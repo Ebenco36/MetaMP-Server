@@ -1,0 +1,16 @@
+[Unit]
+Description=Airflow scheduler daemon
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+Type=simple
+ExecStart=airflow scheduler
+Restart=on-failure
+RestartSec=5s
+StandardOutput=null
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

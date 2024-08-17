@@ -1,0 +1,15 @@
+[Unit]
+Description=Airflow webserver daemon
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+Type=simple
+ExecStart=airflow webserver --port 8090
+RestartSec=5s
+StandardOutput=null
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

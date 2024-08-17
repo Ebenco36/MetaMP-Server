@@ -1,0 +1,33 @@
+from datetime import datetime
+from database.db import db
+
+class OPM(db.Model):
+    __tablename__ = 'membrane_protein_opm'
+    id = db.Column(db.Integer, primary_key=True)
+    pdbid = db.Column(db.Text)
+    name = db.Column(db.Text)
+    comments = db.Column(db.Text)
+    resolution = db.Column(db.Text)
+    thickness = db.Column(db.Float)
+    thicknesserror = db.Column(db.Float)
+    subunit_segments = db.Column(db.Integer)
+    tilt = db.Column(db.Integer)
+    tilterror = db.Column(db.Float)
+    gibbs = db.Column(db.Float)
+    family_name_cache = db.Column(db.Text)
+    species_name_cache = db.Column(db.Text)
+    membrane_name_cache = db.Column(db.Text)
+    family_name = db.Column(db.Text)
+    family_superfamily_name = db.Column(db.Text)
+    family_superfamily_tcdb = db.Column(db.Text)
+    family_superfamily_classtype_name = db.Column(db.Text)
+    famsupclasstype_superfamilies_count = db.Column(db.Integer)
+    famsupclasstype_type_name = db.Column(db.Text)
+    famsupclasstype_type_classtypes_count = db.Column(db.Integer)
+    species_name = db.Column(db.Text)
+    species_description = db.Column(db.Text)
+    membrane_name = db.Column(db.Text)
+    membrane_short_name = db.Column(db.Text)
+    membrane_topology_in = db.Column(db.Text)
+    membrane_topology_out = db.Column(db.Text)
+    pdb_code = db.Column(db.Text)

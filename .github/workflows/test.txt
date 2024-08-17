@@ -1,0 +1,185 @@
+name: Deploy Flask Application to Server
+
+on:
+  push:
+    branches:
+      - main  # Trigger the workflow on push events to the main branch.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Copy project to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "30m"  # Time in seconds
+          source: "."
+          target: "/var/app"
+          rm: true  # Removes the files in the target directory before copying new ones
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Deploy using Docker Compose on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          timeout: "50m"  # Time in seconds
+          script: |
+            export AIRFLOW_HOME=/var/airflow
+            # Check if Docker is installed and install if not
+            if ! type docker > /dev/null 2>&1; then
+              echo "Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            else
+              echo "Docker is already installed."
+            fi
+
+            # Ensure docker-compose is installed and linked properly
+            if [ ! -f "/usr/bin/docker-compose" ]; then
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+            else
+              echo "docker-compose is already installed."
+            fi
+
+            # Ensure Docker is running
+            if ! sudo systemctl is-active --quiet docker; then
+              echo "Starting Docker..."
+              sudo systemctl restart docker
+            else
+              echo "Docker is running."
+            fi
+
+            # Navigate to the application directory and deploy using docker-compose
+            cd /var/app
+            docker-compose -f docker-compose.yml up --build -d
+
+
+
+      - name: Deploy to Host
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            cd /var/app
+            docker-compose down
+            docker rmi $(docker images -q)
+            docker-compose up --build -d
+
+
+      - name: Install Supervisor and Prepare Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            sudo chmod 755 /var/app
+            # Updating and installing necessary packages
+            sudo apt-get update
+            sudo apt-get install -y libpq-dev build-essential libssl-dev libffi-dev python3-setuptools python3-pip python3-dev
+            sudo apt-get install -y python3.11-venv supervisor nginx
+          
+            # Preparing Python environment
+            mkdir -p /var/app
+            python3 -m venv /var/app/venv
+            source /var/app/venv/bin/activate
+            pip install psycopg2-binary
+            pip install -r /var/app/requirements.txt
+            pip install gunicorn
+            pip list
+      
+      - name: Configure and Launch Application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            export PYTHONPATH=/var/app
+            # Activating the virtual environment
+            chmod -R 744 /var/app/logs
+            source /var/app/venv/bin/activate
+
+            # Ensure entrypoint script is executable and run it
+            chmod +x /var/app/serverConfig/entrypoint.sh
+            /var/app/serverConfig/entrypoint.sh
+
+            # Copy metaMP service and nginx config and reload services
+            if [ -f /var/app/serverConfig/services/mpvis-app.service ]; then
+              sudo rm -f /etc/systemd/system/mpvis-app.service
+              sudo cp -f -p /var/app/serverConfig/services/mpvis-app.service /etc/systemd/system/mpvis-app.service
+              sudo systemctl daemon-reload
+              sudo systemctl enable mpvis-app.service
+              sudo systemctl start mpvis-app.service
+              sudo systemctl status mpvis-app.service
+            else
+              echo "Error: service config not found."
+              exit 1
+            fi
+
+            if [ -f /var/app/nginx/nginx.conf ]; then
+              sudo rm -f /etc/nginx/sites-available/mpvis.com
+              sudo rm -f /etc/nginx/sites-enabled/mpvis.com
+              sudo cp -f -p /var/app/nginx/nginx.conf /etc/nginx/sites-available/mpvis.com
+              sudo ln -s /etc/nginx/sites-available/mpvis.com /etc/nginx/sites-enabled/
+              sudo systemctl restart nginx
+              sudo nginx -t && sudo systemctl reload nginx
+              sudo ufw allow 'Nginx Full'
+              sudo ufw reload
+            else
+              echo "Error: nginx.conf not found."
+              exit 1
+            fi
+
+            # Debugging: Final setup check
+            echo "Setup completed. Checking Services and Nginx status:"
+            # sudo supervisorctl status
+            sudo systemctl status nginx
+
+      - name: Configure Airflow and start services
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            sudo rm -f /etc/systemd/system/airflow-scheduler.service
+            sudo rm -f /etc/systemd/system/airflow-webserver.service
+            sudo cp -f -p /var/app/airflowConfig/services/airflow-scheduler.service /etc/systemd/system/airflow-scheduler.service
+            sudo cp -f -p /var/app/airflowConfig/services/airflow-webserver.service /etc/systemd/system/airflow-webserver.service
+            airflow db init
+            airflow webserver --port 8090
+            airflow scheduler
+            airflow users  create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin
+            sudo systemctl enable airflow-webserver.service
+            sudo systemctl start airflow-webserver.service
+            sudo systemctl enable airflow-scheduler.service
+            sudo systemctl start airflow-scheduler.service
+            sudo systemctl restart mpvis-app.service
+

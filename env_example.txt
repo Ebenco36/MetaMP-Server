@@ -1,0 +1,45 @@
+FLASK_DEBUG=True
+APP_SETTINGS=config.config.DevelopmentConfig
+# DATABASE_URI=postgresql://mpvis_user:mpvis_user@localhost:5422/mpvis_db
+# DATABASE_URL="sqlite:///:project.sqlite"
+DATABASE_URL=postgresql://mpvis_user:mpvis_user@postgres:5432/mpvis_db
+PROD_DATABASE_URI=<your production database here>
+
+#FLASK CONFIG
+DEBUG=True
+SECRET_KEY="HAHJHW&@@bsjsqbs"
+
+FLASK_APP=manage.py
+FLASK_RUN_HOST=0.0.0.0
+FLASK_RUN_PORT=5400
+
+#APP CONFIG
+DB_USER=mpvis_user
+DB_PASSWORD=mpvis_user
+DB_HOST=postgres
+DB_PORT=3306
+DB_NAME=mpvis_db
+
+
+ADMIN_NAME='admin'
+ADMIN_EMAIL='admin@example.com'
+ADMIN_USERNAME='admin'
+ADMIN_PASSWORD='password'
+ADMIN_PHONE='923928392832'
+IS_ADMIN=1
+
+EMAIL_HOST_USER="admin@admin.com"
+MAIL_SERVER=0.0.0.0
+MAIL_PORT=1025
+MAIL_USE_TLS=False
+MAIL_USE_SSL=False
+MAIL_USERNAME=None
+MAIL_PASSWORD=None
+MAIL_MAX_EMAILS=None
+MAIL_ASCII_ATTACHMENTS=False
+MAIL_DEBUG=1
+
+# Set SSL/TLS version explicitly
+MAIL_SSL_VERSION='TLSv1_2'
+
+FLASK_ADMIN_SWATCH=cerulean

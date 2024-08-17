@@ -1,0 +1,8 @@
+.venv_mpvis/
+.github/
+.vscode/
+jupyter_test/
+migrations/
+*.ipynb
+some_cray_labels.csv
+some_cray_numeric.csv

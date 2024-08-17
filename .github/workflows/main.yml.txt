@@ -1,0 +1,234 @@
+name: Deploy Flask Application to Server
+
+on:
+  push:
+    branches:
+      - main  # Trigger the workflow on push events to the main branch.
+
+jobs:
+  setup-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup and Deploy Script
+        uses: appleboy/ssh-action@v0.1.3
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          script: |
+            # Ensure SSH directory exists and has secure permissions
+            mkdir -p ~/.ssh
+            chmod 700 ~/.ssh
+
+            # Setup SSH key for GitHub if it does not exist
+            SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+            if [ ! -f "$SSH_KEY_PATH" ]; then
+              # Generate SSH key and output the public key for adding to GitHub
+              ssh-keygen -t ed25519 -C "deploy@github" -f $SSH_KEY_PATH -N ""
+              echo "SSH key generated. Please manually add the following public key to your GitHub repository under Deploy keys or to your GitHub user account's SSH keys:"
+              cat "${SSH_KEY_PATH}.pub"
+            else
+              # Configure SSH to use the existing key for GitHub operations
+              echo "Host github.com\n\tStrictHostKeyChecking no\n\tIdentityFile $SSH_KEY_PATH\n" > ~/.ssh/config
+              echo "SSH configuration updated to use existing key."
+            fi
+
+            # Install Git if not already installed
+            if ! command -v git &>/dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y git
+            fi
+
+            # Setup deployment directory and initialize Git if not done
+            DEPLOY_DIR="/var/app"
+            if [ ! -d "$DEPLOY_DIR/.git" ]; then
+              mkdir -p $DEPLOY_DIR
+              cd $DEPLOY_DIR
+              git init
+              git remote add origin git@github.com:Ebenco36/mpvis.git  # Adjust with your repository
+            fi
+
+            # Pull or clone the repository
+            cd $DEPLOY_DIR
+            git checkout -f
+            if [ -d "$DEPLOY_DIR/.git" ]; then
+              git pull origin main
+            else
+              git clone git@github.com:Ebenco36/mpvis.git $DEPLOY_DIR
+              git checkout main
+            fi
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Deploy using Docker Compose on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          timeout: "50m"  # Time in seconds
+          script: |
+            export AIRFLOW_HOME=/var/app/airflow_home
+            # export AIRFLOW__CORE__SQL_ALCHEMY_CONN='postgresql+psycopg2://airflow_user:your_password@localhost/airflow_db'
+            # Check if Docker is installed and install if not
+            if ! type docker > /dev/null 2>&1; then
+              echo "Installing Docker..."
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sudo sh get-docker.sh
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            else
+              echo "Docker is already installed."
+            fi
+
+            # Ensure docker-compose is installed and linked properly
+            if [ ! -f "/usr/bin/docker-compose" ]; then
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+            else
+              echo "docker-compose is already installed."
+            fi
+
+            # Ensure Docker is running
+            if ! sudo systemctl is-active --quiet docker; then
+              echo "Starting Docker..."
+              sudo systemctl restart docker
+            else
+              echo "Docker is running."
+            fi
+
+            # Navigate to the application directory and deploy using docker-compose
+            cd /var/app
+            docker-compose -f docker-compose.yml up --build -d
+
+      - name: Deploy to Host
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          script: |
+            cd /var/app
+            docker-compose down
+            docker rmi $(docker images -q)
+            docker-compose up --build -d
+
+      - name: Install Supervisor and Prepare Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            sudo chmod 755 /var/app
+            # Updating and installing necessary packages
+            sudo apt-get update
+            sudo apt-get install -y libpq-dev build-essential libssl-dev libffi-dev python3-setuptools python3-pip python3-dev
+            sudo apt-get install -y python3.11-venv supervisor nginx
+          
+            # Preparing Python environment
+            mkdir -p /var/app
+            python3 -m venv /var/app/venv
+            source /var/app/venv/bin/activate
+            pip install psycopg2-binary
+            pip install -r /var/app/requirements.txt
+            pip install gunicorn
+            pip list
+      
+      - name: Configure and Launch Application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            export PYTHONPATH=/var/app
+            # Activating the virtual environment
+            chmod -R 744 /var/app/logs
+            source /var/app/venv/bin/activate
+
+            # Ensure entrypoint script is executable and run it
+            chmod +x /var/app/serverConfig/entrypoint.sh
+            chmod +x /var/app/serverConfig/DBFile.sh
+            /var/app/serverConfig/entrypoint.sh
+
+            # Copy metaMP service and nginx config and reload services
+            if [ -f /var/app/serverConfig/services/mpvis-app.service ]; then
+              sudo rm -f /etc/systemd/system/mpvis-app.service
+              sudo cp -f -p /var/app/serverConfig/services/mpvis-app.service /etc/systemd/system/mpvis-app.service
+              sudo systemctl daemon-reload
+              sudo systemctl enable mpvis-app.service
+              sudo systemctl start mpvis-app.service
+              sudo systemctl status mpvis-app.service
+            else
+              echo "Error: service config not found."
+              exit 1
+            fi
+
+            if [ -f /var/app/nginx/nginx.conf ]; then
+              sudo rm -f /etc/nginx/sites-available/mpvis.com
+              sudo rm -f /etc/nginx/sites-enabled/mpvis.com
+              sudo cp -f -p /var/app/nginx/nginx.conf /etc/nginx/sites-available/mpvis.com
+              sudo ln -s /etc/nginx/sites-available/mpvis.com /etc/nginx/sites-enabled/
+              sudo systemctl restart nginx
+              sudo nginx -t && sudo systemctl reload nginx
+              sudo ufw allow 'Nginx Full'
+              sudo ufw reload
+            else
+              echo "Error: nginx.conf not found."
+              exit 1
+            fi
+
+            # Debugging: Final setup check
+            echo "Setup completed. Checking Services and Nginx status:"
+            # sudo supervisorctl status
+            sudo systemctl status nginx
+
+      - name: Configure Airflow and start services
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST_2 }}
+          username: ${{ secrets.SSH_USERNAME }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          timeout: "50m"  # Time in seconds
+          script: |
+            source /var/app/venv/bin/activate
+            airflow config list --defaults > "${AIRFLOW_HOME}/airflow.cfg"
+            chmod +x /var/app/airflowConfig/set_airflow_home.sh
+            /var/app/airflowConfig/set_airflow_home.sh
+            sudo rm -f /etc/systemd/system/airflow-scheduler.service
+            sudo rm -f /etc/systemd/system/airflow-webserver.service
+            sudo cp -f -p /var/app/airflowConfig/services/airflow-scheduler.service /etc/systemd/system/airflow-scheduler.service
+            sudo cp -f -p /var/app/airflowConfig/services/airflow-webserver.service /etc/systemd/system/airflow-webserver.service
+            airflow db init
+            airflow users  create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin
+            if [[ $(sudo systemctl is-active airflow-webserver.service) == "active" ]]; then
+              echo "Airflow webserver is running, restarting service..."
+              sudo systemctl restart airflow-webserver.service
+            else
+              echo "Airflow webserver is not active, starting service..."
+              sudo systemctl enable airflow-webserver.service
+              sudo systemctl start airflow-webserver.service
+            fi
+            
+            if [[ $(sudo systemctl is-active airflow-scheduler.service) == "active" ]]; then
+              echo "Airflow scheduler is running, restarting service..."
+              sudo systemctl restart airflow-scheduler.service
+            else
+              echo "Airflow scheduler is not active, starting service..."
+              sudo systemctl enable airflow-scheduler.service
+              sudo systemctl start airflow-scheduler.service
+            fi
+            sudo systemctl restart mpvis-app.service
+

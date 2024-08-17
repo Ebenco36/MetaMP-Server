@@ -1,0 +1,822 @@
+conda activate venv_mpvis_flask
+C:\ProgramData\Anaconda3\Scripts\activate venv_mpvis_flask
+
+
+conda create -n venv_mpvis_flask python=3.9
+
+
+pip install python-dotenv
+
+python3.9 -m venv .venv_mpvis
+source .venv_mpvis/bin/activate
+
+5432
+
+Windows
+conda create -n _wvenv_mpvis python=3.9
+conda activate _wvenv_mpvis
+pip install -r /Users/awotoroe/Desktop/mpvis/requirements.txt
+
+run pip install -r requirements.txt to install required modules
+run python manage.py db init  to setup alembic migrations
+run python manage.py db migrate -m='<your migration message>' to create migration files
+then run python manage.py db upgrade to create tables
+
+gunicorn main:app --reload
+gunicorn -127.0.0.1:port main:app --reload
+
+Windows
+.venv_mpvis_\Scripts\activate 
+C:\ProgramData\Anaconda3\Scripts\activate _wvenv_mpvis
+waitress-serve --listen=127.0.0.1:8000 main:app
+pip install hupper
+hupper -m waitress --listen=127.0.0.1:8000 main:app
+
+
+src/api/resources --- flask-restful resources for your project
+src/models --- SQLAlchemy models and schema
+src/routes/api --- contains all your route definition
+src/utils --- contains validations, security and helper files
+src/middlewares --- define your middleware files here
+You can modify the app to suit your need.
+Happy usage.
+
+
+"postgres://postgres:Tope@3236@localhost:5432"
+
+format for you
+npx prettier --write "src/pages/**/*.vue"
+
+pip install pyjwt pillow
+
+python manage.py db migrate
+
+push updates
+python manage.py db upgrade
+
+brew services start redis
+
+brew services info redis
+
+brew services stop redis
+
+Connect to Redis
+Once Redis is running, you can test it by running redis-cli:
+
+redis-cli
+
+
+python -m celery -A main  worker
+celery -A main worker
+celery -A mpvis_app.celery worker
+
+
+mklink "C:\Users\hal\AppData\Local\Continuum\anaconda3\DLLs\libssl-1_1-x64.dll" "C:\Users\hal\AppData\Local\Continuum\anaconda3\Library\bin\libssl-1_1-x64.dll"
+
+mklink "C:\ProgramData\Anaconda3\DLLs\libcrypto-1_1-x64.dll" "C:\ProgramData\Anaconda3\Library\bin\libcrypto-1_1-x64.dll"
+
+pip install bioseq
+pip install biopython
+
+When you have error_message
+pip install -r requirements.txt (This will fix most of your issues. Especially when it has a lot to do with packages.)
+pip install --upgrade attrs
+
+
+conda activate jupyter_env
+
+C:\ProgramData\Anaconda3\Scripts\activate jupyter_env
+
+net use Y: \\sshfs.r\%awotoroe%@hpc-login01.rki.local\scratch\%USERNAME%
+
+net use /PERSISTENT:YES Y: \\sshfs.r\%awotoroe%@hpc-login02.rki.local\scratch\%awotoroe%
+
+pip install hdbscan
+
+Previous research and short information about myself...
+
+pip install missingno
+
+
+flask db init
+flask db migrate -m "initial migration"
+flask db upgrade
+
+https://learning.postman.com/docs/collections/using-newman-cli/installing-running-newman/#installing-newman
+C:\Users\awotoroe\AppData\Roaming\npm\newman run mycollection.json --proxy http://fw-bln.rki.local:8020 --proxy-auth awotoroe:TopeBimboife@32@36 --environment dev_env_postman.json
+
+$ newman run https://www.postman.com/collections/cb208e7e64056f5294e5 -e dev_environment.json
+
+HTTP_PROXY=http://your-proxy-url:port HTTPS_PROXY=http://your-proxy-url:port newman run your_collection.json
+
+
+set HTTP_PROXY=http://fw-bln.rki.local:8020
+set HTTPS_PROXY=http://fw-bln.rki.local:8020
+newman run your_collection.json
+
+curl -X POST http://127.0.0.1:8000/login 
+
+
+python3 -m venv .mpvis
+
+
+ pip install --upgrade --force-reinstall -r requirements.txt
+
+
+
+
+Management Plugin enabled by default at http://localhost:15672
+
+To start rabbitmq now and restart at login:
+  brew services start rabbitmq
+Or, if you don't want/need a background service you can just run:
+  CONF_ENV_FILE="/opt/homebrew/etc/rabbitmq/rabbitmq-env.conf" /opt/homebrew/opt/rabbitmq/sbin/rabbitmq-server
+==> Summary
+🍺  /opt/homebrew/Cellar/rabbitmq/3.12.10: 1,442 files, 34.7MB
+==> Running `brew cleanup rabbitm
+Disable this behaviour by setting HOMEBREW_NO_INSTALL_CLEANUP.
+Hide these hints with HOMEBREW_NO_ENV_HINTS (see `man brew`).
+==> Caveats
+==> rabbitmq
+Management Plugin enabled by default at http://localhost:15672
+
+To start rabbitmq now and restart at login:
+  brew services start rabbitmq
+Or, if you don't want/need a background service you can just run:
+  CONF_ENV_FILE="/opt/homebrew/etc/rabbitmq/rabbitmq-env.conf" /opt/homebrew/opt/rabbitmq/sbin/rabbitmq-server
+
+Credentials
+  guest
+  guest
+
+
+
+set global innodb_file_format = `BARRACUDA`;
+set global innodb_large_prefix = `ON`;
+
+docker build -t mpvis .
+
+
+export LDFLAGS="-L/opt/homebrew/opt/mysql-client/lib"
+  export CPPFLAGS="-I/opt/homebrew/opt/mysql-client/include"
+
+  export MYSQLCLIENT_CFLAGS=`mysql_config --cflags`
+export MYSQLCLIENT_LDFLAGS=`mysql_config --libs`
+
+free memorz if there exist issues with space
+docker system prune -a
+
+
+
+install celery beat and celery using python package pip... What are the effectssssssssss...
+
+EDA for different methods used in MPstruct...
+
+
+flask db stamp head  # Set the current revision to the latest
+flask db migrate -m "Reset database"  # Create a new migration
+flask db upgrade  # Apply the migration
+
+
+docker-compose --env-file .env.production up --build -d
+docker-compose --env-file .env.development up --build -d
+
+docker build -t metamp-custom-airflow:latest ./airflow_image
+
+
+
+sqlalchemy.exc.InvalidRequestError: Implicitly combining column membrane_proteins.group with column membrane_proteins.group under attribute 'group'.  Please configure one or more attributes for these same-named columns explicitly.
+(.mpvis) AwotoroE-Dev@MBPvonEbenezer mpvis % 
+
+
+flask db migrate -m "Your migration message" --directory src/MP
+
+
+snakemake -j 4 --dry-run
+
+
+Problemmatic
+
+Each of these code are not available on RCSB (https://www.rcsb.org/structure/removed/3CJU).
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5W7L  Replaced by 8G1N
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5G1J  Replaced by 7PDC
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3WXV  Replaced by 6KS0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3J8E  Replaced by 5TB0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3HGC  Replaced by 4NYK
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4UPC  Replaced by 5A63
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7UUV  Not found anywhere
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/6AN7  Replaced by 6OIH
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5TSI  Replaced by 5UAR
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4J05  Replaced by 7SP5
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3B8C  5KSD
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4P6V  8ACY
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/1FUM  1L0V
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7ROW  Not found anywhere
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3BZ1  4V62
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3ARC  3WU2
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3CJU  3EGV
+
+
+Meeting Summary
+
+
+Project break down is as follows.
+
+Meeting date:
+Attendance:
+  1. Georges Hattab
+  2. Ebenezer Awotoro
+
+
+We came up with venn diagram to describe things we are looking forward to. The venn diagram was created to 
+illustrate the relationship or enrichment between Mpstruc (Membrane Protein Strucuture) and PDB (Protein Data Bank) 
+can be a useful visualization for understanding the overlap and differences between these two datasets. 
+A Venn diagram is a set diagram that shows the overlap of sets, representing the common elements and unique elements in different datasets.
+
+Here's a description of a hypothetical Venn diagram for Mpstruc and PDB enrichment:
+
+Mpstruc Set (A):
+=============
+Circle A in the Venn diagram represents the set of membrane proteins from Mpstruc.
+Label the circle as "Mpstruc."
+This circle includes all membrane proteins obtained from the Mpstruc database.
+
+PDB Set (B):
+=============
+Circle B in the Venn diagram represents the set of all proteins from the PDB.
+Label the circle as "PDB."
+This circle includes all proteins available in the Protein Data Bank.
+
+Overlap (AB):
+=========
+The overlapping region between circles A and B represents the membrane proteins that are present in both Mpstruc and PDB.
+Label the overlapping region with "Common Membrane Proteins."
+
+Unique Regions:
+
+The non-overlapping region in circle A represents membrane proteins unique to Mpstruc (not present in PDB).
+We labeled this region as "Unique to Mpstruc."
+The non-overlapping region in circle B represents proteins in PDB that are not membrane proteins.
+We also labeled this region as "Non-membrane Proteins in PDB."
+
+Interpretation:
+
+If the overlap between Mpstruc and PDB is significant, it indicates a substantial number of membrane proteins that are shared between the two datasets.
+If the unique region in Mpstruc is substantial, it suggests that Mpstruc contains membrane proteins that might not be present in PDB, highlighting its specificity to membrane proteins.
+If the unique region in PDB is significant, it indicates proteins in PDB that are not membrane proteins.
+This visual representation provides a quick overview of the relationship between membrane proteins in Mpstruc and all proteins in PDB. Adjustments can be made based on the actual datasets and specific criteria for membrane proteins in your analysis.
+
+
+
+
+Development Stages Overview:
+
+Stage 1:
+----------------
+Focus:Only MPstruct (analysis and visualization)
+Example:
+Tree diagrams
+Visuals
+
+
+Stage 2:
+----------------
+Focus: Only enriched MPstruct data (exclude MPstruct)
+Example:
+Generate summary statistics
+Include relevant visualizations
+
+
+Stage 3:
+----------------
+Focus: Integration of both curated MPstruct and enriched data.
+  Tasks:
+    1. Analyze and visualize data with respect to resolution methods.
+    2. Also consider overlap with respect to methods
+    3. Validate new/unclassified MP structures through clustering.
+    4. Outlier detection.
+    5. still counting...
+
+Data separation based on methods used for protein resolution before analysis.
+
+
+Recent Updates:
+
+=====================
+Issue Discovery:
+
+Two membrane proteins listed on MPstruct cannot be found anywhere, including PDB.
+Example: Entries with codes 7ROW and 7UUV are not found in the RCSB database.
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7ROW  Not found anywhere (Including PDB)
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7UUV  Not found anywhere (Including PDB)
+
+
+Problematic Entries:
+
+Certain codes in MPstruct have been updated on PDB, causing discrepancies.
+Example: Entries like 5W7L have been replaced by new codes like 8G1N.
+
+Each of these code are not available on RCSB (https://www.rcsb.org/structure/removed/3CJU). 
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5W7L  Replaced by 8G1N
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5G1J  Replaced by 7PDC
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3WXV  Replaced by 6KS0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3J8E  Replaced by 5TB0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3HGC  Replaced by 4NYK
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4UPC  Replaced by 5A63
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/6AN7  Replaced by 6OIH
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5TSI  Replaced by 5UAR
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4J05  Replaced by 7SP5
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3B8C  Replaced by 5KSD
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4P6V  Replaced by 8ACY
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/1FUM  Replaced by 1L0V
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3BZ1  Replaced by 4V62
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3ARC  Replaced by 3WU2
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3CJU  Replaced by 3EGV
+
+Action Items:
+
+Investigate discrepancies between MPstruct and PDB entries.
+Update problematic entries with the correct replacements.
+
+
+
+
+
+
+
+
+
+
+Recent update from my end:
+================================
+
+Two membrane proteins that were listed on MPstruct are nowhere to be found, I discovered while I was attempting to extract updates from the file again. for example:
+
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7ROW  Not found anywhere (Including PDB)
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/7UUV  Not found anywhere (Including PDB)
+
+The slightly problematic ones have already had their codes updated on PDB, however MPstruct retains the original protein code. Example 
+
+Problemmatic
+======================
+Each of these code are not available on RCSB (https://www.rcsb.org/structure/removed/3CJU). 
+
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5W7L  Replaced by 8G1N
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5G1J  Replaced by 7PDC
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3WXV  Replaced by 6KS0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3J8E  Replaced by 5TB0
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3HGC  Replaced by 4NYK
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4UPC  Replaced by 5A63
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/6AN7  Replaced by 6OIH
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/5TSI  Replaced by 5UAR
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4J05  Replaced by 7SP5
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3B8C  Replaced by 5KSD
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/4P6V  Replaced by 8ACY
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/1FUM  Replaced by 1L0V
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3BZ1  Replaced by 4V62
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3ARC  Replaced by 3WU2
+There is an issue with : https://data.rcsb.org/rest/v1/core/entry/3CJU  Replaced by 3EGV
+
+
+
+docker tag local-image:tagname new-repo:tagname
+docker push new-repo:tagname
+
+https://rki.webex.com/rki/j.php?MTID=m36ad237a20b584c56c68487adf4f1dc0
+
+docker tag mpvis-flask-app ebenco36/mpvis:latest
+
+docker push ebenco36/mpvis:latest
+=====================================================
+docker tag mpvis_frontend:latest ebenco36/mpvis_frontend:latest
+
+docker push ebenco36/mpvis_frontend:latest
+=====================================================
+docker tag mpvis-flask-app ebenco36/mpvis:latest
+
+docker push ebenco36/mpvis:latest
+
+# Pull the image from the repository
+docker pull ebenco36/mtest_docker:latest
+
+
+docker-compose -f docker2-compose.yml up -d
+
+docker-compose exec redis redis-cli
+
+
+snakemake -j 4
+flask sync-protein-database
+flask sync-question-with-database
+flask sync-system_admin-with-database
+flask sync-feedback-questions-with-database
+
+
+gunicorn -w 4 server:app -p 5400
+
+gunicorn -w 4 -b 0.0.0.0:5400 server:app
+
+ gunicorn -w 4 --graceful-timeout 30 -k gevent -b 0.0.0.0:5400 --reload server:app
+
+
+
+
+ CRT GENERATION
+
+ ==========================
+1.
+bash
+Copy code
+
+brew install openssl
+
+2. Generate a Self-Signed Certificate:
+bash
+Copy code
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365
+This command generates a self-signed certificate (cert.pem) and its corresponding private key (key.pem). Follow the prompts to provide information such as the Common Name (CN), Organization, etc. For testing purposes, you can provide dummy information.
+
+3. Combine Certificate and Key into a PEM File:
+bash
+Copy code
+cat cert.pem key.pem > ca-bundle.pem
+This command combines the certificate and private key into a single PEM file (ca-bundle.pem). This file can be used as your CA bundle.
+
+4. Convert PEM to CRT (if needed):
+bash
+Copy code
+openssl x509 -outform der -in ca-bundle.pem -out ca-bundle.crt
+This command converts the PEM file to CRT format, which is commonly used for CA bundle files.
+
+
+lsof -i :5400 | awk 'NR!=1 {print $2}' | xargs kill -9
+
+
+convert ourLogo.png dashboard.png summaryStats.png details.png trainingStart.png Answer1.png TrainingQuestion.png testSummary.png Dimensionality.png trainingEnd.png table.png exploration1.png exploration2.png ML.png ML2.png about.png  output.pdf
+
+convert 110.png 12.png 13.png 14.png 15.png 16.png 17.png 18.png 19.png 20.png 21.png 22.png 23.png  outputR.pdf
+
+
+Hosting the platform for test
+
+convert 001.png 002.png 003.png 004.png 005.png  chartsToWorkOn.pdf
+
+
+
+No information on uniprot
+
+Error: Unable to fetch UniProt ID for 5W7L
+Error: Unable to fetch UniProt ID for 4TW1
+Error: Unable to fetch UniProt ID for 6X1K
+Error: Unable to fetch UniProt ID for 5DL5
+Error: Unable to fetch UniProt ID for 5DL6
+Error: Unable to fetch UniProt ID for 2MHL
+Error: Unable to fetch UniProt ID for 5NEC
+Error: Unable to fetch UniProt ID for 3Q54
+Error: Unable to fetch UniProt ID for 6ODJ
+Error: Unable to fetch UniProt ID for 5WC3
+Error: Unable to fetch UniProt ID for 4P6J
+Error: Unable to fetch UniProt ID for 6B87
+Error: Unable to fetch UniProt ID for 6MQU
+Error: Unable to fetch UniProt ID for 6TJ1
+Error: Unable to fetch UniProt ID for 6XBD
+Error: Unable to fetch UniProt ID for 3WXV
+Error: Unable to fetch UniProt ID for 3A7K
+Error: Unable to fetch UniProt ID for 7ZOU
+Error: Unable to fetch UniProt ID for 6K6I
+Error: Unable to fetch UniProt ID for 2KSY
+Error: Unable to fetch UniProt ID for 6CSN
+Error: Unable to fetch UniProt ID for 7PL9
+Error: Unable to fetch UniProt ID for 7W74
+Error: Unable to fetch UniProt ID for 6XL3
+Error: Unable to fetch UniProt ID for 7SFK
+Error: Unable to fetch UniProt ID for 7W9W
+Error: Unable to fetch UniProt ID for 7KAK
+Error: Unable to fetch UniProt ID for 7CN0
+Error: Unable to fetch UniProt ID for 3OUF
+Error: Unable to fetch UniProt ID for 3J8E
+Error: Unable to fetch UniProt ID for 7K0T
+Error: Unable to fetch UniProt ID for 5GO9
+Error: Unable to fetch UniProt ID for 6JG3
+Error: Unable to fetch UniProt ID for 6NR3
+Error: Unable to fetch UniProt ID for 6O6A
+Error: Unable to fetch UniProt ID for 6BBJ
+Error: Unable to fetch UniProt ID for 6PVR
+Error: Unable to fetch UniProt ID for 3HGC
+Error: Unable to fetch UniProt ID for 5XW6
+Error: Unable to fetch UniProt ID for 4RDQ
+Error: Unable to fetch UniProt ID for 5T5N
+Error: Unable to fetch UniProt ID for 6N23
+Error: Unable to fetch UniProt ID for 4WD7
+Error: Unable to fetch UniProt ID for 6NF4
+Error: Unable to fetch UniProt ID for 6NF6
+Error: Unable to fetch UniProt ID for 7LIC
+Error: Unable to fetch UniProt ID for 4NH2
+Error: Unable to fetch UniProt ID for 3RHW
+Error: Unable to fetch UniProt ID for 8EIZ
+Error: Unable to fetch UniProt ID for 7B6W
+Error: Unable to fetch UniProt ID for 7DD5
+Error: Unable to fetch UniProt ID for 3ORG
+Error: Unable to fetch UniProt ID for 4PX7
+Error: Unable to fetch UniProt ID for 4QO2
+Error: Unable to fetch UniProt ID for 4UPC
+Error: Unable to fetch UniProt ID for 3MKT
+Error: Unable to fetch UniProt ID for 6IDP
+Error: Unable to fetch UniProt ID for 7WAW
+Error: Unable to fetch UniProt ID for 4MT1
+Error: Unable to fetch UniProt ID for 5KHN
+Error: Unable to fetch UniProt ID for 5M94
+Error: Unable to fetch UniProt ID for 6GZ9
+Error: Unable to fetch UniProt ID for 7V73
+Error: Unable to fetch UniProt ID for 5A1S
+Error: Unable to fetch UniProt ID for 4N7W
+Error: Unable to fetch UniProt ID for 3RLB
+Error: Unable to fetch UniProt ID for 6FFV
+Error: Unable to fetch UniProt ID for 6AN7
+Error: Unable to fetch UniProt ID for 5TSI
+Error: Unable to fetch UniProt ID for 6D3R
+Error: Unable to fetch UniProt ID for 4OAA
+Error: Unable to fetch UniProt ID for 6EXS
+Error: Unable to fetch UniProt ID for 4J05
+Error: Unable to fetch UniProt ID for 3WDO
+Error: Unable to fetch UniProt ID for 6IU3
+Error: Unable to fetch UniProt ID for 6TDU
+Error: Unable to fetch UniProt ID for 3B8C
+Error: Unable to fetch UniProt ID for 4P6V
+Error: Unable to fetch UniProt ID for 3M9C
+Error: Unable to fetch UniProt ID for 4UQ8
+Error: Unable to fetch UniProt ID for 1FUM
+Error: Unable to fetch UniProt ID for 2PPS
+Error: Unable to fetch UniProt ID for 1QZV
+Error: Unable to fetch UniProt ID for 1FE1
+Error: Unable to fetch UniProt ID for 3BZ1
+Error: Unable to fetch UniProt ID for 3ARC
+Error: Unable to fetch UniProt ID for 3CJU
+
+
+
+Uniprot Details
+
+Failed to retrieve data for UniProt ID: S3TFW2
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: G2SES0
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: A0A1Z4FUT4
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: C9CPP6
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: C4I4K0
+Failed to retrieve data for UniProt ID: B0V4F5
+Failed to retrieve data for UniProt ID: A0A0X8F058
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: A0A0D6H8R3
+Failed to retrieve data for UniProt ID: A0A0D6H8R3
+Failed to retrieve data for UniProt ID: A0A0D6H8R3
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: nan
+Failed to retrieve data for UniProt ID: A0A7Z6W8S0
+
+Sample commands:
+Install the latest Weekly version: brew install jenkins
+Start the Jenkins service: brew services start jenkins
+Restart the Jenkins service: brew services restart jenkins
+Update the Jenkins version: brew upgrade jenkins
+
+/Users/AwotoroE-Dev/.jenkins/secrets/initialAdminPassword
+
+
+ssh-keygen -t rsa -b 4096 -C "ebenco94@gmail.com"
+Your identification has been saved in /Users/AwotoroE-Dev/.ssh/id_rsa
+Your public key has been saved in /Users/AwotoroE-Dev/.ssh/id_rsa.pub
+
+ssh -i ~/.ssh/id_rsa -p 22 root@138.68.77.113
+
+ssh -i /Users/AwotoroE-Dev/.ssh/id_rsa -p 22 ebenco36@138.68.77.113
+
+sudo adduser ebenco36
+Bimboife@3236
+sudo usermod -aG sudo ebenco36
+
+airflow tasks test complex_data_processing databaseLoad
+
+docker inspect 4d66abf845bcca37b2109d57bf887fde7b71f1a26e23f064c8b0beb3a291feaf
+
+
+supervisord -c /etc/supervisor/supervisord.conf
+
+docker run -d -p 8006:8081 --name mytest mpvis
+
+docker network connect app-networks mytest
+
+b61cdf191080bdae51db8d868404944c162a730f
+
+git log
+
+# Reset the commit
+git reset --soft b61cdf191080bdae51db8d868404944c162a730f
+
+git reset b61cdf191080bdae51db8d868404944c162a730f jupyter_test/test1.ipynb
+
+# If you want to completely remove the file
+git rm --cached jupyter_test/test1.ipynb
+
+
+Remove large files
+commit cadac66195bd4e71fdb5abece1bf1ce2e7ea9e47
+commit 8a6fd2e26102fccfa9bffc10adbcba7987e85d55
+
+# Identify the commit
+git log
+
+# Reset the commit
+git reset --soft HEAD^
+
+# Unstage the file
+git reset HEAD jupyter_test/test1.ipynb
+
+# If you want to completely remove the file
+git rm --cached jupyter_test/test1.ipynb
+
+
+docker exec -it 8dceef25f169 
+
+docker exec -it 0f080bdf51e9 /bin/bash
+
+
+docker container prune -f
+docker image prune -f
+docker volume prune -f
+docker network prune -f
+docker system prune -f
+
+docker stop $(docker ps -aq)
+
+
+delete from questions where id in (35, 36)
+
+delete from options where question_id in (35, 36)
+delete from user_response where answer_id in (select id from options where question_id in (35, 36))
+delete from filter_tools where question_id in (35, 36)
+
+delete from filter_tool_options where filter_tool_id in (select id from filter_tools where question_id in (35, 36))
+
+
+Use green and purple mostly in chart for diverging colors
+
+ipconfig getifaddr en0
+
+PgHero login
+
+pghero-f3e90aa8
+fb3f9a1e458efe3ce5832e4dcb870b38
+
+
+docker exec -it ccd5be56fdbe4b5b4eedc0360c5feedf334956bcf73b41be9bc1f45ef9d7174a redis-cli
+FLUSHALL
+
+
+
+((machine learning) AND (antimicrobial resistance OR antibiotic resistance OR pathogen resistance) AND (hospital) AND (public health surveillance OR epidemiology) AND (clinical data OR demographic data) NOT (DNA) NOT (sequencing) NOT (peptides) NOT (molecules) NOT (genome) NOT (discovery))
+
+
+((machine learning) AND (antimicrobial resistance OR antibiotic resistance OR pathogen resistance) AND (clinical data OR demographic data) NOT (DNA) NOT (sequencing) NOT (peptides) NOT (molecules) NOT (genome) NOT (discovery))
+
+
+((machine learning) AND (antimicrobial) AND (resistance) AND (hospital) NOT (DNA) NOT (sequencing) NOT (peptides) NOT (molecules) NOT (genome) NOT (discovery))
+
+
+((machine learning) AND (antimicrobial) AND (resistance) AND (hospital) NOT (DNA) NOT (sequencing) NOT (peptides) NOT (molecules) NOT (genome))
+
+
+<span title="Length of the unit cell along the A axis"><b>'Cell Length A'</b></span>, 
+                                <span title="Length of the unit cell along the B axis"><b>'Cell Length B'</b></span>, 
+                                <span title="Length of the unit cell along the C axis"><b>'Cell Length C'</b></span>, 
+
+
+
+datasets/pdb/*.csv
+datasets_test/*.csv
+
+
+git rm --cached datasets/*.csv
+git rm --cached datasets_test/*.csv
+
+git add .gitignore
+git commit -m "Update .gitignore and stop tracking specific CSV files"
+
+
+git push origin main
+
+UniProt with Variant : Q8N6U8
+
+
+https://www.uniprot.org/help/transmem
+
+
+git rebase -i 8052c928d4ddf65add98ea59bc81d6735f310177880b2ac6669f6d8bc43d6fec^
+
+
+git rm --cached datasets/Uniprot_functions.csv
+git rm --cached Uniprot.csv
+git rm --cached Uniprotsss.json
+
+git commit --amend --no-edit
+
+git rebase --continue
+
+git push --force
+
+
+check files in commit 
+git ls-tree -r -l HEAD | sort -k 4 -n
+
+
+git filter-branch --force --index-filter \
+'git rm --cached --ignore-unmatch datasets/Uniprot_functions.csv' \
+--prune-empty --tag-name-filter cat -- --all

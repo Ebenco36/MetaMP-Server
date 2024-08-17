@@ -1,0 +1,81 @@
+node_modules
+.venv_mpvis
+.venv
+.venv/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+env/
+venv/
+jupyter_test/
+.env
+
+# Logs
+*.log
+
+# Local SQLite database files
+*.db
+
+# Compiled Python files
+*.pyc
+
+# Compiled C extensions
+*.so
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.swp
+*~
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Flask migration directory
+migrations/
+
+:project.sqlite
+:project.sssqlite
+
+.ipynb_checkpoints/
+__pycache__/
+.vscode/
+.mpvis/
+Jupyter/
+junks/
+
+airflow_home/logs
+airflow_home/airflow.cfg
+
+*.joblib
+datasets/pdb/PDB_data.csv
+datasets/pdb/PDB_data_transformed.csv
+
+ARS.csv
+
+*.png
+
+dataAll.csv
+*.ipynb
+
+*.csv
+datasets/*.csv
+datasets/*.xml
+datasets/pdb/*.csv
+datasets_test/*.csv
+datasets_test/*.xml
