@@ -35,13 +35,14 @@ from src.MP.services import DataService
 from src.Training.models import Category
 from src.utils.response import ApiResponse
 from flask_restful import Resource, reqparse
-from src.services.graphs.helpers import Graph
+from src.services.graphs.helpers import Graph, convert_chart
 from src.Training.serializers import (
     FilterToolSchema, QuestionSchema, CategorySchema
 )
 from src.middlewares.auth_middleware import token_required
 from src.services.basic_plots import group_data_by_methods
 from src.MP.machine_learning_services import UnsupervisedPipeline, plotCharts
+
 
 question_parser = reqparse.RequestParser()
 question_parser.add_argument('text', type=str, help='Text of the question')
@@ -324,7 +325,7 @@ def chartForTraining(
     ).interactive().configure_legend(
         orient='bottom'
     )
-    return chart.to_dict()
+    return convert_chart(chart)
 
 class generateChartForQuestions(Resource):
     def __init__(self):
@@ -490,11 +491,11 @@ class generateChartForQuestions(Resource):
                 ])
                 variable = ['molecular_weight' if var == 'emt_molecular_weight' else var for var in variable]
                 
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 numerical_data, categorical_data = preprocess_data(all_data, "EM")
                 
                 width_chart_single = (chart_width / len(variable)) - 70
-                return outlier_detection_implementation(
+                return convert_chart(outlier_detection_implementation(
                     variable, numerical_data, 
                     categorical_data, 
                     training_attrs=['Component 1', 'Component 2'], 
@@ -502,7 +503,7 @@ class generateChartForQuestions(Resource):
                     width_chart_single=width_chart_single,
                     width_chart_single2=(chart_width - 70),
                     create_pairwise_plot_bool=False
-                ).to_dict(format="vega")
+                ))
             
             elif(data["question"] == 5):
                 chart_width = data.get("chart_width", 800)
@@ -512,10 +513,10 @@ class generateChartForQuestions(Resource):
                     'processed_resolution'
                 ])
                 variable = ['molecular_weight' if var == 'emt_molecular_weight' else var for var in variable]
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 numerical_data, categorical_data = preprocess_data(all_data, "EM")
                 width_chart_single = (chart_width / len(variable)) - 70
-                return outlier_detection_implementation(
+                return convert_chart(outlier_detection_implementation(
                     variable, numerical_data, 
                     categorical_data, 
                     training_attrs=['Component 1', 'Component 2'], 
@@ -523,12 +524,12 @@ class generateChartForQuestions(Resource):
                     width_chart_single=width_chart_single,
                     width_chart_single2=(chart_width - 70),
                     create_pairwise_plot_bool=True
-                ).to_dict(format="vega")
+                ))
                 
             elif(data["question"] == "DI1"):
                 chart_width = data.get("chart_width", 800)
                 variable = data["variables"].get("methods")
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
                 expected_groups = {
                     'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
@@ -556,7 +557,7 @@ class generateChartForQuestions(Resource):
                 # Create and display the visualization
                 chart_with_table = create_visualization(transformed_data, chart_width)
                 
-                return chart_with_table.to_dict()
+                return convert_chart(chart_with_table)
             
             elif(data["question"] == "DM33"):
                 data_type = "X-ray"
@@ -586,7 +587,7 @@ class generateChartForQuestions(Resource):
                     result_df_opm = get_table_as_dataframe("membrane_protein_opm")
                     result_df = pd.merge(right=result_df_mpstruc_pdb, left=result_df_opm.drop(columns=["resolution", "name"]), on="pdb_code")
                     result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
-                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="uniprot_id")
+                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code")
                     data_frame = all_data #[all_data["rcsentinfo_experimental_method"] == data_type]
                     data_frame = data_frame[
                         (data_frame["group"] == "TRANSMEMBRANE PROTEINS:BETA-BARREL") |
@@ -767,10 +768,10 @@ class generateChartForQuestions(Resource):
                     "molecular_weight", 
                     "processed_resolution"
                 ])
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 numerical_data, categorical_data = preprocess_data(all_data, "X-ray")
                 width_chart_single = (chart_width / len(variable)) - 70
-                return outlier_detection_implementation(
+                return convert_chart(outlier_detection_implementation(
                     variable, numerical_data, 
                     categorical_data, 
                     training_attrs=['Component 1', 'Component 2'], 
@@ -778,12 +779,12 @@ class generateChartForQuestions(Resource):
                     width_chart_single=width_chart_single,
                     width_chart_single2=(chart_width - 70),
                     create_pairwise_plot_bool=True
-                ).to_dict(format="vega")
+                ))
             
             elif(data["question"] == "DI2"):
                 chart_width = data.get("chart_width", 800)
                 variable = data["variables"].get("methods")
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
                 expected_groups = {
                     'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
@@ -811,7 +812,7 @@ class generateChartForQuestions(Resource):
                 # Create and display the visualization
                 chart_with_table = create_visualization(transformed_data, chart_width)
                 
-                return chart_with_table.to_dict()
+                return convert_chart(chart_with_table)
                 
             elif(data["question"] == "DM1"):
                 data_type = "EM"
@@ -840,7 +841,7 @@ class generateChartForQuestions(Resource):
                     result_df_opm = get_table_as_dataframe("membrane_protein_opm")
                     result_df = pd.merge(right=result_df_mpstruc_pdb, left=result_df_opm.drop(columns=["resolution", "name"]), on="pdb_code")
                     result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
-                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="uniprot_id")
+                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code")
                     data_frame = all_data[all_data["rcsentinfo_experimental_method"] == data_type]
                     data_frame = data_frame[
                         (data_frame["group"] == "TRANSMEMBRANE PROTEINS:BETA-BARREL") |
@@ -902,7 +903,7 @@ class generateChartForQuestions(Resource):
                     result_df_opm = get_table_as_dataframe("membrane_protein_opm")
                     result_df = pd.merge(right=result_df_mpstruc_pdb, left=result_df_opm.drop(columns=["resolution", "name"]), on="pdb_code")
                     result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
-                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="uniprot_id")
+                    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code")
                     data_frame = all_data
                     
                     result = (
@@ -939,12 +940,12 @@ class generateChartForQuestions(Resource):
         if cached_result:
             return cached_result
         else:
-            self.cache.set_item(cache_key, chart.to_dict(), ttl=ttl_in_seconds)  # Cache for 10 days
+            self.cache.set_item(cache_key, convert_chart(chart), ttl=ttl_in_seconds)  # Cache for 10 days
         
         try:
-            response = chart.to_dict(format="vega")
+            response = convert_chart(chart)
         except ValueError as e:
-            response = chart.to_dict()
+            response = convert_chart(chart)
         return response
             
             

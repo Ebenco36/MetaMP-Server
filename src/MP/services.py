@@ -51,6 +51,6 @@ class DataService:
         result_df_opm = get_table_as_dataframe("membrane_protein_opm")
         result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
             
-        all_data = pd.merge(right=result_df, left=result_df_uniprot, on="uniprot_id")
+        all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code")
         
         return result_df, result_df_db, result_df_opm, result_df_uniprot, all_data

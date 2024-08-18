@@ -16,7 +16,7 @@ with app.app_context():
     result_df_opm = get_table_as_dataframe("membrane_protein_opm")
     result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
     
-all_data = pd.merge(right=result_df, left=result_df_uniprot, on="uniprot_id")
+all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code")
 
 
 # Function to fetch PDB data from RCSB PDB

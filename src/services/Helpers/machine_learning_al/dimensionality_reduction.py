@@ -1,4 +1,6 @@
 import os
+
+from src.services.graphs.helpers import convert_chart
 os.environ["NUMBA_CACHE_DIR"] = "/tmp"
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -12,6 +14,7 @@ import pandas as pd
 import numpy as np
 import json
 import altair as alt
+
 
 class DimensionalityReduction:
     def __init__(self, X = [], n_features=2, pca_columns:list=[]):
@@ -188,7 +191,7 @@ class DimensionalityReduction:
             # Concatenate the charts vertically
             combined_charts = alt.hconcat(*charts)
 
-            graph_data = combined_charts.to_dict()
+            graph_data = convert_chart(combined_charts)
 
         return {
             "explained_variance_ratio": explained_variance_ratio.tolist() if (not explained_variance_ratio is None) else [],

@@ -1,10 +1,20 @@
 import altair as alt
-import json
-from src.services.Helpers.helper import remove_underscore_change_toupper, \
-    format_string_caps
 from src.services.exceptions.AxisExceptions import AxisException
 from src.services.exceptions.NotFoundOnList import NotFoundOnList
 from src.services.exceptions.TagDoesnotExist import TagDoesnotExist
+
+def remove_underscore_change_toupper(original_string):
+    return original_string.replace("_", " ")
+
+def format_string_caps(input_string):
+    # Replace underscores with spaces
+    formatted_string = input_string.replace('_', ' ')
+    
+    # Capitalize the first character
+    formatted_string = formatted_string.capitalize()
+
+    return formatted_string
+
 
 class Graph:
 
@@ -291,7 +301,7 @@ class Graph:
         return self.altair_obj
     
     def return_dict_obj(self):
-        return self.altair_obj.to_dict()
+        return convert_chart(self.altair_obj)
     
     def show(self):
         return self.altair_obj.show()
@@ -502,3 +512,17 @@ def replace_value(value):
         if value in replacement_dict:
             return replacement_dict[value], replacement_dict.get('title')
     return value, value
+
+def convert_chart(chart):
+    try:
+        # Get the currently active data transformer
+        current_transformer = alt.data_transformers.get()
+
+        # Check if the current transformer is vegafusion
+        if 'vegafusion' in str(current_transformer):
+            return chart.to_dict(format="vega")
+        else:
+            return chart.to_dict()
+    except ValueError as e:
+        print(f"Handling ValueError: {e}")
+        return chart.to_dict()

@@ -24,6 +24,7 @@ from src.Training.services import (
 from src.services.basic_plots import group_data_by_methods
 from sklearn.decomposition import PCA
 os.environ["NUMBA_CACHE_DIR"] = "/tmp"
+from src.services.graphs.helpers import convert_chart
 from utils.redisCache import RedisCache
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
@@ -306,7 +307,6 @@ def get_use_cases(data:dict={}):
     - Caching is used extensively to optimize performance, especially for computationally intensive operations.
     - The output format may vary depending on the use case.
     """
-    
     cache = RedisCache()
     groupby = data.get("groupby", "group")
     features = data.get("features", [
@@ -318,6 +318,7 @@ def get_use_cases(data:dict={}):
     chart_type = data.get("chart_type", "bar")
     chart_width = data.get("chart_width", 800)
     chart_trend = data.get("chart_trend", "No")
+    outlier_detection_algorithm = data.get("outlier_detection_algorithm", "DBSCAN")
     outlier_detection_by_method = data.get("outlier_detection_by_method", "x-ray")
 
     if use_case == "summary_statistics":
@@ -397,7 +398,7 @@ def get_use_cases(data:dict={}):
                 direction = 'vertical', 
                 labelLimit=0
             )
-            return chart.to_dict()
+            return convert_chart(chart)
         elif chart_trend == "Yes":
             variable = groupby
             """
@@ -445,7 +446,7 @@ def get_use_cases(data:dict={}):
                         'rcsentinfo_experimental_method': 'Experimental Method',
                     })
                     
-                chart = alt.Chart.from_dict(
+                chart = convert_chart(alt.Chart.from_dict(
                     group_data_by_methods(
                         chart_data, 
                         columns = [
@@ -458,13 +459,14 @@ def get_use_cases(data:dict={}):
                         interactive=True,
                         arange_legend="vertical"
                     )
-                ).to_dict()
+                ))
                 # Store the result in the cache
                 cache.set_item(cache_key, chart, ttl=ttl_in_seconds)
                 
             return chart
     
     elif use_case == "outlier_detection":
+        alt.data_transformers.enable("vegafusion")
         if(outlier_detection_by_method == "EM"):
             
             """
@@ -482,18 +484,19 @@ def get_use_cases(data:dict={}):
                 chart_width = data.get("chart_width", 800)
                 variable = features
                 variable = ['molecular_weight' if var == 'emt_molecular_weight' else var for var in variable]
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 numerical_data, categorical_data = preprocess_data(all_data, "EM")
                 width_chart_single = (chart_width / len(variable)) - 70
-                response = outlier_detection_implementation(
+                response = convert_chart(outlier_detection_implementation(
                     variable, numerical_data, 
                     categorical_data, 
                     training_attrs=['Component 1', 'Component 2'], 
                     plot_attrs=['Component 1', 'Component 2'],
+                    algorithm=outlier_detection_algorithm,
                     width_chart_single=width_chart_single,
                     width_chart_single2=(chart_width - 70),
                     create_pairwise_plot_bool=True
-                ).to_dict(format="vega")
+                ))
                 # Store the result in the cache
                 cache.set_item(cache_key, response, ttl=ttl_in_seconds)  # Cache for 10 days
             
@@ -503,7 +506,8 @@ def get_use_cases(data:dict={}):
             """
                 Cache Keys Management
             """
-            cache_key = "use_case_" + use_case + "_section_" + str(outlier_detection_by_method) + ','.join(str(x) for x in features) + "_width_" + str(chart_width)
+            print("we are heree in x-ray")
+            cache_key = "use_case_" + use_case + "_section_" + str(outlier_detection_by_method) + ','.join(str(x) for x in features) + "_width_" + str(chart_width) + "_outlier_detection_algorithm_" + str(outlier_detection_algorithm)
             # Set expiration time for cache if used
             ttl_in_seconds = timedelta(days=10).total_seconds()
             
@@ -514,10 +518,10 @@ def get_use_cases(data:dict={}):
             else:
                 chart_width = data.get("chart_width", 800)
                 variable = features
-                _, _, _, _, all_data = DataService.get_data_from_DB()
+                all_data, _, _, _, _ = DataService.get_data_from_DB()
                 numerical_data, categorical_data = preprocess_data(all_data, "X-ray")
                 width_chart_single = (chart_width / len(variable)) - 70
-                response = outlier_detection_implementation(
+                response = convert_chart(outlier_detection_implementation(
                     variable, numerical_data, 
                     categorical_data, 
                     training_attrs=['Component 1', 'Component 2'], 
@@ -525,10 +529,10 @@ def get_use_cases(data:dict={}):
                     width_chart_single=width_chart_single,
                     width_chart_single2=(chart_width - 70),
                     create_pairwise_plot_bool=True
-                ).to_dict(format="vega")
+                ))
                 # Store the result in the cache
                 cache.set_item(cache_key, response, ttl=ttl_in_seconds)  # Cache for 10 days
-                
+            
             return response
         
     elif use_case == "discrepancies":
@@ -544,7 +548,7 @@ def get_use_cases(data:dict={}):
         if cached_result:
             response = cached_result
         else:
-            _, _, _, _, all_data = DataService.get_data_from_DB()
+            all_data, _, _, _, _ = DataService.get_data_from_DB()
             # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
             expected_groups = {
                 'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
@@ -569,7 +573,7 @@ def get_use_cases(data:dict={}):
             # Transform the aggregated data
             transformed_data = transform_dataframe(inconsistencies_by_year)
         
-            response = create_visualization(data=transformed_data, chart_width=chart_width).to_dict(format="vega")
+            response = convert_chart(create_visualization(data=transformed_data, chart_width=chart_width))
             # Store the result in the cache
             cache.set_item(cache_key, response, ttl=ttl_in_seconds)  # Cache for 10 days
         return response

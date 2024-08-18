@@ -404,7 +404,117 @@ def aggregate_inconsistencies(data, keyword_groups):
     ).reset_index()
     return inconsistencies_by_year
 
+
 def create_visualization(data, chart_width=None):
+    """
+    Creates a visualization of inconsistencies by year and protein type.
+
+    Args:
+    - data (pd.DataFrame): The input dataframe.
+    - chart_width (int): The width of the chart and table.
+
+    Returns:
+    - alt.Chart: The combined Altair chart and table.
+    """
+    # Define selections
+    brush = alt.selection_interval(encodings=["x", "y"])
+    click = alt.selection_point(fields=['inconsistencies'], name='click')
+
+    # Check and set chart width
+    if chart_width and isinstance(chart_width,int):
+        chart_width = int(chart_width) - 50
+    else:
+        chart_width = "container"
+
+    # Create line chart
+    line_chart = alt.Chart(data).mark_line(point=True, interpolate='monotone').encode(
+        x=alt.X('bibliography_year:O', title="Year"),
+        y=alt.Y(
+            'inconsistencies:Q', 
+            title="Inconsistencies",
+            scale=alt.Scale(domain=(0, data['inconsistencies'].max() * 1.1))  # Added a small buffer to y-axis
+        ),
+        tooltip=[
+            'bibliography_year', 'inconsistencies', 
+            'protein_codes', 'group (OPM)', 
+            'group (MPstruc)'
+        ]
+    ).add_params(
+        brush, click
+    ).properties(
+        width=chart_width,
+        title='Discrepancies in membrane protein structure groups observed over time using the OPM and MPstruc databases.',
+    )
+    
+    # Create table
+    table = alt.Chart(data).mark_text(align='left').encode(
+        y=alt.Y('row_number:O', axis=None),
+    ).transform_filter(
+        brush
+    ).transform_filter(
+        click
+    ).transform_window(
+        row_number='row_number()'
+    ).transform_filter(
+        'datum.row_number < 15'
+    )
+
+    width_array = [80, 80, 100, 80, 120]
+    
+    # Create individual columns
+    pdb_code = table.encode(
+        text='pdb_code:N'
+    ).properties(
+        width=width_array[0],
+        title=alt.TitleParams(text='PDB Code', align='left')
+    )
+
+    group = table.encode(
+        text='group (MPstruc):N'
+    ).properties(
+        width=width_array[1],
+        title=alt.TitleParams(text='Group (MPstruc)', align='left')
+    )
+
+    OPM_group = table.encode(
+        text='group (OPM):N'
+    ).properties(
+        width=width_array[2],
+        title=alt.TitleParams(text='Group (OPM)', align='left')
+    )
+
+    year = table.encode(
+        text='bibliography_year:N'
+    ).properties(
+        width=width_array[3],
+        title=alt.TitleParams(text='Year', align='left')
+    )
+
+    method = table.encode(
+        text='experimental_method:N'
+    ).properties(
+        width=width_array[4],
+        title=alt.TitleParams(text='Experimental Method', align='left')
+    )
+    
+    # Concatenate columns horizontally
+    table_layout = alt.hconcat(
+        pdb_code, group, OPM_group, year, method
+    ).resolve_legend(
+        color="independent"
+    )
+
+    # Concatenate chart and table vertically
+    chart_with_table = alt.vconcat(
+        line_chart, table_layout
+    ).configure_view(
+        strokeWidth=0
+    )
+
+    return chart_with_table
+
+
+def create_visualizationxxxxx(data, chart_width=None):
     """
     Creates a visualization of inconsistencies by year and protein type.
 
@@ -420,7 +530,7 @@ def create_visualization(data, chart_width=None):
 
     # Check and set chart width
     if chart_width and isinstance(chart_width,int):
-        chart_width = int(chart_width)
+        chart_width = int(chart_width) - 50
     else:
         chart_width = "container"
 
@@ -465,44 +575,47 @@ def create_visualization(data, chart_width=None):
     ).transform_filter(
         'datum.row_number < 15'
     ).properties(
-        width=table_width
+        #width=table_width
     )
 
+    width_array = [30, 30, 40, 30, 40]
+    
     # Create individual columns
     pdb_code = table.encode(
         text='pdb_code:N'
     ).properties(
-        # width=column_width,
+        width=width_array[0], # column_width,
         title=alt.TitleParams(text='PDB Code', align='left')
     )
 
     group = table.encode(
         text='group (MPstruc):N'
     ).properties(
-        # width=column_width,
+        width=width_array[1], #column_width,
         title=alt.TitleParams(text='Group (MPstruc)', align='left')
     )
 
     OPM_group = table.encode(
         text='group (OPM):N'
     ).properties(
-        # width=column_width,
+        width=width_array[2], #column_width,
         title=alt.TitleParams(text='Group (OPM)', align='left')
     )
 
     year = table.encode(
         text='bibliography_year:N'
     ).properties(
-        # width=column_width,
-        title=alt.TitleParams(text='Year', align='left')
+        width=width_array[3], #column_width,
+        title=alt.TitleParams(text='Years', align='left')
     )
 
     method = table.encode(
         text='experimental_method:N'
     ).properties(
-        # width=column_width,
+        width=width_array[4], #column_width,
         title=alt.TitleParams(text='Experimental methods', align='left')
     )
+    
 
     # Concatenate columns horizontally
     table_layout = alt.hconcat(
@@ -519,7 +632,7 @@ def create_visualization(data, chart_width=None):
     )
 
     return chart_with_table
-
+ 
 def group_annotation(chart_obj:Chart, group_list=[1, 2, 3]):
     data = {
         "Group": group_list,
@@ -591,7 +704,8 @@ def create_pairwise_plot(
     categorical_columns=None, width_chart_single=None, 
     width_outlier_detection=None, 
     plot_attrs=[], 
-    axis_name="PCA"
+    axis_name="PCA",
+    outlier_chart_title=""
 ):
     reverse_input = selected_columns[::-1]
     brush = alt.selection_interval(resolve='global')
@@ -635,7 +749,7 @@ def create_pairwise_plot(
     ).add_params(
         brush
     ).properties(
-        title="Outlier Detection using DBSCAN",
+        title=outlier_chart_title,
         width=width_outlier_detection
     )
         
@@ -740,7 +854,6 @@ def preprocess_data(data, method="X-ray"):
     return numerical_data, categorical_data
 
 def feature_boxplot(data, thirty_percent_for_boxplot, categorical_columns=[]):
-    alt.data_transformers.enable('vegafusion')
     # Automatically generate the alias mapping from column names
     feature_aliases = {col: f'{i + 1}' for i, col in enumerate(data.columns) if col != 'x'}
     # Remove keys from dictionary based on values in the list. This is needed for the table
@@ -792,6 +905,7 @@ def outlier_detection_implementation(
     categorical_data=pd.DataFrame(), 
     training_attrs=['Component 1', 'Component 2'], 
     plot_attrs=['Component 1', 'Component 2'],
+    algorithm="DBSCAN",
     width_chart_single=150,
     width_chart_single2="container",
     create_pairwise_plot_bool=False
@@ -837,11 +951,12 @@ def outlier_detection_implementation(
             # PCA is the first followed by TSNE and UMAP
             thirty_percent_for_boxplot = (width_chart_single2 * 0.3)
             seventy_percent_for_boxplot = (width_chart_single2 - thirty_percent_for_boxplot) - 35
-            outlier_annotation_tab = detect_outliers_and_data(combined_data[0], 'DBSCAN', detector)
+            outlier_annotation_tab = detect_outliers_and_data(combined_data[0], algorithm, detector)
             outlier_detection_plot, create_pairwise_plot_chart = create_pairwise_plot(
                 outlier_annotation_tab, column_list, categorical_columns, 
                 width_chart_single, seventy_percent_for_boxplot,
-                plot_attrs, "PCA"
+                plot_attrs, "PCA",
+                outlier_chart_title="Outlier detection using " + algorithm
             )
             
             bottom_chart = alt.hconcat(

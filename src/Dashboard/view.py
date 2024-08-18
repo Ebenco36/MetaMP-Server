@@ -14,6 +14,7 @@ from src.Training.services import (
     group_annotation, 
     transform_dataframe
 )
+from src.services.graphs.helpers import convert_chart
 from src.services.pages import Pages
 from src.Dashboard.data import stats_data
 from src.utils.response import ApiResponse
@@ -46,6 +47,7 @@ from src.Dashboard.services import (
     super_family_filter_options, taxonomic_domain_filter_options
 )
 from utils.redisCache import RedisCache
+
 
 class WelcomePage(Resource):
     def __init__(self):
@@ -237,9 +239,9 @@ class WelcomePage(Resource):
             "trend": trend,
             "map_chart": map,
             "all_data": all_data,
-            "group_chart": chart.to_dict(),
-            "method_chart": chart_method.to_dict(),
-            "outlier_chart": chart_outlier.to_dict(),
+            "group_chart": convert_chart(chart),
+            "method_chart": convert_chart(chart_method),
+            "outlier_chart": convert_chart(chart_outlier),
             'get_master_proteins': get_master_proteins,
             "all_data_uniprot": all_data_uniprot,
             "all_data_opm": all_data_opm,
@@ -334,8 +336,7 @@ class AboutMetaMP(Resource):
         self.cache.set_item(cache_key, result, ttl=ttl_in_seconds)  # Cache for 10 days
 
         return jsonify(result)
-    
-    
+   
 class Dashboard(Resource):
     def __init__(self):
         self.cache = RedisCache()
@@ -429,7 +430,7 @@ class DashboardInconsistencies(Resource):
         if cached_result:
             return jsonify(cached_result)
         
-        _, _, _, _, all_data = DataService.get_data_from_DB()
+        all_data, _, _, _, _ = DataService.get_data_from_DB()
         # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
         expected_groups = {
             'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
@@ -455,9 +456,9 @@ class DashboardInconsistencies(Resource):
         transformed_data = transform_dataframe(inconsistencies_by_year)
         # transformed_data.to_csv("discrepancies.csv")
         # Create and display the visualization
-        chart_with_table = create_visualization(transformed_data, "container")
+        chart_with_table = create_visualization(transformed_data, chart_width)
         result = {
-            'inconsistencies': chart_with_table.to_dict(),
+            'inconsistencies': convert_chart(chart_with_table),
         }
 
         # Store the result in the cache

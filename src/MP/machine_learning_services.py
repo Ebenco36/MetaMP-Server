@@ -1,6 +1,8 @@
 import os, sys
 import numpy as np
 from sklearn.calibration import LabelEncoder
+
+from src.services.graphs.helpers import convert_chart
 sys.path.append(os.getcwd())
 import pandas as pd
 import altair as alt
@@ -18,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.cluster import AgglomerativeClustering
 from src.Jobs.transformData import report_and_clean_missing_values
+
 
 class UnsupervisedPipeline:
     def __init__(self, data_frame):
@@ -302,7 +305,7 @@ class UnsupervisedPipeline:
         ).properties(
             title=f'Clustering with {method.upper()}'
         ).interactive()
-        self.clustering_data = chart.to_dict()
+        self.clustering_data = convert_chart(chart)
         
         return self
 
@@ -312,8 +315,8 @@ class OutlierDetection:
         self.plot_attrs = plot_attrs
         
         self.models = {
-            'IsolationForest': IsolationForest(contamination=0.07, random_state=42),
-            'LocalOutlierFactor': LocalOutlierFactor(n_neighbors=30, contamination=0.07, novelty=True),
+            'IsolationForest': IsolationForest(contamination=0.1, random_state=42),
+            'LocalOutlierFactor': LocalOutlierFactor(n_neighbors=30, contamination=0.1, novelty=True),
             'DBSCAN': DBSCAN(eps=0.5, min_samples=5)
         }
     
@@ -323,7 +326,7 @@ class OutlierDetection:
         
         model = self.models[algorithm]
         data_copy = data.copy()
-        
+        print(algorithm)
         if algorithm == 'LocalOutlierFactor':
             model.fit(data_copy[self.training_attrs])
             data_copy['Outlier'] = model.predict(data_copy[self.training_attrs])
@@ -339,6 +342,7 @@ class OutlierDetection:
         
         self.data = data_copy
         self.data['Outlier'] = self.data['Outlier'].map({0: 'Inlier', 1: 'Outlier'})
+        self.data.to_csv("outliers.csv")
         return self.data
     
     def visualize(self, title, numerical_data_columns, categorical_columns=['pdb_code', 'subgroup','group'], axis_name="PCA", width_chart_single=None):
@@ -389,4 +393,4 @@ def plotCharts(data, class_group=None, variables:list=["PCA 1", "PCA 2"]):
         orient='bottom',
         titleLimit=0
     ).interactive()
-    return chart.to_dict()
+    return convert_chart(chart)

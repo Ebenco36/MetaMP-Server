@@ -4,6 +4,7 @@ from flask import request, send_file
 from flask_restful import Resource
 from flask import jsonify
 import altair as alt
+from src.services.graphs.helpers import convert_chart
 from src.utils.response import ApiResponse
 
 class MachineLearningView(Resource):
@@ -219,7 +220,7 @@ class MachineLearningView(Resource):
             width="container",
         ).interactive().configure_legend(orient='bottom', direction = 'vertical')
         
-        return chart.to_dict()
+        return convert_chart(chart)
     
     
     
@@ -242,6 +243,11 @@ class UseCases(Resource):
                 "molecular_weight", 
                 "processed_resolution"
             ],
+            "outlier_detection_algorithms": [
+                "LocalOutlierFactor",
+                "IsolationForest",
+                "DBSCAN"
+            ]
         }
         
         return ApiResponse.success(data, "Fetch successfully")
@@ -253,6 +259,7 @@ class UseCases(Resource):
         groupby = data.get("category", "group")
         chart_width = data.get("chart_width", 800)
         chart_trend = data.get("chart_trend", "No")
+        outlier_detection_algorithm = data.get("outlier_detection_algorithm", "DBSCAN")
         outlier_detection_by_method = data.get("outlier_detection_by_method", "EM")
         
         #### For dection #####
@@ -279,6 +286,7 @@ class UseCases(Resource):
             "chart_type": chart_type,
             "chart_width": chart_width,
             "chart_trend": chart_trend,
+            "outlier_detection_algorithm": outlier_detection_algorithm,
             "outlier_detection_by_method": outlier_detection_by_method
         }
         response = get_use_cases(payload)

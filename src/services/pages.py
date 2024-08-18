@@ -16,12 +16,13 @@ from src.services.Helpers.helper import (
     convert_to_type,
 )
 
-from src.services.graphs.helpers import Graph
+from src.services.graphs.helpers import Graph, convert_chart
 from src.Dashboard.data import array_string_type
 from src.services.range_order import columns_range_limit
 from src.Commands.Migration.classMigrate import Migration
 from src.services.Helpers.BasicClasses.GroupByClass import GroupBy
 from src.services.data.columns.remove_columns import not_needed_columns
+
 
 class Pages:
 
@@ -278,7 +279,7 @@ class Pages:
         chart = lollipop_chart + lollipop_lines
         # chart.properties(width=1000).save("countryChart.png", scale_factor=2.0)
         # chart to dict for display
-        return chart.to_dict()
+        return convert_chart(chart)
 
     def getMap(self):
         data, map_data = self.viewMap()
@@ -329,7 +330,7 @@ class Pages:
             .project("mercator")
         )
 
-        return map_base.to_dict()
+        return convert_chart(map_base)
 
     def viewMap(self):
         all_country_count = pd.merge(
@@ -453,7 +454,7 @@ class Pages:
             ]
         ]
         map_data = map_data.fillna("Unknown Country").sort_values(by="count", ascending=False)
-        return map_data.to_dict(orient="records"), final_map.to_dict()
+        return map_data.to_dict(orient="records"), convert_chart(final_map)
 
     def view_trends_by_database_year(self):
         final_data = load_and_prepare_data()
@@ -496,7 +497,7 @@ class Pages:
             )
         )
         # lines.properties(width=1000).save('annualContribution.png', scale_factor=2.0)
-        return lines.to_dict()
+        return convert_chart(lines)
 
     def average_resolution_over_years(self, data):
         data = data.dropna(subset=["processed_resolution", "bibliography_year"])
@@ -587,7 +588,7 @@ class Pages:
         )
         
         # chart.properties(width=1000).save("averageResolution.png", scale_factor=2.0)
-        return chart.to_dict()
+        return convert_chart(chart)
 
     def view_dashboard(self, get_query_params, conf={}, ranges_={}):
         # Get the URL parameters using Streamlit routing
@@ -622,7 +623,7 @@ class Pages:
         #     selected_content + ".png", scale_factor=2.0
         # )
 
-        return chart_obj.to_dict(), df_
+        return convert_chart(chart_obj), df_
 
     def remove_emptiness_with_percentage(self, perc=50):
         df = self.data.drop(not_needed_columns, inplace=False, axis=1)

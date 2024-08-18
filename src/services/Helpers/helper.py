@@ -5,6 +5,7 @@ import html
 import json
 import math
 import inspect
+import altair as alt
 import requests
 import pycountry
 import numpy as np
@@ -14,6 +15,7 @@ import matplotlib.colors as mcolors
 from geopy.geocoders import Nominatim
 from src.Dashboard.services import get_table_as_dataframe
 from src.services.data.columns.remove_columns import not_needed_columns
+
 
 def convert_to_type(string_array):
     try:
@@ -889,8 +891,8 @@ def load_and_prepare_data(data_list:list = [
     pdb['Pdb Code'] = pdb['pdb_code'].astype(str).str.lower()
     mpstruc['Pdb Code'] = mpstruc['pdb_code'].astype(str).str.lower()
     opm['pdbid'] = opm['pdbid'].astype(str).str.lower()
-    uniprot['uniprot_id'] = uniprot['uniprot_id'].astype(str).str.lower()
-    pdb['uniprot_id'] = pdb['uniprot_id'].astype(str).str.lower()
+    uniprot['pdb_code'] = uniprot['pdb_code'].astype(str).str.lower()
+    # pdb['uniprot_id'] = pdb['uniprot_id'].astype(str).str.lower()
 
     # Deduplicate and merge data
     merged_data = merge_datasets(pdb, mpstruc, opm, uniprot)
@@ -911,14 +913,13 @@ def merge_datasets(pdb, mpstruc, opm, uniprot):
         'pdb': pdb.drop_duplicates(subset=['Pdb Code']),
         'mpstruc': mpstruc.drop_duplicates(subset=['Pdb Code']),
         'opm': opm.drop_duplicates(subset=['pdbid']),
-        'uniprot': uniprot.drop_duplicates(subset=['uniprot_id'])
+        'uniprot': uniprot.drop_duplicates(subset=['pdb_code'])
     }
 
     merged_data_pdb = pd.merge(unique_records['pdb'][pdb_columns], unique_records['mpstruc'], on='Pdb Code', how='inner')
     merged_data_opm = pd.merge(unique_records['opm'], unique_records['pdb'][pdb_columns], left_on='pdbid', right_on='Pdb Code', how='inner')
-    merged_data_uniprot = pd.merge(unique_records['uniprot'], unique_records['pdb'][pdb_columns], left_on='uniprot_id', right_on='uniprot_id', how='inner')
-    # unique_records['pdb'][pdb_columns].to_csv("ssmsmsm.csv")
-    # unique_records['uniprot'].to_csv("skkkaaa.csv")
+    merged_data_uniprot = pd.merge(unique_records['uniprot'], unique_records['pdb'][pdb_columns], left_on='pdb_code', right_on='Pdb Code', how='inner')
+
     # Group by bibliography year and count entries
     return concatenate_and_group([merged_data_pdb, merged_data_opm, merged_data_uniprot])
 

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import altair as alt
 from scipy.optimize import curve_fit
-from src.services.graphs.helpers import Graph
+from src.services.graphs.helpers import Graph, convert_chart
 from src.services.Helpers.BasicClasses.GroupByClass import GroupBy
 from src.services.data.columns.quantitative.quantitative import cell_columns, rcsb_entries
 from src.services.data.columns.quantitative.quantitative_array import quantitative_array_column
@@ -130,7 +130,7 @@ def data_flowxxxx(protein_db, title="Cumulative sum of resolved Membrane Protein
         title=title
     )
     # chart_with_regression.properties(width=1000).save('cumulativeChart.png', scale_factor=2.0)
-    return chart_with_regression.to_dict(format="vega")
+    return convert_chart(chart_with_regression)
 
 def data_flow(protein_db, title="Cumulative sum of resolved Membrane Protein (MP) Structures over time"):
     import numpy as np
@@ -215,7 +215,7 @@ def data_flow(protein_db, title="Cumulative sum of resolved Membrane Protein (MP
         title=title
     )
     # chart_with_regression.properties(width=1000).save('cumulativeChart.png', scale_factor=2.0)
-    return chart_with_regression.to_dict(format="vega")
+    return convert_chart(chart_with_regression)
 
 def group_data_by_methods(df, columns=['bibliography_year', 'rcsentinfo_experimental_method'], col_color="rcsentinfo_experimental_method", col_x="bibliography_year", chart_type="line", bin_value=None, interactive=False, arange_legend="vertical"):
     # Group and count the data
@@ -277,7 +277,7 @@ def group_data_by_methods(df, columns=['bibliography_year', 'rcsentinfo_experime
     
     # chart.properties(width=1000).save('by_methods.png', scale_factor=2.0)
         
-    return chart.to_dict()
+    return convert_chart(chart)
 
 # Define exponential function for fitting
 def exp_growthxxxx(x, a, b):
@@ -464,7 +464,7 @@ def create_combined_chart_cumulative_growthxxxx(protein_db, chart_width=800):
         labelLimit=0
     )
 
-    return combined_chart.to_dict()
+    return convert_chart(combined_chart)
 
 def exp_growth(x, a, b):
     return a * np.exp(b * (x - 20))
@@ -690,4 +690,4 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
         spacing=2  # Remove spacing between charts
     )
 
-    return combined_chart.to_dict()
+    return convert_chart(combined_chart)

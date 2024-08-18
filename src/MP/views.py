@@ -38,8 +38,6 @@ from src.services.Helpers.fields_helper import (
 from src.middlewares.auth_middleware import token_required
 
 
-
-
 class DataResource(Resource):
     def __init__(self):
         self.parser = reqparse.RequestParser()
@@ -596,7 +594,7 @@ class GroupSubGroupResource(Resource):
         super().__init__()
         
     def get(self):
-        _, _, _, _, all_data = DataService.get_data_from_DB()
+        all_data, _, _, _, _ = DataService.get_data_from_DB()
         data = report_and_clean_missing_values(all_data, threshold=40)
 
         columns_to_drop = [col for col in data.columns if '_citation_' in col or '_count_' in col or col.startswith('count_') or col.endswith('_count') or col.startswith('revision_') or col.endswith('_revision') or col.startswith('id_') or col.endswith('_id') or col == "id"]

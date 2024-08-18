@@ -9,6 +9,7 @@ from sqlalchemy.sql import select
 from sqlalchemy import or_, and_
 from src.MP.model_opm import OPM
 from collections import OrderedDict
+from src.services.graphs.helpers import convert_chart
 from utils.redisCache import RedisCache
 from src.MP.model_uniprot import Uniprot
 from sqlalchemy.orm import Query, aliased
@@ -838,7 +839,7 @@ def create_grouped_bar_chart(table_df):
         labelAngle=0  # Ensure labels are horizontal
     )
 
-    return chart.to_dict()
+    return convert_chart(chart)
 
 
 def extract_widths(chart_dict, chart_width=800):
