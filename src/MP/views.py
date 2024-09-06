@@ -90,10 +90,7 @@ class getFilterBasedOnMethodResource(Resource):
         chart_types = transform_data_view(
             [
                 "bar_plot", 
-                "circle_plot", 
                 "line_plot", 
-                "point_plot", 
-                "rect_plot", 
                 "scatter_plot"
             ], 
             'Chart_options', 'single', [], False
@@ -104,22 +101,22 @@ class getFilterBasedOnMethodResource(Resource):
         
         if(method_type == "X-ray"):
             # Convert columns to numeric (if possible)
-            numeric_columns = list(set(X_ray_columns()))
+            numeric_columns = list(set(X_ray_columns(include_general=False)))
             numeric_columns_filtered_list = [item for item in numeric_columns if item not in ("group", "species")] + ["resolution", "rcsentinfo_resolution_combined"]
         elif(method_type == "NMR"):
             # Convert columns to numeric (if possible)
-            numeric_columns = list(set(NMR_columns()))
+            numeric_columns = list(set(NMR_columns(include_general=False)))
             numeric_columns_filtered_list = [item for item in numeric_columns if item not in ("group", "species")]
         elif(method_type == "Multiple methods"):
             # Convert columns to numeric (if possible)
-            numeric_columns = list(set(MM_columns()))
+            numeric_columns = list(set(MM_columns(include_general=False)))
             numeric_columns_filtered_list = [item for item in numeric_columns if item not in ("group", "species")] + ["resolution", "rcsentinfo_resolution_combined"]
         else:
             # Convert columns to numeric (if possible)
-            numeric_columns = list(set(X_ray_columns())  & set(EM_columns()) & set(NMR_columns()))
+            numeric_columns = list(set(X_ray_columns(include_general=False))  & set(EM_columns(include_general=False)) & set(NMR_columns(include_general=False)))
             
             numeric_columns_filtered_list = [item for item in numeric_columns if item not in ("group", "species")] + ["resolution", "rcsentinfo_resolution_combined"]
-            
+        numeric_columns_filtered_list.remove("rcsentinfo_resolution_combined")  
         quantitative_columns = transform_data_view(
             numeric_columns_filtered_list, 'quantitative', 
             'single', [], False
@@ -143,9 +140,9 @@ class getFilterBasedOnMethodResource(Resource):
     def post(self):
         data = request.get_json()
         x_axis = data.get('x_axis', "rcsentinfo_molecular_weight")
-        x_axis = "rcsentinfo_molecular_weight" if (x_axis is None or len(x_axis) == 0) else x_axis
+        x_axis = "" if (x_axis is None or len(x_axis) == 0) else x_axis
         y_axis = data.get('y_axis', "rcsentinfo_deposited_solvent_atom_count")
-        y_axis = "rcsentinfo_resolution_combined" if (y_axis is None or len(y_axis) == 0) else y_axis
+        y_axis = "resolution" if (y_axis is None or len(y_axis) == 0) else y_axis
         categorical_axis = data.get('categorical_axis', None)
         categorical_axis = None if (categorical_axis is None or len(categorical_axis) == 0) else categorical_axis
         experimental_method = data.get('experimental_method', "All")
@@ -160,12 +157,10 @@ class getFilterBasedOnMethodResource(Resource):
             'Taxonomic Domain',
             'Expressed in Species' 
         ] if x is not None])
-        columns = [
-            x_axis, y_axis
-        ] + cat_columns 
+        columns = cat_columns + ([x_axis] if x_axis != "" else []) + ([y_axis] if y_axis != "" else []) 
         data_frame = data_frame[list(set(columns))]
         
-        if categorical_axis is not None:
+        if categorical_axis is not None and ((x_axis is None or x_axis == "") or (y_axis is None or y_axis == "")):
             data_frame = data_frame.groupby([
                 data_frame[categorical_axis]
             ]).size().reset_index(name='Value')
@@ -174,10 +169,11 @@ class getFilterBasedOnMethodResource(Resource):
             _plot.set_selection(type='single', groups=[categorical_axis])\
                 .encoding(
                     tooltips = [categorical_axis, "Value"], 
-                    encoding_tags = ["norminal", "quantitative"]
+                    encoding_tags = ["norminal", "quantitative"],
+                    legend_columns=1
                 )\
-                .properties(width=0)\
-                .legend_config()\
+                .properties(width=0, title="Membrane Protein Structures categorized by " + categorical_axis.replace("rcsentinfo", " ").replace("_", " "))\
+                .legend_config(orient='bottom')\
                 .add_selection()\
                 .interactive()
         
@@ -185,15 +181,18 @@ class getFilterBasedOnMethodResource(Resource):
             chart_dict = _plot.return_dict_obj()
             
         else:
-            _plot = Graph(data_frame, axis = [x_axis, y_axis], labels="")
+            label = data.get('categorical_axis', "")
+            label = "" if (categorical_axis is None or len(categorical_axis) == 0) else categorical_axis
+            _plot = Graph(data_frame, axis = [x_axis, y_axis], labels=label)
             _plot = getattr(_plot, str(chart_type).replace(' ', '_'))()
             _plot.set_selection(type='single', groups=[])\
                 .encoding(
                     tooltips = columns, 
-                    encoding_tags = ["quantitative", "quantitative"]
+                    encoding_tags = ["quantitative", "quantitative"],
+                    legend_columns=1
                 )\
-                .properties(width=0)\
-                .legend_config()\
+                .properties(width=0, title="Relationship between " + x_axis.replace("rcsentinfo", " ").replace("_", " ") + " and " + y_axis.replace("rcsentinfo", " ").replace("_", " "))\
+                .legend_config(orient='bottom')\
                 .add_selection()\
                 .interactive()
         
@@ -394,6 +393,7 @@ class UsupervisedResource(Resource):
             dimensionality_algorithms = data.get('dimensionality_algorithms', "pca_algorithm")
             experimental_method = data.get('experimental_method_list', "All")
             color_by = data.get('categorical_list', "species")
+            color_by = "rcsentinfo_experimental_method" if color_by == "exptl_method" else color_by
             excluded_fields = data.get('excluded_list', [])
             #ML Option
             distance_threshold = data.get('distance_threshold', None)
@@ -554,13 +554,14 @@ class UsupervisedResource(Resource):
             .set_selection(type='single', groups=[label, color_by])\
             .encoding(
                 tooltips = result.columns, 
-                encoding_tags = ["quantitative", "quantitative"]
+                encoding_tags = ["quantitative", "quantitative"],
+                legend_columns=1
             )\
             .properties(width=0, title="Unsupervised Machine Learning (Clustering)")\
             .legend_config()\
             .add_selection()\
             .interactive()
-    
+        
         # Convert the Altair chart to a dictionary
         chart_dict = scatter_plot.return_dict_obj()
         
@@ -569,9 +570,10 @@ class UsupervisedResource(Resource):
             .set_selection(type='single', groups=[color_by])\
             .encoding(
                 tooltips = result.columns, 
-                encoding_tags = ["quantitative", "quantitative"]
+                encoding_tags = ["quantitative", "quantitative"],
+                legend_columns=1
             )\
-            .properties(width=0, title="Dimensionality Reduction using " + dimensionality_algorithms.replace("_", ""))\
+            .properties(width=0, title="Dimensionality Reduction using " + dimensionality_algorithms.replace("_", " ").title())\
             .legend_config()\
             .add_selection()\
             .interactive()
@@ -823,7 +825,7 @@ class GenerateRealSampleDataTest(Resource):
         pdb_codes_unclean = data.get('pdb_codes', '')  # Replace with your list of PDB codes
         pdb_codes = [code.strip() for code in pdb_codes_unclean.split(",") if code.strip()]  # Remove empty strings and strip whitespace
 
-        if len(pdb_codes) > 10:
+        if len(pdb_codes) > 20:
             return ApiResponse.error("Validation Error", 400, "Too many PDB codes (maximum 20 allowed)")
         
         result_df = self.fetch_records_for_proteins(pdb_codes)
@@ -836,7 +838,8 @@ class GenerateRealSampleDataTest(Resource):
             return ApiResponse.error("Validation Error", 404, "No data found for the provided PDB codes")
             
             
-        
+import os
+
 class MLPredictionPost(Resource):    
     def post(self):
         if 'data_file' not in request.files:
@@ -851,33 +854,42 @@ class MLPredictionPost(Resource):
             # Read the CSV file into a pandas DataFrame
             stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
             filename_data = pd.read_csv(stream)
+            
             expected_columns = [
                 'pdb_code', 'subunit_segments', 'thickness', 
                 'tilt', 'membrane_topology_in', 'membrane_topology_out'
             ]  
+            
             if not set(expected_columns).issubset(filename_data.columns):
                 return ApiResponse.error("Validation Error", 400, "Missing or incorrect column names")
             
+            # import the original old data
+            read_path = pd.read_csv("./models/semi-supervised/without_reduction_data.csv")
+            data_ = pd.concat([read_path, filename_data[[
+                'pdb_code', 'subunit_segments', 'thickness', 
+                'tilt', 'membrane_topology_in', 'membrane_topology_out'
+            ]]], axis=0)
             # Numerical columns
-            filename_data_ = filename_data[[ 'subunit_segments', 'thickness', 'tilt']]
+            filename_data_ = data_[[ 'subunit_segments', 'thickness', 'tilt']]
             
             """
                 Onehot encoding
             """
-            encode_data = filename_data[[
+            encode_data = data_[[
                 "membrane_topology_in", 
-                # "membrane_topology_out"
+                "membrane_topology_out"
             ]]
             encoded_data = onehot_encoder(encode_data)
             complete_numerical_data = pd.concat([filename_data_, encoded_data], axis=1)
-        
+            
             # Implementation for dimensionality reduction 
             perplexity_count = 50 if len(filename_data) > 50 else len(filename_data) - 1
             methods_params = {
                 'PCA': {'n_components': 2},
-                't-SNE': {'n_components': 2, 'perplexity': perplexity_count},
+                't-SNE': {'n_components': 2, 'perplexity': 30},
                 'UMAP': {'n_components': 2, 'n_neighbors': 15}
             }
+            
             if request.form.get("dim_reduction", "PCA").upper() == "TSNE":
                 key = "t-SNE"
             else:
@@ -892,10 +904,29 @@ class MLPredictionPost(Resource):
             combined_plot_data = pd.concat(plot_data)
             dm_data = combined_plot_data[combined_plot_data["Method"] == key].reset_index(drop=True)
             
+            label = data_["pdb_code"].reset_index(drop=True)
+            complete_merge = pd.concat([dm_data, label], axis=1)
+            complete_merge = complete_merge[complete_merge["pdb_code"].isin(filename_data["pdb_code"].to_list())]
+            complete_merge.reset_index()
+            
             # Load the saved model
-            model = joblib.load('./models/semi-supervised/' + request.form.get("model") + '__' + request.form.get("dim_reduction") + '.joblib')
+            model_name = request.form.get("model")
+            dim_reduction = request.form.get("dim_reduction")
+            model_path = f'./models/semi-supervised/{model_name}__{dim_reduction}.joblib'
+            first_model_search = './models/semi-supervised/Random Forest__semi_supervised_tsne_0.joblib'
+            # Check if the file exists
+            if os.path.exists(first_model_search):
+                model = joblib.load(first_model_search)
+                print(f"Loaded model from {first_model_search}")
+            else:
+                if os.path.exists(model_path):
+                    model = joblib.load(model_path)
+                    print(f"Loaded alternative model from {model_path}")
+                else:
+                    return ApiResponse.error("File Not Found", 404, f"Neither {model_path} nor {first_model_search} exists.")
+            
             # Make predictions using the imputed DataFrame
-            predictions = model.predict(dm_data[["Component 1", "Component 2"]])
+            predictions = model.predict(complete_merge[["Component 1", "Component 2"]])
             filename_data["predicted_class"] = predictions
             
             # Convert DataFrame to CSV

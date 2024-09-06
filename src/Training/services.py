@@ -613,7 +613,7 @@ def create_visualizationxxxxx(data, chart_width=None):
         text='experimental_method:N'
     ).properties(
         width=width_array[4], #column_width,
-        title=alt.TitleParams(text='Experimental methods', align='left')
+        title=alt.TitleParams(text='Experimental Method', align='left')
     )
     
 

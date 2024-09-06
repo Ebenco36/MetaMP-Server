@@ -428,13 +428,6 @@ def get_use_cases(data:dict={}):
 
                 # Grouping data by 'rcsb_entry_info_experimental_method' and 'Group' and counting occurrences
                 group_method_year_counts = chart_data.groupby([variable, 'bibliography_year']).size().reset_index(name='count')
-
-                # Choose mark type dynamically
-                if mark_type == "line":
-                    chart = alt.Chart(group_method_year_counts).mark_line()
-                else:
-                    chart = alt.Chart(group_method_year_counts).mark_bar()
-                
                 if("rcsentinfo_experimental_method" in group_method_year_counts):
                     group_method_year_counts['rcsentinfo_experimental_method'] = group_method_year_counts['rcsentinfo_experimental_method'].replace({
                         'EM': 'Cryo-Electron Microscopy (Cryo-EM)',
@@ -445,6 +438,13 @@ def get_use_cases(data:dict={}):
                     group_method_year_counts = group_method_year_counts.rename(columns={
                         'rcsentinfo_experimental_method': 'Experimental Method',
                     })
+                
+                    
+                # Choose mark type dynamically
+                if mark_type == "line":
+                    chart = alt.Chart(group_method_year_counts).mark_line()
+                else:
+                    chart = alt.Chart(group_method_year_counts).mark_bar()
                     
                 chart = convert_chart(alt.Chart.from_dict(
                     group_data_by_methods(

@@ -223,7 +223,11 @@ def transform_data_view(data, unique_field_name, multiple_selection, parents:lis
     data_object = {
         "options": [{
             "value": value, 
-            "name": format_string_caps(replace_and_separate(value)) if (isinstance(value, str)) else value
+            "name": (
+                    format_string_caps(
+                        replace_and_separate(value)
+                    ).replace("rcsentinfo", " ").replace("_", " ").title()
+                ) if (isinstance(value, str)) else value
             } for value in data
         ],
         "model_name": [],

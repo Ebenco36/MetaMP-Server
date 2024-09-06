@@ -471,14 +471,15 @@ class ClassifierComparisonSemiSupervised:
         self.X_unlabeled = self.scaler.transform(self.X_unlabeled)
     
     def train_and_evaluate(self):
+        # random_state=42,
         classifiers = {
-            "Logistic Regression": LogisticRegression(random_state=42, max_iter=50000),
-            "Decision Tree": DecisionTreeClassifier(random_state=42),
-            "Random Forest": RandomForestClassifier(random_state=42, n_estimators=100),
+            "Logistic Regression": LogisticRegression(max_iter=50000),
+            "Decision Tree": DecisionTreeClassifier(),
+            "Random Forest": RandomForestClassifier(n_estimators=100),
             "KNeighbors Classifier": KNeighborsClassifier(n_neighbors=5),
-            "Gradient Boosting Classifier": GradientBoostingClassifier(random_state=42, n_estimators=100, learning_rate=0.1),
+            "Gradient Boosting Classifier": GradientBoostingClassifier( n_estimators=100, learning_rate=0.1),
             "Gaussian NB": GaussianNB(),
-            "SVM": SVC(probability=True, random_state=42)  # Ensure probability=True for SVM
+            "SVM": SVC(probability=True)  # Ensure probability=True for SVM
         }
 
         results = {"Classifier": [], "Accuracy": [], "Precision": [], "Recall": [], "F1-score": []}
@@ -618,13 +619,13 @@ class ClassifierComparisonSemiSupervisedOutlier:
     
     def train_and_evaluate(self):
         classifiers = {
-            "Logistic Regression": LogisticRegression(random_state=42, max_iter=50000),
-            "Decision Tree": DecisionTreeClassifier(random_state=42),
-            "Random Forest": RandomForestClassifier(random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=50000),
+            "Decision Tree": DecisionTreeClassifier(),
+            "Random Forest": RandomForestClassifier(),
             "KNeighbors Classifier": KNeighborsClassifier(n_neighbors=5),
-            "Gradient Boosting Classifier": GradientBoostingClassifier(random_state=42, n_estimators=100, learning_rate=0.1),
+            "Gradient Boosting Classifier": GradientBoostingClassifier(n_estimators=100, learning_rate=0.1),
             "Gaussian NB": GaussianNB(),
-            "SVM": SVC(probability=True, random_state=42)  # Ensure probability=True for SVM
+            "SVM": SVC(probability=True)  # Ensure probability=True for SVM
         }
 
         results = {"Classifier": [], "Accuracy": [], "Precision": [], "Recall": [], "F1-score": []}

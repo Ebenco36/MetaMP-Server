@@ -245,21 +245,25 @@ def group_data_by_methods(df, columns=['bibliography_year', 'rcsentinfo_experime
     axis = alt.Axis(labelAngle=-45, tickCount=15, values=tick_positions if not bin_value else None)
 
     # Define custom colors
-    custom_colors = {
-        'Cryo-Electron Microscopy (Cryo-EM)': '#517caa',
-        'Multi-Method': '#e55e5d',
-        'Nuclear Magnetic Resonance (NMR)': '#73b7b3',
-        'X-ray Crystallography (X-ray)': '#f38820'       
-    }
+    if "rcsentinfo_experimental_method" in group_subtype_count:
+        custom_colors = {
+            'Cryo-Electron Microscopy (Cryo-EM)': '#517caa',
+            'Multi-Method': '#e55e5d',
+            'Nuclear Magnetic Resonance (NMR)': '#73b7b3',
+            'X-ray Crystallography (X-ray)': '#f38820'       
+        }
+        scale = alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values()))
+        color_obj = alt.Color(f'{col_color}:N', legend=alt.Legend(title=title, labelLimit=0, direction=arange_legend), scale=scale)
+    else:
+        scale = None
+        color_obj = alt.Color(f'{col_color}:N', legend=alt.Legend(title=title, labelLimit=0, direction=arange_legend))
         
     # Create the chart object
     chart_obj = chart_t.encode(
         x=alt.X(f'{col_x}:O', title='Bibliography (Year)', sort="x", bin=bin, axis=axis),
         y=alt.Y('Cumulative MP Structures:Q', title="Cumulative MP Structures"),
         tooltip=['Cumulative MP Structures:Q'],
-        color=alt.Color(f'{col_color}:N', legend=alt.Legend(title=title, labelLimit=0, direction=arange_legend),
-            scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values()))
-        )
+        color=color_obj
     )
 
     # Add interactivity if required
@@ -602,8 +606,18 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
     padding = 200 
     available_width = chart_width - padding
 
-    chart_width_1 = 0.5*available_width
-    chart_width_2 = 0.5*chart_width_1
+    if available_width > 600:
+        chart_width_1 = 0.5*available_width
+        chart_width_2 = 0.5*chart_width_1
+        title_1 = ['Cumulative resolved MPs', ' categorized by group']
+        title_2 = ['Cumulative resolved MPs ', 'categorized by taxonomic domain']
+        title_3 = ["Cumulative resolved Membrane ", "Protein (MP) Structures over time"]
+    else:
+        chart_width_1 = available_width + 100
+        chart_width_2 = available_width + 100
+        title_1 = 'Cumulative resolved MPs categorized by group'
+        title_2 = 'Cumulative resolved MPs categorized by taxonomic domain'
+        title_3 = "Cumulative resolved Membrane Protein (MP) Structures over time"
     
     grouped_bar_chart = alt.Chart(grouped_data).mark_bar().encode(
         x=alt.X(
@@ -624,7 +638,7 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
     ).add_params(
         brush
     ).properties(
-        title=['Cumulative resolved MPs', ' categorized by group'],
+        title=title_1,
         width=chart_width_2
     )
     
@@ -641,7 +655,7 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
     ).transform_filter(
         brush
     ).properties(
-        title=['Cumulative resolved MPs ', 'categorized by taxonomic domain'],
+        title=title_2,
         width=chart_width_2
     ).interactive()
     
@@ -658,7 +672,7 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
         brush
     ).properties(
         width=chart_width_1,
-        title=["Cumulative resolved Membrane ", "Protein (MP) Structures over time"]
+        title=title_3
     ).interactive()
     
     # Add exponential fit line
@@ -675,11 +689,19 @@ def create_combined_chart_cumulative_growth(protein_db, chart_width=1000):
     chart_with_regression = entries_over_time + line
     
     # Combine both charts into one visualization
-    combined_chart = alt.hconcat(
-        grouped_bar_chart, 
-        grouped_bar_chart_taxonomic,  
-        chart_with_regression
-    ).configure_view(
+    if available_width > 600:
+        combined_chart = alt.hconcat(
+            grouped_bar_chart, 
+            grouped_bar_chart_taxonomic,  
+            chart_with_regression
+        )
+    else:
+        combined_chart = alt.vconcat(
+            grouped_bar_chart, 
+            grouped_bar_chart_taxonomic,  
+            chart_with_regression
+        )
+    combined_chart.configure_view(
         stroke='transparent'
     ).configure_legend(
         orient='bottom',

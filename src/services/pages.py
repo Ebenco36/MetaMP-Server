@@ -544,8 +544,8 @@ class Pages:
                 y=alt.Y("processed_resolution_median:Q", title="Average Resolution in Angstroms (Å)"),
                 color=alt.Color(
                     "rcsentinfo_experimental_method:N",
-                    title="Experimental Methods",
-                    legend=alt.Legend(orient="bottom", direction="vertical")
+                    title="Experimental Method",
+                    legend=alt.Legend(orient="bottom", direction="horizontal", labelLimit=0)
                 ),
                 tooltip=[
                     "bibliography_year",
@@ -554,7 +554,7 @@ class Pages:
                 ],
             ).properties(
                 width="container",
-                title="Median Resolution by Experimental Method Across Different Years",
+                title="Median resolution improvement by experimental method over time",
             )
         )
         

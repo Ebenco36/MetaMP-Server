@@ -198,10 +198,10 @@ def reduce_value_length_version2(data):
 
 def general_columns():
     return [
-        "group", "species", "pdb_code", "name", "taxonomic_domain", "resolution"
+        "group", "species", "pdb_code", "name", "taxonomic_domain", "resolution", "rcsentinfo_experimental_method"
     ]
     
-def EM_columns():
+def EM_columns(include_general=True):
     return reduce_value_length_version2([
         "rcsb_entry_info_assembly_count",
         "rcsb_entry_info_branched_entity_count",
@@ -237,27 +237,27 @@ def EM_columns():
         "em_image_recording_avg_electron_dose_per_image",
         "em_imaging_accelerating_voltage"
 
-    ] + general_columns())
+    ] + (general_columns() if include_general else []))
     
-def X_ray_columns():
+def X_ray_columns(include_general=True):
     return reduce_value_length_version2([
         "cell_angle_alpha",
         "cell_angle_beta",
         "cell_angle_gamma","cell_length_a","cell_length_b","cell_length_c","cell_zpdb","rcsb_entry_info_assembly_count","rcsb_entry_info_branched_entity_count","rcsb_entry_info_cis_peptide_count","rcsb_entry_info_deposited_atom_count","rcsb_entry_info_deposited_hydrogen_atom_count","rcsb_entry_info_deposited_model_count","rcsb_entry_info_deposited_modeled_polymer_monomer_count","rcsb_entry_info_deposited_nonpolymer_entity_instance_count","rcsb_entry_info_deposited_polymer_entity_instance_count","rcsb_entry_info_deposited_polymer_monomer_count","rcsb_entry_info_deposited_solvent_atom_count","rcsb_entry_info_deposited_unmodeled_polymer_monomer_count","rcsb_entry_info_disulfide_bond_count","rcsb_entry_info_entity_count","rcsb_entry_info_inter_mol_covalent_bond_count","rcsb_entry_info_inter_mol_metalic_bond_count","rcsb_entry_info_molecular_weight","rcsb_entry_info_nonpolymer_entity_count","rcsb_entry_info_nonpolymer_molecular_weight_maximum","rcsb_entry_info_nonpolymer_molecular_weight_minimum","rcsb_entry_info_polymer_entity_count","rcsb_entry_info_polymer_entity_count_dna","rcsb_entry_info_polymer_entity_count_rna","rcsb_entry_info_polymer_entity_count_nucleic_acid","rcsb_entry_info_polymer_entity_count_protein","rcsb_entry_info_polymer_entity_taxonomy_count","rcsb_entry_info_polymer_molecular_weight_maximum","rcsb_entry_info_polymer_molecular_weight_minimum","rcsb_entry_info_polymer_monomer_count_maximum","rcsb_entry_info_polymer_monomer_count_minimum","rcsb_entry_info_solvent_entity_count","rcsb_entry_info_diffrn_resolution_high_value","rcsb_entry_info_diffrn_radiation_wavelength_maximum","rcsb_entry_info_diffrn_radiation_wavelength_minimum","diffrn_ambient_temp","exptl_crystals_number","exptl_crystal_density_matthews","exptl_crystal_density_percent_sol","refine_ls_rfactor_rfree","refine_ls_rfactor_rwork","refine_ls_rfactor_obs","refine_ls_dres_high","refine_ls_dres_low","refine_ls_number_reflns_obs","refine_pdbx_ls_sigma_f","refine_ls_percent_reflns_rfree","refine_ls_percent_reflns_obs","refine_biso_mean","refine_ls_number_reflns_rfree","refine_overall_suml","refine_pdbx_solvent_shrinkage_radii","refine_pdbx_solvent_vdw_probe_radii","refine_hist_d_res_high","refine_hist_d_res_low","refine_hist_number_atoms_solvent","refine_hist_number_atoms_total","refine_hist_pdbx_number_atoms_ligand","refine_hist_pdbx_number_atoms_nucleic_acid","refine_hist_pdbx_number_atoms_protein","reflns_d_resolution_high","reflns_d_resolution_low","reflns_number_obs","reflns_pdbx_ordinal","reflns_pdbx_redundancy","reflns_percent_possible_obs","reflns_pdbx_net_iover_sigma_i","exptl_crystal_grow_p_h","exptl_crystal_grow_temp","reflns_shell_d_res_high","reflns_shell_d_res_low"
-    ] + general_columns())
+    ] + (general_columns() if include_general else []))
     
 
-def NMR_columns():
+def NMR_columns(include_general=True):
     return reduce_value_length_version2([
         "rcsb_entry_info_assembly_count","rcsb_entry_info_branched_entity_count","rcsb_entry_info_cis_peptide_count","rcsb_entry_info_deposited_atom_count","rcsb_entry_info_deposited_hydrogen_atom_count","rcsb_entry_info_deposited_model_count","rcsb_entry_info_deposited_modeled_polymer_monomer_count","rcsb_entry_info_deposited_nonpolymer_entity_instance_count","rcsb_entry_info_deposited_polymer_entity_instance_count","rcsb_entry_info_deposited_polymer_monomer_count","rcsb_entry_info_deposited_solvent_atom_count","rcsb_entry_info_deposited_unmodeled_polymer_monomer_count","rcsb_entry_info_disulfide_bond_count","rcsb_entry_info_entity_count","rcsb_entry_info_inter_mol_covalent_bond_count","rcsb_entry_info_inter_mol_metalic_bond_count","rcsb_entry_info_molecular_weight","rcsb_entry_info_nonpolymer_entity_count","rcsb_entry_info_polymer_entity_count","rcsb_entry_info_polymer_entity_count_dna","rcsb_entry_info_polymer_entity_count_rna","rcsb_entry_info_polymer_entity_count_nucleic_acid","rcsb_entry_info_polymer_entity_count_protein","rcsb_entry_info_polymer_entity_taxonomy_count","rcsb_entry_info_polymer_molecular_weight_maximum","rcsb_entry_info_polymer_molecular_weight_minimum","rcsb_entry_info_polymer_monomer_count_maximum","rcsb_entry_info_polymer_monomer_count_minimum","rcsb_entry_info_solvent_entity_count", "pdbx_nmr_exptl_sample_conditions_p_h","pdbx_nmr_exptl_sample_conditions_temperature"
 
-    ] + general_columns())
+    ]  + (general_columns() if include_general else []))
     
-def MM_columns():
+def MM_columns(include_general=True):
     return reduce_value_length_version2([
         "rcsb_entry_info_assembly_count","rcsb_entry_info_branched_entity_count","rcsb_entry_info_cis_peptide_count","rcsb_entry_info_deposited_atom_count","rcsb_entry_info_deposited_hydrogen_atom_count","rcsb_entry_info_deposited_model_count","rcsb_entry_info_deposited_modeled_polymer_monomer_count","rcsb_entry_info_deposited_nonpolymer_entity_instance_count","rcsb_entry_info_deposited_polymer_entity_instance_count","rcsb_entry_info_deposited_polymer_monomer_count","rcsb_entry_info_deposited_solvent_atom_count","rcsb_entry_info_deposited_unmodeled_polymer_monomer_count","rcsb_entry_info_disulfide_bond_count","rcsb_entry_info_entity_count","rcsb_entry_info_inter_mol_covalent_bond_count","rcsb_entry_info_inter_mol_metalic_bond_count","rcsb_entry_info_molecular_weight","rcsb_entry_info_nonpolymer_entity_count","rcsb_entry_info_polymer_entity_count","rcsb_entry_info_polymer_entity_count_dna","rcsb_entry_info_polymer_entity_count_rna","rcsb_entry_info_polymer_entity_count_nucleic_acid","rcsb_entry_info_polymer_entity_count_protein","rcsb_entry_info_polymer_entity_taxonomy_count","rcsb_entry_info_polymer_molecular_weight_maximum","rcsb_entry_info_polymer_molecular_weight_minimum","rcsb_entry_info_polymer_monomer_count_maximum","rcsb_entry_info_polymer_monomer_count_minimum","rcsb_entry_info_solvent_entity_count","pdbx_nmr_ensemble_conformers_calculated_total_number","pdbx_nmr_ensemble_conformers_submitted_total_number"
 
-    ] + general_columns())
+    ] + (general_columns() if include_general else []))
    
 def columns_to_retrieve():
     membrane_proteins = reduce_value_length_version2([

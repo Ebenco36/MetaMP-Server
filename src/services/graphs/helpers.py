@@ -140,7 +140,7 @@ class Graph:
         return self
 
     
-    def encoding(self, tooltips:list = [], encoding_tags:list = []):
+    def encoding(self, tooltips:list = [], encoding_tags:list = [], legend_columns=5):
 
         # manage color patterns
         # selection = alt.selection_point(fields=[self.y])
@@ -149,7 +149,7 @@ class Graph:
         #     alt.Y(self.y).legend(None),
         #     alt.value('lightgray')
         # )
-        color = alt.condition(self.selection, self.labels+':N', alt.value('lightgray'), legend=alt.Legend(title=self.labels, columns=5, columnPadding=20, labelLimit=0, direction = 'vertical'))
+        color = alt.condition(self.selection, self.labels+':N', alt.value('lightgray'), legend=alt.Legend(title=self.labels, columns=legend_columns, columnPadding=20, labelLimit=0, direction = 'vertical'))
 
         # set tooltips
 
@@ -284,9 +284,9 @@ class Graph:
         )
         return self
     
-    def legend_config(self):
+    def legend_config(self, orient='bottom'):
         self.altair_obj = self.altair_obj.configure_legend(
-            orient='bottom',
+            orient=orient,
             titleLimit=0
         )
         return self
@@ -517,7 +517,6 @@ def convert_chart(chart):
     try:
         # Get the currently active data transformer
         current_transformer = alt.data_transformers.get()
-
         # Check if the current transformer is vegafusion
         if 'vegafusion' in str(current_transformer):
             return chart.to_dict(format="vega")

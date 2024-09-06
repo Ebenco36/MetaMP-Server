@@ -356,6 +356,7 @@ class Dashboard(Resource):
         ########################Check width if they are the same ###########################
         
         if cached_result:
+            print(cached_result.get("trend", {}))
             if extract_widths(cached_result.get("trend", {}), int(first_leveled_width)):
                 return jsonify(cached_result)
 
