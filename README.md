@@ -148,8 +148,6 @@ Step 3: Configure Environment Variables
     ```bash
     flask sync-protein-database
     ```
-
-
 ## Running the Application
 
 ### Running with Flask Development Server
@@ -157,22 +155,16 @@ To run the application using Flask's development server:
     ```bash
     python manage.py runserver
     ```
-
-
 ### Running with Gunicorn (macOS/Linux)
 To run the application using Gunicorn:
     ```bash
     gunicorn -w 4 --graceful-timeout 30 -k gevent -b 0.0.0.0:5400 --reload server:app
     ```
-
-
 ### Running with Waitress (Windows)
 To run the application using Waitress:
     ```bash
     waitress-serve --port=5000 app:app
     ```
-
-
 ## Using Docker
 1. Build the Docker image:
     ```bash
@@ -186,8 +178,6 @@ To run the application using Waitress:
     ```bash
     docker system prune -a
     ```
-
-
 ## Flask Database Commands
 1. flask db init: Initialize the database.
 2. flask db migrate: Create a new migration.
@@ -213,7 +203,6 @@ To run the application using Waitress:
     ```bash
     redis-cli
     ```
-
 ## Working with RabbitMQ
 
 1. Start RabbitMQ service:
@@ -224,8 +213,6 @@ To run the application using Waitress:
     ```bash
     CONF_ENV_FILE="/opt/homebrew/etc/rabbitmq/rabbitmq-env.conf" /opt/homebrew/opt/rabbitmq/sbin/rabbitmq-server
     ```
-
-
 ## Performance Considerations
 To optimize the performance of MetaMP:
 
