@@ -430,8 +430,7 @@ def replace_and_separate(text):
         r'^pdbx_database_status_',
         r'^pdbx_nmr_ensemble_',
         r'^rcsb_primary_citation_rcsb_',
-        r'^rcsb_primary_citation_rcsb_',
-        r'^rcsentinfo_'
+        r'^rcsb_primary_citation_rcsb_'
     ]
 
     # Replace the substrings with 'pdbx' or 'rcsb'

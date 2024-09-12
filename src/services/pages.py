@@ -456,7 +456,8 @@ class Pages:
         map_data = map_data.fillna("Unknown Country").sort_values(by="count", ascending=False)
         return map_data.to_dict(orient="records"), convert_chart(final_map)
 
-    def view_trends_by_database_year(self):
+    
+    def view_trends_by_database_year_default(self):
         final_data = load_and_prepare_data()
         
         if "database" in final_data:
@@ -498,6 +499,59 @@ class Pages:
         )
         # lines.properties(width=1000).save('annualContribution.png', scale_factor=2.0)
         return convert_chart(lines)
+    
+    
+    def view_trends_by_database_year(self):
+        final_data = load_and_prepare_data()
+        
+        if "database" in final_data:
+            # Rename databases for better readability
+            databases = {
+                'OPM': 'OPM (Orientation of Proteins in Membranes)',
+                'PDB': 'PDB (Protein Data Bank)',
+                'UniProt': 'UniProt (Universal Protein Resource)'
+            }
+            final_data['database'] = final_data['database'].replace(databases)
+        
+        
+        # Compute the crosstab with cumulative sum
+        d = pd.crosstab(final_data['bibliography_year'], final_data['database'], values=final_data['count'], aggfunc='sum').cumsum()
+
+        # Reset the index to get 'bibliography_year' as a column
+        d = d.reset_index()
+
+        # Melt the dataframe to convert it into long format for Altair
+        d_melted = d.melt(id_vars='bibliography_year', var_name='database', value_name='count')
+
+        custom_colors = {
+            'PDB (Protein Data Bank)': '#005EB8',  # Blue for PDB
+            'OPM (Orientation of Proteins in Membranes)': '#A0C4E1',  # Green for OPM
+            'UniProt (Universal Protein Resource)': '#F4A261'  # Orange for UniProt
+        }
+        
+        # Create the stacked bar chart using Altair
+        chart = alt.Chart(d_melted).mark_bar().encode(
+            x=alt.X('bibliography_year:O', title='Year'),
+            y=alt.Y('count:Q', title='Cumulative MP Structures'),
+            color=alt.Color(
+                f"database:N",
+                scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())),
+                legend=alt.Legend(
+                    title="Database", labelLimit=0, orient="bottom", direction="vertical"
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip('database:N', title='Database'),
+                alt.Tooltip('bibliography_year:O', title='Year'),
+                alt.Tooltip('count:Q', title='Count')
+            ]
+        ).properties(
+            width=800,
+            height=400,
+            title="Comparative Annual Contributions by PDB, OPM, and UniProt Databases"
+        )
+
+        return convert_chart(chart)
 
     def average_resolution_over_years(self, data):
         data = data.dropna(subset=["processed_resolution", "bibliography_year"])

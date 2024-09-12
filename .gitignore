@@ -13,6 +13,8 @@ env/
 venv/
 jupyter_test/
 .env
+.env.development
+.env.production
 
 # Logs
 *.log
@@ -79,3 +81,5 @@ datasets/*.xml
 datasets/pdb/*.csv
 datasets_test/*.csv
 datasets_test/*.xml
+
+requirementss.txt

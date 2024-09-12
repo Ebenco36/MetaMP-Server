@@ -1,178 +1,199 @@
 # MetaMP README
 
-## Overview
+# MetaMP Application
 
-MetaMP is a platform designed for managing and visualizing membrane protein data. This documentation provides all the necessary commands and guidelines for setting up the development environment, running the application, and managing the associated database migrations.
+MetaMP is a web application designed to dynamically curate structure determination metadata for resolved Membrane Proteins (MPs). It provides several interactive views to explore enriched MP structure data and associated metadata, supporting advanced analysis and data-driven decision-making.
 
 ## Table of Contents
 
-1. [Features](#features)
-2. [Built With](#built-with)
-3. [Requirements](#requirements)
-4. [Installation](#installation)
-5. [Running the App](#running-the-app)
-6. [Usage](#usage)
-7. [Environment Setup](#environment-setup)
-8. [Installing Dependencies](#installing-dependencies)
-9. [Database Migrations](#database-migrations)
+1. [About the Project](#about-the-project)
+2. [Key Features](#key-features)
+3. [Built With](#built-with)
+4. [Requirements](#requirements)
+5. [Environment Setup](#environment-setup)
+6. [Installation](#installation)
+7. [Project Folder Structure](#project-folder-structure)
+8. [Application Setup and Configuration](#application-setup-and-configuration)
+9. [Seeding Process](#seeding-process)
 10. [Running the Application](#running-the-application)
-11. [Working with Redis](#working-with-redis)
-12. [Working with RabbitMQ](#working-with-rabbitmq)
-13. [Docker Commands](#docker-commands)
-15. [Common Issues & Fixes](#common-issues--fixes)
-16. [Project Structure](#project-structure)
-17. [Development Stages Overview](#development-stages-overview)
-18. [Recent Updates](#recent-updates)
-19. [Hosting the Platform](#hosting-the-platform)
+    - [Running with Flask Development Server](#running-with-flask-development-server)
+    - [Running with Gunicorn (macOS/Linux)](#running-with-gunicorn-macoslinux)
+    - [Running with Waitress (Windows)](#running-with-waitress-windows)
+11. [Using Docker](#using-docker)
+12. [Flask Database Commands](#flask-database-commands)
+13. [Working with Redis](#working-with-redis)
+14. [Working with RabbitMQ](#working-with-rabbitmq)
+15. [Performance Considerations](#performance-considerations)
+16. [License](#license)
+17. [Contact](#contact)
+18. [Acknowledgments](#acknowledgments)
 
-## Features
-- Gunicorn server setup
-- Database migration setup for SQLAlchemy Models
-- JWT authentication at `<your-host>/api/v1/login`
-- URL to register your admin and users at `<your-host>/api/v1/signup`
-- Provisioned route file for all your routes with admin blueprints
-- Test environment setup
+## About the Project
+
+**MetaMP** is a web application designed to dynamically curate structure determination metadata for resolved Membrane Proteins (MPs). It offers several interactive views to explore enriched MP structure data and their associated metadata, facilitating advanced analysis and data-driven decision-making. These views provide insights into MP structures resolved by different experimental methods, discrepancies in data across databases, outlier detection, and more. The application is modular, with each component having its own route, view, service, and model files.
+
+## Key Features
+
+### 1. Overview View
+Provides high-level visualizations of MP structures, categorized by experimental methods, taxonomic domains, and groups. It includes interactive charts for exploring trends such as the cumulative sum of resolved MP structures over time.
+
+### 2. Summary Statistics View
+Offers an on-demand analysis of MP structure metadata. A bar chart displays the cumulative sum of resolved structures by experimental method, with a table showing detailed data points. Users can dynamically filter data by various attributes, such as molecular type, resolution, or growth method, to update the visualization and table.
+
+### 3. Data Discrepancy View
+Identifies and displays discrepancies between database entries for MP structures. It provides a line chart to visualize discrepancies over time and a detailed table for inspecting metadata differences. A form is available for users to provide feedback to resolve discrepancies.
+
+### 4. Outlier Detection View
+Focuses on detecting outliers in MP structure data using Principal Component Analysis (PCA) and DBSCAN clustering. It includes a whisker plot and Scatter Plot Matrix (SPLOM) for analyzing outliers and understanding data variability. This view enables users to interactively examine anomalies for further investigation or correction.
+
+### 5. Database View
+Features a customizable tabular interface for exploring the enriched MetaMP database. Users can filter, sort, and export data based on criteria such as taxonomic domain, experimental method, and resolution. This view facilitates detailed analysis, comparison, and reporting.
+
+### 6. Exploration View
+Supports interactive exploration of MP structure data through a dynamic dashboard with customizable filters and visualization options. Users can analyze relationships between attributes like molecular type and experimental method to identify patterns and generate insights.
+
+### 7. Grouping View
+Utilizes AI to suggest categorizations of MP structures into predefined groups based on attributes. Experts review and refine these AI-generated groupings to ensure accuracy, enabling efficient and nuanced data curation.
 
 ## Built With
 
-This App was developed with the following stack:
-
-- Python
-- Flask
-- Flask-RESTful
-- Postgres DB
-- Gunicorn Web Server
+<!-- - **Python**: Programming language used for backend development. -->
+- **Flask**: Web framework used for creating the server-side application.
+- **Docker**: Containerization platform for easy deployment.
+- **Redis**: In-memory data structure store for caching.
+- **RabbitMQ**: Message-broker software for handling asynchronous tasks.
 
 ## Requirements
-- Python 3.6+
-- Python pip
-- Postgres SQL
 
-## Installation
-- Fork this repository.
-- Create a `.env` file as shown in the `env_example` file.
-- Set up your database.
-- On the terminal, `cd` into the app folder.
-- Run `pip install -r requirements.txt` to install required modules.
-- Run `python manage.py db init` to set up Alembic migrations.
-- Run `python manage.py db migrate -m='<your migration message>'` to create migration files.
-- Then run `python manage.py db upgrade` to create tables.
-
-## Running the App
-- On the terminal, run `gunicorn main:app`.
-- To run the app on a specific port, use `gunicorn -127.0.0.1:<port> main:app`.
-
-## Usage
-- `src/api/resources` — Flask-RESTful resources for your project.
-- `src/models` — SQLAlchemy models and schema.
-- `src/routes/api` — Contains all your route definitions.
-- `src/utils` — Contains validations, security, and helper files.
-- `src/middlewares` — Define your middleware files here.
-- You can modify the app to suit your needs.
-- Happy usage!
+- Python 3.9+
+- Flask 2.0+
+- Docker
+- Redis
+- RabbitMQ
+- PostgreSQL or MySQL (depending on your database choice)
 
 ## Environment Setup
 
-### Conda Environment (Linux/MacOS)
-1. Create a virtual environment:
-    ```bash
-    conda create -n venv_mpvis_flask python=3.9
+To set up the development environment, follow these steps:
+
+1. Install Python (3.8 or higher) from the [official Python website](https://www.python.org/).
+2. Install Docker and Docker Compose from the [official Docker website](https://www.docker.com/).
+3. Install Redis and RabbitMQ on your local machine or use Docker images.
+4. Set up a virtual environment:
+   ```bash
+   python -m venv venv_metamp
+   source venv_metamp/bin/activate  # On Windows use `venv_metamp\Scripts\activate`
+5. Install required Python libraries:
     ```
-2. Activate the environment:
-    ```bash
-    conda activate venv_mpvis_flask
+        pip install -r requirements.txt
     ```
 
-### Conda Environment (Windows)
-1. Create a virtual environment:
-    ```bash
-    conda create -n _wvenv_mpvis python=3.9
+## Installation
+
+Step 1: Clone the repository
     ```
-2. Activate the environment:
-    ```bash
-    conda activate _wvenv_mpvis
+    git clone https://github.com/Ebenco36/MPVIS-V2.git
+    cd MetaMP
+
     ```
 
-### Python Virtual Environment (Linux/MacOS)
-1. Create a virtual environment:
-    ```bash
-    python3.9 -m venv .venv_mpvis
+Step 2: Install Dependencies
     ```
-2. Activate the environment:
-    ```bash
-    source .venv_mpvis/bin/activate
-    ```
-
-### Python Virtual Environment (Windows)
-1. Activate the environment:
-    ```bash
-    .venv_mpvis_\Scripts\activate
-    ```
-
-## Installing Dependencies
-
-1. Install necessary packages:
-    ```bash
     pip install -r requirements.txt
-    ```
-2. Install additional required modules:
-    ```bash
-    pip install python-dotenv pyjwt pillow hupper hdbscan missingno bioseq biopython
+
     ```
 
-## Database Migrations
+Step 3: Configure Environment Variables
+    Copy .env content from our example env.
+    ```
+    cp env_example .env
+    ```
 
-1. Initialize Alembic migrations:
-    ```bash
-    python manage.py db init
-    ```
-2. Create migration files:
-    ```bash
-    python manage.py db migrate -m "<your migration message>"
-    ```
-3. Apply migrations to the database:
-    ```bash
-    python manage.py db upgrade
-    ```
-4. Running database migration and seeding all at once
+## Project Folder Structure
+/MetaMP
+|-- /airflow        # Save logs for airflow
+|-- /airflow_home   # Dag implementations are saved here
+|-- /airflowConfig  # Airflow configuration
+|-- /config         # Here is where we have different environment configuration
+|-- /database       # Database connection class is implemented here
+|-- /datasets and datasets_test     # A directory for processed datasets
+|-- /logs           # Save application logs
+|-- /migrations     # MetaMP migration folder
+|-- /models         # machine learning models are saved here
+|-- /nginx          # Nginx configuration for docker container is here
+|-- /public         # Public saves image and other static content
+|-- /serveConfig    # This folder contains files required for docker container to start properly
+|-- /src            # MetaMP implementations are here
+    |-- /app (Module)
+    |   |-- /routes       # Flask route files for each view
+    |   |-- /views        # HTML and Jinja templates for views
+    |   |-- /services     # Business logic and service files
+    |   |-- /models       # Database models
+|-- /tests          # test are written here
+|-- /utils          # MetaMP utils
+|-- Dockerfile        # Docker configuration
+|-- docker-compose.yml        # Docker configuration
+|-- docker-compose.yml # Docker Compose file for multi-container setup
+|-- README.md         # Documentation file
+|-- requirements.txt  # Python dependencies
+|-- env_example      # Example environment configuration
+|-- /manage.py, app.py and server.py # Server implementation
+
+
+## Application Setup and Configuration
+
+1. Configure the .env file with your database and other settings.
+2. Run migrations and seed to set up the database schema:
     ```
     flask sync-protein-database
-    flask sync-question-with-database
-    flask sync-system_admin-with-database
-    flask sync-feedback-questions-with-database
     ```
 
-### Flask Database Commands
-- Stamp the current revision to the latest:
-    ```bash
-    flask db stamp head
-    ```
-- Create a new migration:
-    ```bash
-    flask db migrate -m "Reset database"
-    ```
-- Apply the migration:
-    ```bash
-    flask db upgrade
-    ```
 
 ## Running the Application
 
-### Using Gunicorn
-1. Start the application (Linux/MacOS):
-    ```bash
-    gunicorn main:app --reload
+### Running with Flask Development Server
+To run the application using Flask's development server:
+
     ```
-2. Start the application on a specific port:
-    ```bash
-    gunicorn -127.0.0.1:<port> main:app --reload
+    python manage.py runserver
     ```
 
-### Using Waitress (Windows)
-1. Start the application:
-    ```bash
-    waitress-serve --listen=127.0.0.1:8000 main:app
+
+### Running with Gunicorn (macOS/Linux)
+To run the application using Gunicorn:
     ```
+    gunicorn -w 4 --graceful-timeout 30 -k gevent -b 0.0.0.0:5400 --reload server:app
+    ```
+
+
+### Running with Waitress (Windows)
+To run the application using Waitress:
+    ```
+    waitress-serve --port=5000 app:app
+    ```
+
+
+## Using Docker
+1. Build the Docker image:
+    ```bash
+    docker build -t mpvis .
+    ```
+2. Start the application using Docker Compose:
+    ```bash
+    docker-compose -f docker2-compose.yml up -d
+    ```
+3. Free up space by pruning Docker system:
+    ```bash
+    docker system prune -a
+    ```
+
+
+## Flask Database Commands
+1. flask db init: Initialize the database.
+2. flask db migrate: Create a new migration.
+3. flask db upgrade: Apply migrations.
+4. flask db downgrade: Revert migrations.
+
 
 ## Working with Redis
 
@@ -204,87 +225,26 @@ This App was developed with the following stack:
     CONF_ENV_FILE="/opt/homebrew/etc/rabbitmq/rabbitmq-env.conf" /opt/homebrew/opt/rabbitmq/sbin/rabbitmq-server
     ```
 
-### RabbitMQ Management Plugin
-- Management Plugin is enabled by default at: `http://localhost:15672`
-- Default credentials:
-    - Username: username
-    - Password: password
 
-## Docker Commands
+## Performance Considerations
+To optimize the performance of MetaMP:
 
-1. Build the Docker image:
-    ```bash
-    docker build -t mpvis .
-    ```
-2. Tag and push the Docker image:
-    ```bash
-    docker tag mpvis-flask-app ebenco36/mpvis:latest
-    docker push ebenco36/mpvis:latest
-    ```
-3. Pull the Docker image:
-    ```bash
-    docker pull ebenco36/mtest_docker:latest
-    ```
-4. Start the application using Docker Compose:
-    ```bash
-    docker-compose -f docker2-compose.yml up -d
-    ```
-5. Free up space by pruning Docker system:
-    ```bash
-    docker system prune -a
-    ```
+1. Use Redis for caching frequently accessed data.
+2. Utilize RabbitMQ for handling asynchronous tasks.
+3. Optimize database queries and use indexes where necessary.
+4. Use connection pooling and load balancing for handling high traffic.
 
-## Common Issues & Fixes
 
-1. Fix most issues by reinstalling dependencies:
-    ```bash
-    pip install --upgrade --force-reinstall -r requirements.txt
-    ```
-2. For attribute errors, upgrade `attrs`:
-    ```bash
-    pip install --upgrade attrs
-    ```
-3. To handle MySQL issues:
-    ```bash
-    export LDFLAGS="-L/opt/homebrew/opt/mysql-client/lib"
-    export CPPFLAGS="-I/opt/homebrew/opt/mysql-client/include"
-    export MYSQLCLIENT_CFLAGS=`mysql_config --cflags`
-    export MYSQLCLIENT_LDFLAGS=`mysql_config --libs`
-    ```
+## License
+Distributed under the MIT License. See LICENSE for more information.
 
-## Project Structure
 
-- `src/api/resources` - Contains Flask-RESTful resources.
-- `src/models` - SQLAlchemy models and schema.
-- `src/routes/api` - Contains all route definitions.
-- `src/utils` - Contains validations, security, and helper files.
-- `src/middlewares` - Define middleware files here.
+## Contact
+ebenco94@gmail.com, georgeshattab@gmail.com
 
-You can modify the app to suit your needs.
 
-## Development Stages Overview
-
-**Stage 1:** Focus on MPstruct analysis and visualization (e.g., tree diagrams, visuals).
-
-**Stage 2:** Focus on enriched MPstruct data, excluding MPstruct itself (e.g., summary statistics, relevant visualizations).
-
-**Stage 3:** Integration of both curated MPstruct and enriched data:
-  - Analyze and visualize data with respect to resolution methods.
-  - Validate new/unclassified MP structures through clustering.
-  - Outlier detection.
-
-## Recent Updates
-
-### Issue Discovery
-Some membrane proteins listed on MPstruct cannot be found anywhere, including PDB (e.g., 7ROW, 7UUV).
-
-### Problematic Entries
-Certain codes in MPstruct have been updated on PDB, causing discrepancies (e.g., 5W7L replaced by 8G1N).
-
-## Hosting the Platform
-
-To host the platform for testing or production, use the following commands:
-- Convert images to PDF for reports:
-    ```bash
-    convert ourLogo.png dashboard.png summaryStats.png details.png trainingStart.png Answer1.png TrainingQuestion.png testSummary.png Dimensionality.png trainingEnd.png table.png exploration1.png exploration2.png ML.png ML2.png about.png output.pdf
-    ```
+## Acknowledgments
+1. Flask for the web framework.
+2. Docker for containerization.
+3. Redis for caching.
+4. RabbitMQ for message brokering.
