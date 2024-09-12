@@ -154,7 +154,6 @@ Step 3: Configure Environment Variables
 
 ### Running with Flask Development Server
 To run the application using Flask's development server:
-
     ```bash
     python manage.py runserver
     ```
