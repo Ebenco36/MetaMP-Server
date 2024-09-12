@@ -71,6 +71,8 @@ datasets/pdb/PDB_data_transformed.csv
 ARS.csv
 
 *.png
+# Exempt a specific PNG file from being ignored
+!public/MetaMPArchitecture.png
 
 dataAll.csv
 *.ipynb

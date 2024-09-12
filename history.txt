@@ -820,3 +820,9 @@ git ls-tree -r -l HEAD | sort -k 4 -n
 git filter-branch --force --index-filter \
 'git rm --cached --ignore-unmatch datasets/Uniprot_functions.csv' \
 --prune-empty --tag-name-filter cat -- --all
+
+
+
+Add file after exempting it in gitignore file
+
+git add -f  public/MetaMPArchitecture.png
