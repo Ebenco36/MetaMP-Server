@@ -729,7 +729,10 @@ def countriesD():
         last_country_index = country_df.index[-1] + 1
     else:
         # If file doesn't exist, create an empty DataFrame
-        country_df = pd.DataFrame(columns=['location', 'country', 'flag', 'country_number', 'latitude', 'longitude'])
+        country_df = pd.DataFrame(columns=[
+            'location', 'country', 'country_with_flag', 
+            'flag', 'country_number', 'latitude', 'longitude'
+        ])
         # Start from the first country
         last_country_index = 0
 
@@ -742,11 +745,12 @@ def countriesD():
         # Iterate over countries in the current batch
         for country in batch_countries:
             # Get country name, ISO country code (alpha-3), and numeric code
-            country_name = country.flag + ' ' + country.name
+            country_name = country.name
             flag = country.flag
             iso_code_3 = country.alpha_3
             iso_code_2 = country.alpha_2
             country_number = country.numeric
+            country_with_flag = country.flag + ' ' + country.name
 
             # Geocode country to get latitude and longitude
             try:
@@ -758,11 +762,12 @@ def countriesD():
 
             # Append country information to the DataFrame
             data = {
-                'country': country_name, 
                 'flag': flag, 
                 'iso_code_2': iso_code_2, 
                 'iso_code_3': iso_code_3, 
+                'country': country_name, 
                 'country_number': country_number,
+                'country_with_flag': country_with_flag,
                 'latitude': location.latitude if location else None, 
                 'longitude': location.longitude if location else None
             }
@@ -916,16 +921,17 @@ def merge_datasets(pdb, mpstruc, opm, uniprot):
         'uniprot': uniprot.drop_duplicates(subset=['pdb_code'])
     }
 
+    merged_data_mpstruc = pd.merge(unique_records['mpstruc'], unique_records['pdb'][pdb_columns],  on='Pdb Code', how='inner')
     merged_data_pdb = pd.merge(unique_records['pdb'][pdb_columns], unique_records['mpstruc'], on='Pdb Code', how='inner')
     merged_data_opm = pd.merge(unique_records['opm'], unique_records['pdb'][pdb_columns], left_on='pdbid', right_on='Pdb Code', how='inner')
     merged_data_uniprot = pd.merge(unique_records['uniprot'], unique_records['pdb'][pdb_columns], left_on='pdb_code', right_on='Pdb Code', how='inner')
 
     # Group by bibliography year and count entries
-    return concatenate_and_group([merged_data_pdb, merged_data_opm, merged_data_uniprot])
+    return concatenate_and_group([merged_data_pdb, merged_data_mpstruc, merged_data_opm, merged_data_uniprot])
 
 def concatenate_and_group(dataframes):
     result = []
-    for df, name in zip(dataframes, ["PDB", "OPM", "UniProt"]):
+    for df, name in zip(dataframes, ["PDB", "MPstruc", "OPM", "UniProt"]):
         grouped = df.groupby(['bibliography_year']).size().reset_index(name='count')
         grouped['database'] = name
         result.append(grouped)

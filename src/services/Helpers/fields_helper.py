@@ -226,7 +226,7 @@ def transform_data_view(data, unique_field_name, multiple_selection, parents:lis
             "name": (
                     format_string_caps(
                         replace_and_separate(value)
-                    ).replace("rcsentinfo", " ").replace("_", " ").title()
+                    ).replace("Rcsentinfo", " ").replace("rcsentinfo", " ").replace("_", " ").title()
                 ) if (isinstance(value, str)) else value
             } for value in data
         ],
@@ -234,6 +234,43 @@ def transform_data_view(data, unique_field_name, multiple_selection, parents:lis
         "safe_name" : "name",
         "field_name": format_string_caps(unique_field_name),
         "multiple": True if multiple_selection == "multiple" else False,
+        "tooltip": "",
+        "parents": parents,
+        "show_option": status
+    }
+
+    return data_object
+
+
+
+def transform_data_dict_view(data, unique_field_name, multiple_selection, parents: list = [], status: bool = True):
+    """
+    Transforms data view from a list of dictionaries into the expected format.
+    
+    Args:
+    - data (list): List of dictionaries from which a value will be extracted.
+    - unique_field_name (str): Field name for formatting.
+    - multiple_selection (str): Whether the field is multiple selection.
+    - parents (list, optional): Parent options.
+    - status (bool, optional): Whether to show the option.
+    - value_key (str, optional): The key to extract the value from each dict.
+
+    Returns:
+    - dict: Transformed data object.
+    """
+    data_object = {
+        "options": [{
+            "value": item.get("value"), 
+            "name": (
+                format_string_caps(
+                    replace_and_separate(item.get("text"))
+                ).replace("Rcsentinfo", " ").replace("rcsentinfo", " ").replace("_", " ").title()
+            ) if isinstance(item.get("text"), str) else item.get("value")
+        } for item in data],
+        "model_name": [],
+        "safe_name": "name",
+        "field_name": format_string_caps(unique_field_name),
+        "multiple": multiple_selection == "multiple",
         "tooltip": "",
         "parents": parents,
         "show_option": status

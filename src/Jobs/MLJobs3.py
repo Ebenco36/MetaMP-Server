@@ -1,23 +1,10 @@
 import os, sys
 sys.path.append(os.getcwd())
 from sklearn.calibration import LabelEncoder
-from sklearn.model_selection import (
-    train_test_split, 
-    cross_val_score, 
-    cross_validate, 
-    StratifiedKFold,
-    KFold
-)
+from sklearn.model_selection import train_test_split, cross_val_score
 import pandas as pd
 import numpy as np
-import joblib
-from sklearn.metrics import (
-    make_scorer, 
-    f1_score, 
-    precision_score, 
-    recall_score, 
-    accuracy_score
-)
+
 from app import app
 import altair as alt
 from database.db import db
@@ -37,7 +24,7 @@ class MLJob:
         
         # Load data
         self.load_data()
-        self.models = {}  # Initialize self.models as an empty dictionary
+        
         # Data containers
         self.data = pd.DataFrame()
         self.numerical_data = pd.DataFrame()
@@ -144,124 +131,10 @@ class MLJob:
             chart.save('models/' + key + '.png', scale_factor=2.0)
         return self
 
-    def run_classificationXXX(self, X, y, model_class, filename_prefix, X_unlabeled=None):
-        """Run classification and save results."""
-        metrics_list = []
-
-        for run in range(self.num_runs):
-            if X_unlabeled is not None:  # Semi-Supervised Case
-                model = model_class(X, y, X_unlabeled, test_size=0.2, random_state=self.random_state + run)
-            else:  # Supervised Case
-                model = model_class(X, y, test_size=0.2, random_state=self.random_state + run)
-
-            # Train and evaluate the models
-            model.train_and_evaluate()
-
-            # Collect metrics for aggregation
-            metrics_list.append(model.results_df)
-
-            # Save model and plot performance
-            model.save_models(save_filename=f"{filename_prefix}_{run}")
-            model.plot_performance_comparison(save_filename=f"{filename_prefix}_{run}")
-
-        # Concatenate all metric results
-        concatenated_metrics = pd.concat(metrics_list)
-
-        # Select only numeric columns for aggregation
-        numeric_columns = concatenated_metrics.select_dtypes(include=['number'])
-
-        # Aggregate only numeric columns
-        aggregated_metrics = numeric_columns.groupby(level=0).agg(['mean', 'std'])
-
-        # Combine non-numeric data with aggregated numeric data (if needed)
-        non_numeric_columns = concatenated_metrics.select_dtypes(exclude=['number']).drop_duplicates()
-        if not non_numeric_columns.empty:
-            aggregated_metrics = pd.concat([aggregated_metrics, non_numeric_columns], axis=1)
-
-        # Save aggregated metrics
-        aggregated_metrics.to_csv(f"./models/{filename_prefix}_metrics_mean.csv")
-        print(f"Metrics saved to ./models/{filename_prefix}_metrics_mean.csv")
-        
-        
-    def run_classificationXXXXX(self, X, y, model_class, filename_prefix, X_unlabeled=None):
-        """Run classification and save results."""
-        metrics_list = []
-
-        for run in range(self.num_runs):
-            if X_unlabeled is not None:  # Semi-Supervised Case
-                model = model_class(X, y, X_unlabeled, test_size=0.2, random_state=self.random_state + run)
-            else:  # Supervised Case
-                model = model_class(X, y, test_size=0.2, random_state=self.random_state + run)
-
-            # Train and evaluate the models
-            model.train_and_evaluate()
-
-            # Perform cross-validation
-            cv_scores = cross_val_score(model.model, X, y, cv=5)  # Adjust cv as needed
-            print(f"Run {run} - Cross-validation scores: {cv_scores}")
-            print(f"Run {run} - Mean cross-validation score: {cv_scores.mean()}")
-
-            # Collect metrics for aggregation
-            metrics_list.append(model.results_df)
-
-            # Save model and plot performance
-            model.save_models(save_filename=f"{filename_prefix}_{run}")
-            model.plot_performance_comparison(save_filename=f"{filename_prefix}_{run}")
-
-        # Concatenate all metric results
-        concatenated_metrics = pd.concat(metrics_list)
-
-        # Select only numeric columns for aggregation
-        numeric_columns = concatenated_metrics.select_dtypes(include=['number'])
-
-        # Aggregate only numeric columns
-        aggregated_metrics = numeric_columns.groupby(level=0).agg(['mean', 'std'])
-
-        # Combine non-numeric data with aggregated numeric data (if needed)
-        non_numeric_columns = concatenated_metrics.select_dtypes(exclude=['number']).drop_duplicates()
-        if not non_numeric_columns.empty:
-            aggregated_metrics = pd.concat([aggregated_metrics, non_numeric_columns], axis=1)
-
-        # Save aggregated metrics
-        aggregated_metrics.to_csv(f"./models/{filename_prefix}_metrics_mean.csv")
-        print(f"Metrics saved to ./models/{filename_prefix}_metrics_mean.csv")
-    
-    def plot_metrics_altair(self, metrics_data):
-        # Convert metrics_data to a DataFrame
-        metrics_df = pd.DataFrame(metrics_data)
-        
-        # Melt the DataFrame to long format for Altair
-        plot_data = metrics_df.melt(id_vars='Classifier', value_vars=['Mean Accuracy', 'Mean F1-Score', 'Mean Precision', 'Mean Recall'],
-                                    var_name='Metric', value_name='Score')
-        
-        # Create a grouped bar chart with Altair
-        chart = alt.Chart(plot_data).mark_bar().encode(
-            x=alt.X('Classifier:N', title='Classifier'),
-            y=alt.Y('Score:Q', title='Score'),
-            color=alt.Color('Metric:N', title='Metric'),
-            column=alt.Column('Metric:N', title='Metric')
-        ).properties(
-            title='Mean Performance Metrics for Each Classifier',
-            width=200,
-            height=300
-        ).configure_axis(
-            labelAngle=-45
-        ).configure_view(
-            stroke='transparent'
-        )
-        
-        # Save the plot as a file
-        chart.save('./models/metrics_comparison_altair.png')
-        
-    
     def run_classification(self, X, y, model_class, filename_prefix, X_unlabeled=None):
         """Run classification and save results."""
         metrics_list = []
-        best_model = None
-        best_score = -float('inf')  # Initialize with a very low value
-        # Create an empty list to collect metrics for saving to CSV
-        metrics_data = []
-        
+
         for run in range(self.num_runs):
             if X_unlabeled is not None:  # Semi-Supervised Case
                 model = model_class(X, y, X_unlabeled, test_size=0.2, random_state=self.random_state + run)
@@ -270,64 +143,13 @@ class MLJob:
 
             # Train and evaluate the models
             model.train_and_evaluate()
-            # Define stratified cross-validation
-            # skf = StratifiedKFold(n_splits=5)
-            kf = KFold(n_splits=5, shuffle=True, random_state=self.random_state + run)
-            # Perform cross-validation for each classifier using multiple metrics
-            for clf_name, clf in model.models.items():
-                scoring = {
-                    'accuracy': make_scorer(accuracy_score),
-                    'f1_weighted': make_scorer(f1_score, average='weighted', zero_division=0),
-                    'precision_weighted': make_scorer(precision_score, average='weighted', zero_division=0),
-                    'recall_weighted': make_scorer(recall_score, average='weighted', zero_division=0)
-                }
-                
-                cv_results = cross_validate(clf, X, y, cv=5, scoring=scoring, return_train_score=False)
-                
-                # Calculate mean scores for each metric
-                mean_accuracy = cv_results['test_accuracy'].mean()
-                mean_f1 = cv_results['test_f1_weighted'].mean()
-                mean_precision = cv_results['test_precision_weighted'].mean()
-                mean_recall = cv_results['test_recall_weighted'].mean()
 
-                # Collect metrics data for saving to CSV
-                metrics_data.append({
-                    'Run': run,
-                    'Classifier': clf_name,
-                    'Accuracy Scores': cv_results['test_accuracy'],
-                    'Mean Accuracy': mean_accuracy,
-                    'F1-Score': cv_results['test_f1_weighted'],
-                    'Mean F1-Score': mean_f1,
-                    'Precision': cv_results['test_precision_weighted'],
-                    'Mean Precision': mean_precision,
-                    'Recall': cv_results['test_recall_weighted'],
-                    'Mean Recall': mean_recall
-                })
+            # Collect metrics for aggregation
+            metrics_list.append(model.results_df)
 
-                # Evaluate and update the best model based on chosen metric
-                if mean_f1 > best_score:
-                    best_score = mean_f1
-                    best_model = clf
-                    best_clf_name = clf_name
-
-                # Collect metrics for aggregation
-                metrics_list.append(model.results_df)
-
-            # Save models and plot performance only after all runs
+            # Save model and plot performance
             model.save_models(save_filename=f"{filename_prefix}_{run}")
             model.plot_performance_comparison(save_filename=f"{filename_prefix}_{run}")
-
-        # Save the best model once after all runs
-        if best_model is not None:
-            # Use the last run number or a specific number if preferred
-            self.save_best_model(best_model, best_clf_name, filename_prefix, self.num_runs - 1)
-
-        # Convert metrics data to DataFrame
-        metrics_df = pd.DataFrame(metrics_data)
-
-        # Save metrics to CSV
-        metrics_df.to_csv(f"./models/{filename_prefix}_cross_validation_metrics.csv", index=False)
-        print(f"Cross-validation metrics saved to ./models/{filename_prefix}_cross_validation_metrics.csv")
 
         # Concatenate all metric results
         concatenated_metrics = pd.concat(metrics_list)
@@ -346,17 +168,7 @@ class MLJob:
         # Save aggregated metrics
         aggregated_metrics.to_csv(f"./models/{filename_prefix}_metrics_mean.csv")
         print(f"Metrics saved to ./models/{filename_prefix}_metrics_mean.csv")
-        
-        self.plot_metrics_altair(metrics_data)
     
-    
-
-    def save_best_model(self, model, clf_name, filename_prefix, run):
-        """Save the best model based on selected metric."""
-        joblib.dump(model, f'./models/{filename_prefix}_best_{clf_name}_{run}.joblib')
-        print(f"Best model saved to ./models/{filename_prefix}_best_{clf_name}_{run}.joblib")
-
-
     def semi_supervised_learning(self):
         """Run semi-supervised learning on different dimensionality-reduced datasets."""
         data_list = {
@@ -366,12 +178,6 @@ class MLJob:
         }
         
         for key, data in data_list.items():
-            # data["group"] = data["group"].replace({
-            #     'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL': 0,
-            #     'TRANSMEMBRANE PROTEINS:BETA-BARREL': 1,
-            #     'MONOTOPIC MEMBRANE PROTEINS': 2
-            # })
-            
             X_labeled, X_unlabeled, y_labeled, _ = train_test_split(
                 data[["Component 1", "Component 2"]],
                 data["group"], test_size=0.66,
@@ -384,12 +190,6 @@ class MLJob:
 
         # Without Dimensionality Reduction
         categorical_data = self.over_sampling_data_selected_feature_data["group"]
-        # .replace({
-        #     'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL': 0,
-        #     'TRANSMEMBRANE PROTEINS:BETA-BARREL': 1,
-        #     'MONOTOPIC MEMBRANE PROTEINS': 2
-        # })
-        
         X_labeled, X_unlabeled, y_labeled, _ = train_test_split(
             self.complete_numerical_data,
             categorical_data, test_size=0.66,

@@ -1,0 +1,1143 @@
+{
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.16.3.json",
+    "config": {
+        "view": {
+            "continuousHeight": 300,
+            "continuousWidth": 300
+        }
+    },
+    "data": {
+        "name": "data-0363618f489980ed59ef24fd741159b6"
+    },
+    "datasets": {
+        "data-0363618f489980ed59ef24fd741159b6": [
+            {
+                "Order": 0,
+                "bibliography_year": 1985,
+                "count": 1,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1987,
+                "count": 2,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1990,
+                "count": 3,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1991,
+                "count": 4,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1992,
+                "count": 7,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.434782608695656
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1993,
+                "count": 9,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1994,
+                "count": 14,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1995,
+                "count": 19,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1996,
+                "count": 29,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 31.182795698924732
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1997,
+                "count": 42,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.88235294117647
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1998,
+                "count": 57,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.481283422459892
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 1999,
+                "count": 71,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.34188034188034
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2000,
+                "count": 87,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2001,
+                "count": 107,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.31161473087819
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2002,
+                "count": 130,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 30.023094688221708
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2003,
+                "count": 157,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 29.79127134724858
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2004,
+                "count": 190,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 29.36630602782071
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2005,
+                "count": 223,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 29.074315514993483
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2006,
+                "count": 275,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.886554621848738
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2007,
+                "count": 337,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.754266211604097
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2008,
+                "count": 390,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.487947406866326
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2009,
+                "count": 465,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.440366972477065
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2010,
+                "count": 547,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.45993756503642
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2011,
+                "count": 641,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.476232785428696
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2012,
+                "count": 750,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.398333964407424
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2013,
+                "count": 861,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.294446270128166
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2014,
+                "count": 991,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.249714937286203
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2015,
+                "count": 1110,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.208386277001267
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2016,
+                "count": 1255,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.151637505607894
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2017,
+                "count": 1398,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 28.066653282473396
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2018,
+                "count": 1612,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.889273356401382
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2019,
+                "count": 1883,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.756485849056606
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2020,
+                "count": 2283,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.542526239594643
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2021,
+                "count": 2700,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.308587033478304
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2022,
+                "count": 3097,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.157137846369693
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2023,
+                "count": 3339,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 27.297253106605623
+            },
+            {
+                "Order": 0,
+                "bibliography_year": 2024,
+                "count": 3370,
+                "database": "MPstruc (Membrane Protein Structures)",
+                "percentage": 33.64280722771289
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1985,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1987,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1990,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1991,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1992,
+                "count": 2,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 8.695652173913043
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1993,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1994,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1995,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1996,
+                "count": 6,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 6.451612903225806
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1997,
+                "count": 11,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 8.088235294117647
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1998,
+                "count": 17,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 9.090909090909092
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 1999,
+                "count": 23,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 9.82905982905983
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2000,
+                "count": 31,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 10.689655172413794
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2001,
+                "count": 35,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 9.91501416430595
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2002,
+                "count": 46,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 10.623556581986143
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2003,
+                "count": 60,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 11.385199240986717
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2004,
+                "count": 81,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 12.5193199381762
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2005,
+                "count": 102,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 13.298565840938723
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2006,
+                "count": 131,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 13.760504201680673
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2007,
+                "count": 166,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 14.163822525597269
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2008,
+                "count": 204,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 14.901387874360847
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2009,
+                "count": 247,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 15.10703363914373
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2010,
+                "count": 293,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 15.244536940686784
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2011,
+                "count": 344,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 15.28209684584629
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2012,
+                "count": 408,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 15.448693676637637
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2013,
+                "count": 479,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 15.7410450213605
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2014,
+                "count": 568,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 16.191562143671607
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2015,
+                "count": 642,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 16.315120711562898
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2016,
+                "count": 736,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 16.509645580978017
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2017,
+                "count": 833,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 16.723549488054605
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2018,
+                "count": 1001,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 17.31833910034602
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2019,
+                "count": 1204,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 17.74764150943396
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2020,
+                "count": 1515,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 18.27723488961274
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2021,
+                "count": 1869,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 18.903610802063316
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2022,
+                "count": 2205,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 19.335320940021045
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2023,
+                "count": 2308,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": 18.868541530412035
+            },
+            {
+                "Order": 2,
+                "bibliography_year": 2024,
+                "count": null,
+                "database": "OPM (Orientation of Proteins in Membranes)",
+                "percentage": null
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1985,
+                "count": 1,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1987,
+                "count": 2,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1990,
+                "count": 3,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1991,
+                "count": 4,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1992,
+                "count": 7,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.434782608695656
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1993,
+                "count": 9,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1994,
+                "count": 14,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1995,
+                "count": 19,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1996,
+                "count": 29,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 31.182795698924732
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1997,
+                "count": 42,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.88235294117647
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1998,
+                "count": 57,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.481283422459892
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 1999,
+                "count": 71,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.34188034188034
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2000,
+                "count": 87,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2001,
+                "count": 107,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.31161473087819
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2002,
+                "count": 130,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 30.023094688221708
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2003,
+                "count": 157,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 29.79127134724858
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2004,
+                "count": 190,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 29.36630602782071
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2005,
+                "count": 223,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 29.074315514993483
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2006,
+                "count": 275,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.886554621848738
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2007,
+                "count": 337,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.754266211604097
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2008,
+                "count": 390,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.487947406866326
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2009,
+                "count": 465,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.440366972477065
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2010,
+                "count": 547,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.45993756503642
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2011,
+                "count": 641,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.476232785428696
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2012,
+                "count": 750,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.398333964407424
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2013,
+                "count": 861,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.294446270128166
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2014,
+                "count": 991,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.249714937286203
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2015,
+                "count": 1110,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.208386277001267
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2016,
+                "count": 1255,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.151637505607894
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2017,
+                "count": 1398,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 28.066653282473396
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2018,
+                "count": 1612,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.889273356401382
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2019,
+                "count": 1883,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.756485849056606
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2020,
+                "count": 2283,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.542526239594643
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2021,
+                "count": 2700,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.308587033478304
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2022,
+                "count": 3097,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.157137846369693
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2023,
+                "count": 3339,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 27.297253106605623
+            },
+            {
+                "Order": 1,
+                "bibliography_year": 2024,
+                "count": 3370,
+                "database": "PDB (Protein Data Bank)",
+                "percentage": 33.64280722771289
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1985,
+                "count": 1,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1987,
+                "count": 2,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1990,
+                "count": 3,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1991,
+                "count": 4,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1992,
+                "count": 7,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 30.434782608695656
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1993,
+                "count": 9,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1994,
+                "count": 14,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1995,
+                "count": 19,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 33.33333333333333
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1996,
+                "count": 29,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 31.182795698924732
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1997,
+                "count": 41,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 30.14705882352941
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1998,
+                "count": 56,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.946524064171122
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 1999,
+                "count": 69,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.48717948717949
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2000,
+                "count": 85,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.310344827586203
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2001,
+                "count": 104,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.461756373937675
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2002,
+                "count": 127,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.330254041570434
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2003,
+                "count": 153,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 29.03225806451613
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2004,
+                "count": 186,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.748068006182383
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2005,
+                "count": 219,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.552803129074317
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2006,
+                "count": 271,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.46638655462185
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2007,
+                "count": 332,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.327645051194537
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2008,
+                "count": 385,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.122717311906502
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2009,
+                "count": 458,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 28.01223241590214
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2010,
+                "count": 535,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.835587929240376
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2011,
+                "count": 625,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.765437583296315
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2012,
+                "count": 733,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.75463839454752
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2013,
+                "count": 842,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.670062438383177
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2014,
+                "count": 958,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.309007981755983
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2015,
+                "count": 1073,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.26810673443456
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2016,
+                "count": 1212,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.18707940780619
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2017,
+                "count": 1352,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 27.143143946998592
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2018,
+                "count": 1555,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.903114186851212
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2019,
+                "count": 1814,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.73938679245283
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2020,
+                "count": 2208,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.637712631197974
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2021,
+                "count": 2618,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.479215130980077
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2022,
+                "count": 3005,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.350403367239565
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2023,
+                "count": 3246,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 26.53695225637672
+            },
+            {
+                "Order": 3,
+                "bibliography_year": 2024,
+                "count": 3277,
+                "database": "UniProt (Universal Protein Resource)",
+                "percentage": 32.71438554457423
+            }
+        ]
+    },
+    "encoding": {
+        "color": {
+            "field": "database",
+            "legend": {
+                "direction": "horizontal",
+                "labelLimit": 0,
+                "orient": "none",
+                "title": "Database",
+                "legendX": -30, "legendY": 570,
+                "titleAnchor": "middle",
+                "labelFontSize": 14,
+                "titleFontSize": 16,
+                "symbolStrokeColor":"black",
+                "symbolStrokeWidth": 0.2,
+                "symbolSize": 150
+            },
+            "scale": {
+                "domain": [
+                    "PDB (Protein Data Bank)",
+                    "MPstruc (Membrane Protein Structures)",
+                    "OPM (Orientation of Proteins in Membranes)",
+                    "UniProt (Universal Protein Resource)"
+                ],
+                "range": [
+                    "lightgrey",
+                    "#fff",
+                    "#66c2a5",
+                    "#8da0cb"
+                ]
+            },
+            "sort": [
+                "MPstruc (Membrane Protein Structures)",
+                "PDB (Protein Data Bank)",
+                "OPM (Orientation of Proteins in Membranes)",
+                "UniProt (Universal Protein Resource)"
+            ],
+            "type": "nominal"
+        },
+        "order": {
+            "field": "Order",
+            "type": "quantitative"
+        },
+        
+        "tooltip": [
+            {
+                "field": "database",
+                "title": "Database",
+                "type": "nominal"
+            },
+            {
+                "field": "bibliography_year",
+                "title": "Year",
+                "type": "ordinal"
+            },
+            {
+                "field": "percentage",
+                "title": "Percentage",
+                "type": "quantitative"
+            }
+        ],
+        "x": {
+            "field": "bibliography_year",
+            "title": "Year",
+            "type": "ordinal",
+            "axis": {
+                "labelFontSize": 14,
+                "titleFontSize": 16
+            }
+        },
+        "y": {
+            "field": "percentage",
+            "scale": {
+                "domain": [
+                    0,
+                    100
+                ]
+            },
+            "title": "Proportional Representation of Databases Entries (%)",
+            "type": "quantitative",
+            "axis": {
+                "labelFontSize": 14,
+                "titleFontSize": 16
+            }
+        }
+    },
+    "height": 500,
+    "mark": {
+        "type": "bar"
+    },
+    "title": {"text": "Comparative Annual Representation of Membrane Protein Entries from the PDB, OPM, UniProt, and MPstruc Databases.", "fontSize": 16},
+    "width": 1000
+}

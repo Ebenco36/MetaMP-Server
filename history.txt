@@ -826,3 +826,5 @@ git filter-branch --force --index-filter \
 Add file after exempting it in gitignore file
 
 git add -f  public/MetaMPArchitecture.png
+
+git remote set-url origin  https://github.com/Ebenco36/MetaMP-Server.git

@@ -9,6 +9,7 @@ import altair as alt
 from umap import UMAP
 # import tensorflow as tf
 import matplotlib.pyplot as plt
+from sklearn.utils import shuffle
 from sklearn.svm import SVC, OneClassSVM
 from sklearn.impute import (
     SimpleImputer, KNNImputer
@@ -455,7 +456,7 @@ class ClassifierComparison:
         for clf_name, clf in self.models.items():
             joblib.dump(clf, f'{save_path}{clf_name}__{save_filename}.joblib')
 
-class ClassifierComparisonSemiSupervised:
+class ClassifierComparisonSemiSupervisedXX:
     def __init__(self, X_labeled, y_labeled, X_unlabeled, test_size=0.2, random_state=42):
         # Split labeled data for training and evaluation
         self.X_train_labeled, self.X_test, self.y_train_labeled, self.y_test = train_test_split(
@@ -501,6 +502,9 @@ class ClassifierComparisonSemiSupervised:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=UserWarning)
                 self_training_clf.fit(X_combined, y_combined)
+            
+            print("Wellcoosss")
+            print(y_combined)
             y_pred = self_training_clf.predict(self.X_test)
             accuracy = accuracy_score(self.y_test, y_pred)
             precision = precision_score(self.y_test, y_pred, average='weighted', zero_division=0)
@@ -545,6 +549,118 @@ class ClassifierComparisonSemiSupervised:
         for clf_name, clf in self.models.items():
             joblib.dump(clf, f'{save_path}{clf_name}__{save_filename}.joblib')
 
+ 
+ 
+import warnings
+from sklearn.exceptions import UndefinedMetricWarning
+
+class ClassifierComparisonSemiSupervised:
+    def __init__(self, X_labeled, y_labeled, X_unlabeled, test_size=0.2, random_state=42):
+        # Split labeled data for training and evaluation
+        self.X_train_labeled, self.X_test, self.y_train_labeled, self.y_test = train_test_split(
+            X_labeled, y_labeled, 
+            test_size=test_size, 
+            random_state=random_state,
+            stratify=y_labeled,
+        )
+        # Check the distribution of labels in each set
+        print("Labeled set distribution:\n", self.y_train_labeled.value_counts())
+        print("Unlabeled set distribution:\n", self.y_test.value_counts())
+        
+        self.X_unlabeled = X_unlabeled
+        self.results_df = None
+        self.models = {}  # Dictionary to store trained models
+        
+        # Scale features
+        self.scaler = StandardScaler()
+        self.X_train_labeled = self.scaler.fit_transform(self.X_train_labeled)
+        self.X_test = self.scaler.transform(self.X_test)
+        self.X_unlabeled = self.scaler.transform(self.X_unlabeled)
+    
+    def train_and_evaluate(self):
+        classifiers = {
+            "Logistic Regression": LogisticRegression(max_iter=50000),
+            "Decision Tree": DecisionTreeClassifier(),
+            "Random Forest": RandomForestClassifier(n_estimators=100),
+            "KNeighbors Classifier": KNeighborsClassifier(n_neighbors=5),
+            "Gradient Boosting Classifier": GradientBoostingClassifier(n_estimators=100, learning_rate=0.1),
+            "Gaussian NB": GaussianNB(),
+            "SVM": SVC(probability=True, max_iter=10000)
+        }
+
+        results = {"Classifier": [], "Accuracy": [], "Precision": [], "Recall": [], "F1-score": []}
+
+        # Combine labeled and unlabeled data
+        X_combined = np.vstack((self.X_train_labeled, self.X_unlabeled))
+        
+        # Ensure y_combined is 1-dimensional by converting DataFrame to NumPy array and then raveling
+        y_combined = np.concatenate((self.y_train_labeled.ravel(), -1 * np.ones(len(self.X_unlabeled), dtype=int)))
+        X_combined, y_combined = shuffle(X_combined, y_combined, random_state=0)
+        pd.DataFrame(y_combined).to_csv("y_combined.csv")
+        # Debugging: Verify the combined dataset
+        print(f"X_combined shape: {X_combined.shape}")
+        print(f"y_combined shape: {y_combined.shape}")
+        print(f"Number of labeled samples in y_combined: {np.sum(y_combined != -1)}")
+        print(f"Number of unlabeled samples in y_combined: {np.sum(y_combined == -1)}")
+
+        # Check if there are unlabeled samples
+        if np.sum(y_combined == -1) == 0:
+            print("No unlabeled samples found in y_combined. Check data preparation.")
+            return  # Early exit to debug
+
+        for clf_name, clf in classifiers.items():
+            # Semi-supervised learning with SelfTrainingClassifier
+            self_training_clf = SelfTrainingClassifier(clf)  # Adjust parameters as needed
+            self_training_clf.fit(X_combined, y_combined)
+            # Predict on the test set
+            y_pred = self_training_clf.predict(self.X_test)
+            accuracy = accuracy_score(self.y_test, y_pred)
+            precision = precision_score(self.y_test, y_pred, average='weighted', zero_division=0)
+            recall = recall_score(self.y_test, y_pred, average='weighted', zero_division=0)
+            f1 = f1_score(self.y_test, y_pred, average='weighted', zero_division=0)
+            
+            # Store results
+            results["Classifier"].append(clf_name)
+            results["Accuracy"].append(round(accuracy, 3))
+            results["Precision"].append(round(precision, 3))
+            results["Recall"].append(round(recall, 3))
+            results["F1-score"].append(round(f1, 3))
+            # Save trained model
+            self.models[clf_name] = self_training_clf
+        self.results_df = pd.DataFrame(results)
+    
+    def plot_performance_comparison(self, save_filename="default"):
+        if self.results_df is None:
+            print("No results to plot. Please run train_and_evaluate method first.")
+            return
+        
+        # Convert results DataFrame to Altair-friendly format
+        melted_df = self.results_df.melt(id_vars='Classifier', var_name='Metric', value_name='Score')
+
+        # Create the chart using Altair
+        chart = alt.Chart(melted_df).mark_line().encode(
+            x=alt.X('Classifier:N', title='Classifier', sort=alt.EncodingSortField(field='Score', order='descending')),
+            y=alt.Y('Score:Q', title='Score'),
+            color='Metric:N'
+        ).properties(
+            width="container",
+            title='Performance Comparison of Classifiers'
+        ).configure_axis(
+            labelAngle=-45
+        ).configure_legend(
+            orient='top'
+        )
+        
+        self.results_df.to_csv('models/semi-supervised/' + save_filename + '_main.csv')
+        # Display the chart
+        chart.save('models/semi-supervised/' + save_filename + '.png', scale_factor=2.0)
+    
+    def save_models(self, save_path='models/semi-supervised/', save_filename="default"):
+        for clf_name, clf in self.models.items():
+            joblib.dump(clf, f'{save_path}{clf_name}__{save_filename}.joblib')
+
+
+        
 from sklearn.preprocessing import label_binarize
 from itertools import cycle
 from sklearn.metrics import roc_curve, auc, roc_auc_score
@@ -649,7 +765,7 @@ class ClassifierComparisonSemiSupervisedOutlier:
                 self_training_clf.fit(X_combined, y_combined)
             y_pred = self_training_clf.predict(self.X_test)
             
-            accuracy = accuracy_score(self.y_test, y_pred)
+            accuracy = accuracy_score(self.y_test, y_pred, average='weighted', zero_division=0)
             precision = precision_score(self.y_test, y_pred, average='weighted', zero_division=0)
             recall = recall_score(self.y_test, y_pred, average='weighted', zero_division=0)
             f1 = f1_score(self.y_test, y_pred, average='weighted', zero_division=0)
@@ -945,13 +1061,27 @@ def select_features_using_decision_tree(dataframe, target_column, num_features=N
 
 
 import shap
-def plot_shap_values(model, X, filename='./models/shap_plot.png', dpi=300):
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+
+def plot_shap_values(model, X, filename='./models/shap_plot.png', dpi=500):
     # Compute SHAP values
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)
+    shap_values = explainer(X)
     
+    # Define a custom colormap using LinearSegmentedColormap
+    colors = [(0, "green"), (0.5, "white"), (1, "purple")]  # Define blue-to-white-to-red gradient
+    cmap = LinearSegmentedColormap.from_list("blue_white_red", colors)
+    plt.figure(figsize=(10, 5))
     # Plotting SHAP values
-    shap.summary_plot(shap_values, X, plot_type="bar", show=False)
+    shap.summary_plot(
+        shap_values.values, 
+        features=X, 
+        plot_type="dot", 
+        feature_names=X.columns,
+        cmap=cmap,
+        show=False
+    )
     plt.savefig(filename, dpi=dpi, bbox_inches='tight')
     print(f"SHAP summary plot saved as {filename}")
     

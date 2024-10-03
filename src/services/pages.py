@@ -240,7 +240,7 @@ class Pages:
             .encode(
                 x=alt.X(
                     "country:O",
-                    axis=alt.Axis(labelAngle=45),
+                    axis=alt.Axis(labelAngle=45, labelFont='Arial', titleFont='Arial'),
                     sort=alt.EncodingSortField(field="count", order="descending"),
                 ),  # Rotate x-axis labels for better readability
                 y="count",
@@ -265,7 +265,7 @@ class Pages:
             .encode(
                 x=alt.X(
                     "country:O",
-                    axis=alt.Axis(labelAngle=45),
+                    axis=alt.Axis(labelAngle=45, labelFont='Arial', titleFont='Arial'),
                     sort=alt.EncodingSortField(field="count", order="descending"),
                 ),  # Rotate x-axis labels for better readability
                 y="count",
@@ -277,7 +277,8 @@ class Pages:
 
         # Combine the chart and lines
         chart = lollipop_chart + lollipop_lines
-        # chart.properties(width=1000).save("countryChart.png", scale_factor=2.0)
+        chart = chart.configure_title(font='Arial', fontSize=16)
+        chart.properties(width=1000).save("countryChart.png", scale_factor=5.0)
         # chart to dict for display
         return convert_chart(chart)
 
@@ -449,7 +450,7 @@ class Pages:
                 "iso_code_3",
                 "latitude",
                 "legend",
-                "location",
+                # "location",
                 "longitude",
             ]
         ]
@@ -509,10 +510,10 @@ class Pages:
             databases = {
                 'OPM': 'OPM (Orientation of Proteins in Membranes)',
                 'PDB': 'PDB (Protein Data Bank)',
-                'UniProt': 'UniProt (Universal Protein Resource)'
+                'UniProt': 'UniProt (Universal Protein Resource)',
+                'MPstruc': 'MPstruc (Membrane Protein Structures)'
             }
             final_data['database'] = final_data['database'].replace(databases)
-        
         
         # Compute the crosstab with cumulative sum
         d = pd.crosstab(final_data['bibliography_year'], final_data['database'], values=final_data['count'], aggfunc='sum').cumsum()
@@ -523,35 +524,88 @@ class Pages:
         # Melt the dataframe to convert it into long format for Altair
         d_melted = d.melt(id_vars='bibliography_year', var_name='database', value_name='count')
 
+        # Compute percentage for stacked bar chart
+        # Ensure that percentages are calculated correctly and aligned
+        d_melted['percentage'] = d_melted.groupby('bibliography_year')['count'].transform(lambda x: x / x.sum() * 100)
+
         custom_colors = {
-            'PDB (Protein Data Bank)': '#005EB8',  # Blue for PDB
-            'OPM (Orientation of Proteins in Membranes)': '#A0C4E1',  # Green for OPM
-            'UniProt (Universal Protein Resource)': '#F4A261'  # Orange for UniProt
+            'MPstruc (Membrane Protein Structures)': '#fff',  # Blue for MPstruc
+            'UniProt (Universal Protein Resource)': '#8da0cb',  # Orange for UniProt
+            'PDB (Protein Data Bank)': 'lightgrey',  # Blue for PDB
+            'OPM (Orientation of Proteins in Membranes)': '#66c2a5',  # Green for OPM
         }
         
-        # Create the stacked bar chart using Altair
+        # Add new columns to define stroke color and width based on the database
+        d_melted['stroke_color'] = d_melted['database'].map(custom_colors)
+
+        d_melted['stroke_width'] = d_melted['database'].map({
+            'MPstruc (Membrane Protein Structures)': 0.3,
+            'PDB (Protein Data Bank)': 0.3,
+            'OPM (Orientation of Proteins in Membranes)': 0.3,
+            'UniProt (Universal Protein Resource)': 0.3
+        })
+
+
+        order_mapping = {
+            'MPstruc (Membrane Protein Structures)': 0, 
+            'UniProt (Universal Protein Resource)': 1,
+            'PDB (Protein Data Bank)': 2, 
+            'OPM (Orientation of Proteins in Membranes)': 3, 
+        }
+        d_melted['Order'] = d_melted['database'].map(order_mapping)
+        # d_melted.to_csv("DBContribution.csv")
+        # Create the 100% stacked bar chart using Altair
         chart = alt.Chart(d_melted).mark_bar().encode(
             x=alt.X('bibliography_year:O', title='Year'),
-            y=alt.Y('count:Q', title='Cumulative MP Structures'),
+            y=alt.Y('percentage:Q', title='Proportional Representation of Databases Entries (%)', scale=alt.Scale(domain=[0, 100])),
             color=alt.Color(
-                f"database:N",
+                'database:N',
                 scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())),
                 legend=alt.Legend(
-                    title="Database", labelLimit=0, orient="bottom", direction="vertical"
+                    title="Database", labelLimit=0, orient="bottom", direction="vertical",
+                    symbolStrokeColor="black", symbolStrokeWidth=0.5
                 ),
+                sort=[
+                    'MPstruc (Membrane Protein Structures)', 
+                    'UniProt (Universal Protein Resource)',
+                    'PDB (Protein Data Bank)', 
+                    'OPM (Orientation of Proteins in Membranes)', 
+                ]
             ),
             tooltip=[
                 alt.Tooltip('database:N', title='Database'),
                 alt.Tooltip('bibliography_year:O', title='Year'),
-                alt.Tooltip('count:Q', title='Count')
-            ]
+                alt.Tooltip('percentage:Q', title='Percentage')
+            ],
+            order=alt.Order('Order:Q')
+        ).encode(
+            stroke=alt.condition(
+                alt.datum.database == 'MPstruc (Membrane Protein Structures)',  # Condition for sub_category 'X'
+                alt.value('black'),              # Border color for selected
+                alt.value('transparent')          # No border for unselected
+            ),
+            strokeWidth=alt.condition(
+                alt.datum.database == 'MPstruc (Membrane Protein Structures)',  # Same condition for sub_category 'X'
+                alt.value(1),                    # Border width for selected
+                alt.value(0)                     # No border width for unselected
+            )
         ).properties(
             width=800,
             height=400,
-            title="Comparative Annual Contributions by PDB, OPM, and UniProt Databases"
+            title="Comparative Annual Representation of Membrane Protein Entries from the MPstruc, PDB, OPM, and UniProt Databases."
         )
+        
+        # # Create a legend for MPstruc with a border
+        # mpstruc_legend = alt.Chart(d_melted).mark_point(size=100, color='black').encode(
+        #     y=alt.Y('database:N', title='Database', axis=alt.Axis(labels=False, ticks=False)),
+        #     color=alt.Color('database:N', scale=alt.Scale(domain=['MPstruc (Membrane Protein Structures)'], range=['black']))
+        # )
 
-        return convert_chart(chart)
+        # # Combine the base chart with the legend
+        # final_chart = chart + mpstruc_legend
+
+                
+        return convert_chart((chart))
 
     def average_resolution_over_years(self, data):
         data = data.dropna(subset=["processed_resolution", "bibliography_year"])

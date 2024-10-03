@@ -277,7 +277,7 @@ class AboutMetaMP(Resource):
         table_df = get_table_as_dataframe("membrane_proteins")
         # Get the DataFrame directly
         pages = Pages(table_df)
-        trends_by_database_year = pages.view_trends_by_database_year()
+        trends_by_database_year = pages.view_trends_by_database_year_default()
         
         get_master_proteins = DataService.get_data_by_column_search(
             column_name="is_master_protein", 
@@ -356,7 +356,7 @@ class Dashboard(Resource):
         ########################Check width if they are the same ###########################
         
         if cached_result:
-            print(cached_result.get("trend", {}))
+            # print(cached_result.get("trend", {}))
             if extract_widths(cached_result.get("trend", {}), int(first_leveled_width)):
                 return jsonify(cached_result)
 

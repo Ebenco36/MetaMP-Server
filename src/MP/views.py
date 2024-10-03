@@ -33,7 +33,8 @@ from src.Dashboard.data import (
 from src.services.Helpers.fields_helper import (
     dimensionality_reduction_algorithms_helper_kit, 
     machine_algorithms_helper_kit, missing_algorithms_helper_kit, 
-    normalization_algorithms_helper_kit, transform_data_view
+    normalization_algorithms_helper_kit, transform_data_view,
+    transform_data_dict_view
 )
 from src.middlewares.auth_middleware import token_required
 
@@ -87,11 +88,11 @@ class getFilterBasedOnMethodResource(Resource):
     def get(self):
         method_type = request.args.get('method_type', "All")
         method_type = None if method_type == "All" else method_type
-        chart_types = transform_data_view(
+        chart_types = transform_data_dict_view(
             [
-                "bar_plot", 
-                "line_plot", 
-                "scatter_plot"
+                {"value": "bar_plot", "text": "bar_chart" },
+                {"value": "line_plot", "text": "line_chart" },
+                {"value": "scatter_plot", "text":  "scatter_chart"},
             ], 
             'Chart_options', 'single', [], False
         ) # graph_types_kit()
@@ -117,6 +118,7 @@ class getFilterBasedOnMethodResource(Resource):
             
             numeric_columns_filtered_list = [item for item in numeric_columns if item not in ("group", "species")] + ["resolution", "rcsentinfo_resolution_combined"]
         numeric_columns_filtered_list.remove("rcsentinfo_resolution_combined")  
+        
         quantitative_columns = transform_data_view(
             numeric_columns_filtered_list, 'quantitative', 
             'single', [], False
@@ -143,6 +145,7 @@ class getFilterBasedOnMethodResource(Resource):
         x_axis = "" if (x_axis is None or len(x_axis) == 0) else x_axis
         y_axis = data.get('y_axis', "rcsentinfo_deposited_solvent_atom_count")
         y_axis = "resolution" if (y_axis is None or len(y_axis) == 0) else y_axis
+        
         categorical_axis = data.get('categorical_axis', None)
         categorical_axis = None if (categorical_axis is None or len(categorical_axis) == 0) else categorical_axis
         experimental_method = data.get('experimental_method', "All")
@@ -183,13 +186,15 @@ class getFilterBasedOnMethodResource(Resource):
         else:
             label = data.get('categorical_axis', "")
             label = "" if (categorical_axis is None or len(categorical_axis) == 0) else categorical_axis
+            
             _plot = Graph(data_frame, axis = [x_axis, y_axis], labels=label)
             _plot = getattr(_plot, str(chart_type).replace(' ', '_'))()
             _plot.set_selection(type='single', groups=[])\
                 .encoding(
                     tooltips = columns, 
                     encoding_tags = ["quantitative", "quantitative"],
-                    legend_columns=1
+                    legend_columns=1,
+                    axis_label = [x_axis, y_axis]
                 )\
                 .properties(width=0, title="Relationship between " + x_axis.replace("rcsentinfo", " ").replace("_", " ") + " and " + y_axis.replace("rcsentinfo", " ").replace("_", " "))\
                 .legend_config(orient='bottom')\
@@ -225,7 +230,9 @@ class DataFilterResource(Resource):
         experimental_method = transform_data_view(methods, 'experimental_method', 'single', [], False)
         excluded_fields = [
             "reflns", "refine", "rcsb_", "rcs", "ref", "diffrn", 
-            "exptl", "cell_", "group_", "subgroup_", "species_", 
+            "exptl", 
+            "cell_", 
+            "group_", "subgroup_", "species_", 
             "expressed_in_species", "pdb", "taxonomic_domain", 
             "symspa", "expcry", "em2cry", "software_"
         ]

@@ -643,9 +643,10 @@ class UniProtDataFetcher:
         
         # Iterate over each row in the DataFrame
         for index, row in df.iterrows():
-            pdb_code = row[pdb_code_column]
+            pdb_code = row["Pdb Code"]
+            uniprot_id = row[pdb_code_column]
             # Fetch data from UniProt for the given PDB code
-            data_source, uniprot_data_list = self.fetch_data(pdb_code)
+            data_source, uniprot_data_list = self.fetch_data(uniprot_id)
             
             if data_source == "uniprotKB":
                 for uniprot_data in uniprot_data_list:
@@ -677,9 +678,9 @@ class UniProtDataFetcher:
 
 # Load input data
 data = pd.read_csv(modified_path + "/datasets/Quantitative_data.csv", low_memory=False)
-data = data[data["Pdb Code"].notna()]
+data = data[data["uniprot_id"].notna()]
 # data = data[data["Pdb Code"].isin(["1PTH", "8KH4", "2KIX"])]
 # data = data[data["Pdb Code"].isin(["2KIX"])]
 fetcher = UniProtDataFetcher()
-result_df = fetcher.fetch_and_process(data, 'Pdb Code', modified_path + '/datasets/Uniprot_functions')
+result_df = fetcher.fetch_and_process(data, 'uniprot_id', modified_path + '/datasets/Uniprot_functions')
 

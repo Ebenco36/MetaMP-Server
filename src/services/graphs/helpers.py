@@ -51,14 +51,22 @@ class Graph:
         
         return self
 
-    def encoding_tags(self, encoding_tags:list=[], tooltips:list = []):
+    def encoding_tags(self, encoding_tags:list=[], tooltips:list = [], axis_label=[]):
         if (len(self.axis) == len(encoding_tags) or len(encoding_tags) == 0):
+            
+            #  check if tooltips is more than 2
+            if (len(tooltips) > 2):
+                axis_tag = axis_label
+            else:
+                axis_tag = tooltips
+            
+            
             """
                 This services can still be optimized.
             """
             # Title label
-            title_x = remove_underscore_change_toupper(tooltips[0])
-            title_y = remove_underscore_change_toupper(tooltips[1])
+            title_x = remove_underscore_change_toupper(axis_tag[0].replace("rcsentinfo_", ""))
+            title_y = remove_underscore_change_toupper(axis_tag[1].replace("rcsentinfo_", ""))
 
             # check with default tags if exist
             if(len(encoding_tags) > 0):
@@ -140,15 +148,7 @@ class Graph:
         return self
 
     
-    def encoding(self, tooltips:list = [], encoding_tags:list = [], legend_columns=5):
-
-        # manage color patterns
-        # selection = alt.selection_point(fields=[self.y])
-        # color = alt.condition(
-        #     selection,
-        #     alt.Y(self.y).legend(None),
-        #     alt.value('lightgray')
-        # )
+    def encoding(self, tooltips:list = [], encoding_tags:list = [], legend_columns=5, axis_label = []):
         color = alt.condition(self.selection, self.labels+':N', alt.value('lightgray'), legend=alt.Legend(title=self.labels, columns=legend_columns, columnPadding=20, labelLimit=0, direction = 'vertical'))
 
         # set tooltips
@@ -156,8 +156,9 @@ class Graph:
         tooltip_list = [alt.Tooltip(tooltip, title=format_string_caps(tooltip.capitalize())) for tooltip in tooltips]
 
         # setting encoding tags
-
-        self.encoding_tags(encoding_tags, tooltips)
+        
+        self.encoding_tags(encoding_tags, tooltips, axis_label)
+        
         if (len(self.axis) == 2):
             self.altair_obj = self.altair_obj.encode(
                 self.encoded_x,
