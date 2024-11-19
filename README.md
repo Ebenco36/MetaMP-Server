@@ -22,7 +22,7 @@ MetaMP is a web application designed to dynamically curate structure determinati
 13. [Working with Redis](#working-with-redis)
 14. [Working with RabbitMQ](#working-with-rabbitmq)
 15. [Performance Considerations](#performance-considerations)
-16. [Data Availability Statement](data-availability-statement)
+16. [Data Availability Statement](#data-availability-statement)
 17. [License](#license)
 18. [Contact](#contact)
 19. [Acknowledgments](#acknowledgments)
