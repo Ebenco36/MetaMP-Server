@@ -5,31 +5,47 @@ MetaMP is a web application designed to dynamically curate structure determinati
 ## Table of Contents
 
 1. [About the Project](#about-the-project)
-2. [Key Features](#key-features)
-3. [Built With](#built-with)
-4. [Requirements](#requirements)
-5. [Environment Setup](#environment-setup)
-6. [Installation](#installation)
-7. [Project Folder Structure](#project-folder-structure)
-8. [Application Setup and Configuration](#application-setup-and-configuration)
-9. [Seeding Process](#seeding-process)
-10. [Running the Application](#running-the-application)
+2. [Abstract](#abstract)
+3. [Key Features](#key-features)
+4. [Built With](#built-with)
+5. [Requirements](#requirements)
+6. [Environment Setup](#environment-setup)
+7. [Installation](#installation)
+8. [Project Folder Structure](#project-folder-structure)
+9. [Application Setup and Configuration](#application-setup-and-configuration)
+10. [Seeding Process](#seeding-process)
+11. [Running the Application](#running-the-application)
     - [Running with Flask Development Server](#running-with-flask-development-server)
     - [Running with Gunicorn (macOS/Linux)](#running-with-gunicorn-macoslinux)
     - [Running with Waitress (Windows)](#running-with-waitress-windows)
-11. [Using Docker](#using-docker)
-12. [Flask Database Commands](#flask-database-commands)
-13. [Working with Redis](#working-with-redis)
-14. [Working with RabbitMQ](#working-with-rabbitmq)
-15. [Performance Considerations](#performance-considerations)
-16. [Data Availability Statement](#data-availability-statement)
-17. [License](#license)
-18. [Contact](#contact)
-19. [Acknowledgments](#acknowledgments)
+12. [Using Docker](#using-docker)
+13. [Flask Database Commands](#flask-database-commands)
+14. [Working with Redis](#working-with-redis)
+15. [Working with RabbitMQ](#working-with-rabbitmq)
+16. [Performance Considerations](#performance-considerations)
+17. [Data Availability Statement](#data-availability-statement)
+18. [License](#license)
+19. [Contact](#contact)
+20. [Acknowledgments](#acknowledgments)
 
 ## About the Project
 
 **MetaMP** allows users to visualize, analyze, and curate MP structure metadata through various interactive views. These views provide insights into MP structures resolved by different experimental methods, discrepancies in data across databases, outlier detection, and more. The application is modular, with each component having its own route, view, service, and model files.
+
+## Abstract
+
+Structural biology has made significant progress in the determination of membrane proteins, leading to a remarkable increase in the number of structures accessible from several dedicated databases.
+Despite these advances, the lack of integrated databases results in inaccuracies, inconsistencies, and duplication of effort, hindering a coherent understanding of these structures. 
+The inherent complexity of membrane protein structures, coupled with challenges such as missing data and computational barriers from disparate sources, underscores the need for improved database integration.
+To address this gap in membrane protein structure analysis, we present MetaMP, the first computational application to use machine learning to categorize membrane protein structures. 
+In addition to curating structural determination methods, MetaMP enriches membrane protein data with comprehensive and accurate metadata, all enhanced by a user-friendly landing page and seven interactive views.
+MetaMP provides an unprecedented overview of the discrepancies between membrane protein databases. 
+A first user evaluation confirmed the effectiveness of training on MetaMP, highlighting its advantages across tasks of varying difficulty, with no significant effect of completion speed on accuracy. 
+This underscores the need to assist experts in critical analytical tasks, such as classifying newly published structures and detecting outliers. 
+MetaMP was validated by both professionals and academics, focusing on the calculation of summary statistics and the identification of outliers. 
+Participants completed three tasks in less than 10 minutes and showed significant improvements from training to testing, particularly in the early summary statistics and the identification of outliers. 
+MetaMP not only finds and resolves 77% of the data discrepancies compared to expert validation, it also predicts the correct class of newly resolved membrane proteins 98% of the time.
+In summary, MetaMP is an awaited resource that synthesizes current knowledge and improves the understanding of membrane protein structures, enabling more informed and rigorous scientific investigations.
 
 
 ![MetaMP Architecture](public/MetaMPArchitecture.png)
