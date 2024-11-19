@@ -346,15 +346,15 @@ def transform_dataframe(data):
     df = data.copy()
     df['pdb_codes'] = df['pdb_codes'].str.split(', ')
     df['protein_codes'] = df['pdb_codes']
-    df['famsupclasstype_type_name'] = df['famsupclasstype_type_name'].str.split(', ')
+    df['family_superfamily_classtype_name'] = df['family_superfamily_classtype_name'].str.split(', ')
     df['group'] = df['group'].str.split(', ')
     df['experimental_method'] = df['rcsentinfo_experimental_method'].str.split(', ')
     df['inconsistency'] = 1
 
-    df = df.explode(['pdb_codes', 'famsupclasstype_type_name', 'group', 'experimental_method'])
+    df = df.explode(['pdb_codes', 'family_superfamily_classtype_name', 'group', 'experimental_method'])
     df = df.rename(columns={
         'pdb_codes': 'pdb_code', 
-        'famsupclasstype_type_name': 'group (OPM)', 
+        'family_superfamily_classtype_name': 'group (OPM)', 
         'group': 'group (MPstruc)'
     })
     df = df.reset_index(drop=True)
@@ -367,7 +367,7 @@ def transform_dataframe(data):
     df.to_csv("inconsistencies_by_year.csv")
     return df
 
-def find_inconsistencies(row, keyword_groups):
+def find_inconsistencies(row):
     """
     Checks for inconsistencies in the given row based on keyword groups.
     
@@ -378,12 +378,13 @@ def find_inconsistencies(row, keyword_groups):
     Returns:
     - bool: True if an inconsistency is found, False otherwise.
     """
-    for keyword, expected_group in keyword_groups.items():
-        if keyword.lower() in row['famsupclasstype_type_name'].lower() and keyword.lower() in row['group'].lower():
-            return False
-    return True
+    family_name = row['family_superfamily_classtype_name']
+    group_value = row['group']
+    
+    # Check if the group value is different from the family name
+    return group_value.lower() != family_name.lower()
 
-def aggregate_inconsistencies(data, keyword_groups):
+def aggregate_inconsistencies(data):
     """
     Aggregates inconsistencies by year and collects PDB codes.
     
@@ -394,14 +395,36 @@ def aggregate_inconsistencies(data, keyword_groups):
     Returns:
     - pd.DataFrame: The aggregated inconsistencies by year.
     """
-    data['inconsistency'] = data.apply(find_inconsistencies, axis=1, keyword_groups=keyword_groups)
+    # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
+    # expected_groups = {
+    #     'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
+    #     'Transmembrane': 'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL',
+    #     'Transmembrane': 'TRANSMEMBRANE PROTEINS:BETA-BARREL'
+    #     # Add more mappings as needed
+    # }
+    look_up_table = {
+        "Alpha-helical polytopic": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL",
+        "Bitopic proteins": "BITOPIC PROTEINS",
+        "Beta-barrel transmembrane": "TRANSMEMBRANE PROTEINS:BETA-BARREL",
+        "All alpha monotopic/peripheral": "MONOTOPIC MEMBRANE PROTEINS",
+        "All beta monotopic/peripheral": "MONOTOPIC MEMBRANE PROTEINS",
+        "Alpha/Beta monotopic/peripheral": "MONOTOPIC MEMBRANE PROTEINS",
+        "Alpha + Beta monotopic/peripheral": "MONOTOPIC MEMBRANE PROTEINS",
+        "Alpha-helical peptides": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL"
+    }
+    # Map family_superfamily_classtype_name to look-up table and handle missing records
+    data['family_superfamily_classtype_name'] = data['family_superfamily_classtype_name'].map(look_up_table)
+
+    data['inconsistency'] = data.apply(lambda row: find_inconsistencies(row), axis=1)
+    # Aggregate the inconsistencies by year
     inconsistencies_by_year = data[data['inconsistency']].groupby('bibliography_year').agg(
         inconsistencies=('inconsistency', 'sum'),
         pdb_codes=('pdb_code', lambda x: ', '.join(x)),
-        famsupclasstype_type_name=('famsupclasstype_type_name', lambda x: ', '.join(x)),
+        family_superfamily_classtype_name=('family_superfamily_classtype_name', lambda x: ', '.join(x)),
         group=('group', lambda x: ', '.join(x)),
         rcsentinfo_experimental_method=('rcsentinfo_experimental_method', lambda x: ', '.join(x))
     ).reset_index()
+    
     return inconsistencies_by_year
 
 

@@ -48,6 +48,7 @@ class MLJob:
         self.data_combined_UMAP = pd.DataFrame()
         self.semi_supervised_metrics = pd.DataFrame()
         self.supervised_metrics = pd.DataFrame()
+        self.label_encoder = LabelEncoder()
         self.over_sampling_data_selected_feature_data = pd.DataFrame()
         
     def load_data(self):
@@ -60,6 +61,17 @@ class MLJob:
             result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
         
         self.result_df = pd.merge(right=self.all_data, left=result_df_uniprot, on="pdb_code")
+        # Reserve some data for test specifically for discrepancies
+        exclude_pdb_codes = [
+            "1PFO", "1B12", "1GOS", "1MT5", "1KN9", "1OJA", "1O5W", "1UUM", "1T7D", "2BXR",
+            "1YGM", "2GMH", "2OLV", "2OQO", "2QCU", "2PRM", "2Z5X", "2VQG", "3HYW", "3I65",
+            "3VMA", "3NSJ", "3ML3", "3PRW", "3P1L", "3Q7M", "2YH3", "3LIM", "3VMT", "3Q54",
+            "2YMK", "2LOU", "4LXJ", "4HSC", "4CDB", "4P6J", "4TSY", "5B49", "5IMW", "5IMY",
+            "5JYN", "5LY6", "6BFG", "6MLU", "6DLW", "6H03", "6NYF", "6MTI", "7OFM", "7LQ6",
+            "7RSL", "8A1D", "7QAM"
+        ]
+        
+        self.all_data = self.all_data[~self.all_data['pdb_code'].isin(exclude_pdb_codes)]
     
     def fix_missing_data(self):
         self.data = report_and_clean_missing_values(self.all_data, threshold=30)
@@ -77,8 +89,13 @@ class MLJob:
     def feature_selection(self):
         self.categorical_data.reset_index(drop=True, inplace=True)
         encode_data = self.categorical_data[["membrane_topology_in", "membrane_topology_out"]]
-        encoded_data = onehot_encoder(encode_data)
-        encoded_data.reset_index(drop=True, inplace=True)
+        # encoded_data = onehot_encoder(encode_data)
+        # encoded_data.reset_index(drop=True, inplace=True)
+        encoded_data = pd.DataFrame([])
+        encoded_data['membrane_topology_in'] = self.label_encoder.fit_transform(self.categorical_data['membrane_topology_in'])
+        encoded_data['membrane_topology_out'] = self.label_encoder.fit_transform(self.categorical_data['membrane_topology_out'])
+        
+        
         self.numerical_data.reset_index(drop=True, inplace=True)
         self.complete_numerical_data = pd.concat([self.numerical_data, encoded_data], axis=1).reset_index(drop=True)
         
@@ -97,7 +114,8 @@ class MLJob:
             self.numerical_data, 
             self.categorical_data[[
                     "pdb_code", "membrane_topology_in", 
-                    "membrane_topology_out"
+                    "membrane_topology_out",
+                    "group"
                 ]
             ]], axis=1)
         raw_data.reset_index(drop=True, inplace=True)
@@ -180,8 +198,7 @@ class MLJob:
 
         # Save aggregated metrics
         aggregated_metrics.to_csv(f"./models/{filename_prefix}_metrics_mean.csv")
-        print(f"Metrics saved to ./models/{filename_prefix}_metrics_mean.csv")
-        
+        print(f"Metrics saved to ./models/{filename_prefix}_metrics_mean.csv")      
         
     def run_classificationXXXXX(self, X, y, model_class, filename_prefix, X_unlabeled=None):
         """Run classification and save results."""
@@ -253,7 +270,6 @@ class MLJob:
         # Save the plot as a file
         chart.save('./models/metrics_comparison_altair.png')
         
-    
     def run_classification(self, X, y, model_class, filename_prefix, X_unlabeled=None):
         """Run classification and save results."""
         metrics_list = []
@@ -349,13 +365,10 @@ class MLJob:
         
         self.plot_metrics_altair(metrics_data)
     
-    
-
     def save_best_model(self, model, clf_name, filename_prefix, run):
         """Save the best model based on selected metric."""
         joblib.dump(model, f'./models/{filename_prefix}_best_{clf_name}_{run}.joblib')
         print(f"Best model saved to ./models/{filename_prefix}_best_{clf_name}_{run}.joblib")
-
 
     def semi_supervised_learning(self):
         """Run semi-supervised learning on different dimensionality-reduced datasets."""
@@ -374,7 +387,7 @@ class MLJob:
             
             X_labeled, X_unlabeled, y_labeled, _ = train_test_split(
                 data[["Component 1", "Component 2"]],
-                data["group"], test_size=0.66,
+                data["group"], test_size=0.3,
                 stratify=data["group"].to_list(),
                 random_state=self.random_state
             )

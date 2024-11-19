@@ -22,9 +22,10 @@ MetaMP is a web application designed to dynamically curate structure determinati
 13. [Working with Redis](#working-with-redis)
 14. [Working with RabbitMQ](#working-with-rabbitmq)
 15. [Performance Considerations](#performance-considerations)
-16. [License](#license)
-17. [Contact](#contact)
-18. [Acknowledgments](#acknowledgments)
+16. [Data Availability Statement](data-availability-statement)
+17. [License](#license)
+18. [Contact](#contact)
+19. [Acknowledgments](#acknowledgments)
 
 ## About the Project
 
@@ -221,6 +222,19 @@ To optimize the performance of MetaMP:
 3. Optimize database queries and use indexes where necessary.
 4. Use connection pooling and load balancing for handling high traffic.
 
+
+## Data Availability Statement
+
+The data supporting the findings of this manuscript are derived from publicly available databases widely used in membrane protein research. These sources include:
+
+- **MPstruc**: http://blanco.biomol.uci.edu/mpstruc/
+- **OPM (Orientations of Proteins in Membranes)**: https://opm.phar.umich.edu/
+- **PDB (Protein Data Bank)**: https://www.rcsb.org/
+- **UniProt**: https://www.uniprot.org/uniprotkb
+
+These datasets provide detailed information on membrane protein structures and related characteristics. All data are publicly accessible and do not contain sensitive or personally identifiable information.
+
+The aggregated and processed data used in this study will be made available upon reasonable request to the corresponding author. Requests must include details about the intended use of the data. For further inquiries or access requests, please contact the corresponding author.
 
 ## License
 Distributed under the MIT License. See LICENSE for more information.

@@ -742,7 +742,7 @@ class MLDimensionalityReductionCharts(Resource):
             tooltip=['Method', 'Parameter', "group"]
         ).properties(
             width="container",
-        ).interactive().configure_legend(orient='bottom', direction = 'vertical', labelLimit=0).to_dict()
+        ).interactive().configure_legend(orient='bottom', direction = 'vertical', labelLimit=0).to_dict(format="vega")
     
     def get(self):
         pca = pd.read_csv("./models/semi-supervised/PCA_data.csv")

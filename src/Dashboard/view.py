@@ -432,14 +432,6 @@ class DashboardInconsistencies(Resource):
             return jsonify(cached_result)
         
         all_data, _, _, _, _ = DataService.get_data_from_DB()
-        # Define a dictionary to map keywords in famsupclasstype_type_name to expected group values
-        expected_groups = {
-            'Monotopic': 'MONOTOPIC MEMBRANE PROTEINS',
-            'Transmembrane': 'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL',
-            'Transmembrane': 'TRANSMEMBRANE PROTEINS:BETA-BARREL'
-            # Add more mappings as needed
-        }
-
         # Assume all_data is already defined and loaded with appropriate data
         dtd = all_data
         df_combined = dtd[[
@@ -451,7 +443,7 @@ class DashboardInconsistencies(Resource):
         df_combined.dropna(inplace=True)
 
         # Aggregate inconsistencies
-        inconsistencies_by_year = aggregate_inconsistencies(df_combined, expected_groups)
+        inconsistencies_by_year = aggregate_inconsistencies(df_combined)
 
         # Transform the aggregated data
         transformed_data = transform_dataframe(inconsistencies_by_year)

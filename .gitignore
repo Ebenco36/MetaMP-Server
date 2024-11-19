@@ -85,3 +85,12 @@ datasets_test/*.csv
 datasets_test/*.xml
 
 requirementss.txt
+
+discrepancies.json
+experimental.json
+latex_output.tex
+models/pca_chart.json
+models/tsne_chart.json
+models/umap_chart.json
+my_summary.txt
+your_file.txt
