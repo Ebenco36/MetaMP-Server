@@ -2,6 +2,35 @@
 
 MetaMP is a web application designed to dynamically curate structure determination metadata for resolved Membrane Proteins (MPs). It provides several interactive views to explore enriched MP structure data and associated metadata, supporting advanced analysis and data-driven decision-making.
 
+
+## Jupyter Notebook Test
+
+### Overview
+We have developed a Jupyter Notebook, **JupyterNotebookTest.ipynb**, to test and visualize various implementations, including machine learning techniques such as Dimensionality Reduction and Semi-Supervised Learning. This notebook serves as an interactive tool to explore our methodologies and outcomes in detail.
+
+### Key Features
+1. **Visualization of Results**: The notebook includes a variety of interactive charts and visualizations designed to effectively communicate insights derived from our analyses.
+2. **Implementation Testing**: Evaluate the performance of Dimensionality Reduction and Semi-Supervised Learning models with provided sample datasets.
+
+### Accessing the Required Data
+To utilize the notebook, you will need to download the required dataset.
+
+[Click here to download the dataset](https://drive.google.com/file/d/1L7mArSRHRbpp6hq0z74XpyHYvJBM8Kjt/view?usp=drive_link)
+
+After downloading the dataset, ensure that the file is saved to the specified filepath mentioned in the notebook to guarantee seamless operation.
+
+### Instructions
+1. Download the dataset using the link above.
+2. Open the Jupyter Notebook **JupyterNotebookTest.ipynb** and verify that the filepath to the dataset matches your local setup.
+3. Follow the instructions in the notebook to execute the code cells and interact with the visualizations.
+
+We aim to provide a streamlined and intuitive experience for exploring our machine learning implementations and results.
+
+
+
+
+
+
 ## Table of Contents
 
 1. [About the Project](#about-the-project)

@@ -384,7 +384,7 @@ def find_inconsistencies(row):
     # Check if the group value is different from the family name
     return group_value.lower() != family_name.lower()
 
-def aggregate_inconsistencies(data):
+def aggregate_inconsistencies(data, pdb_code_column="pdb_code"):
     """
     Aggregates inconsistencies by year and collects PDB codes.
     
@@ -419,7 +419,7 @@ def aggregate_inconsistencies(data):
     # Aggregate the inconsistencies by year
     inconsistencies_by_year = data[data['inconsistency']].groupby('bibliography_year').agg(
         inconsistencies=('inconsistency', 'sum'),
-        pdb_codes=('pdb_code', lambda x: ', '.join(x)),
+        pdb_codes=(pdb_code_column, lambda x: ', '.join(x)),
         family_superfamily_classtype_name=('family_superfamily_classtype_name', lambda x: ', '.join(x)),
         group=('group', lambda x: ', '.join(x)),
         rcsentinfo_experimental_method=('rcsentinfo_experimental_method', lambda x: ', '.join(x))

@@ -37,16 +37,20 @@ def drop_id_columns(dataframe):
 
 def drop_columns(dataframe, columns_to_drop=[]):
     """
-    Drops columns from a DataFrame that contain specified values in their names.
+    Safely drops specified columns from a DataFrame, ignoring non-existent columns.
 
     Parameters:
-    dataframe (DataFrame): The DataFrame from which to drop columns.
+    - dataframe (DataFrame): The input DataFrame from which to drop columns.
+    - columns_to_drop (list): List of column names to drop.
 
     Returns:
-    DataFrame: DataFrame with columns containing specified columns dropped.
-
+    - DataFrame: A new DataFrame with the specified columns removed.
     """
-    return dataframe.drop(columns=columns_to_drop)
+    # Filter only columns that exist in the DataFrame
+    valid_columns_to_drop = [col for col in columns_to_drop if col in dataframe.columns]
+
+    # Drop only valid columns
+    return dataframe.drop(columns=valid_columns_to_drop)
 
 
 def separate_numerical_categorical(data):
@@ -115,12 +119,12 @@ def impute_knn_best_hyperparameter(dataframe, n_neighbors_options=[1, 3, 5, 7, 1
     best_score = float('inf')
     best_k = None
     
-    X_train, _ = train_test_split(numeric_data, test_size=0.2, random_state=42)  # Split data for cross-validation
+    # X_train, _ = train_test_split(numeric_data, test_size=0.0, random_state=42)  # Split data for cross-validation
 
     for k in n_neighbors_options:
         imputer = KNNImputer(n_neighbors=k)
         try:
-            imputed_scores = cross_val_score(imputer, X_train, cv=cv, scoring='neg_mean_squared_error', error_score=np.nan)
+            imputed_scores = cross_val_score(imputer, numeric_data, cv=cv, scoring='neg_mean_squared_error', error_score=np.nan)
             mean_score = -np.mean(imputed_scores)
         except Exception as e:
             print(f"Error occurred during cross-validation for k={k}: {e}")

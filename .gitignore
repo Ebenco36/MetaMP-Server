@@ -76,8 +76,14 @@ ARS.csv
 
 dataAll.csv
 *.ipynb
+!JupyterNotebookTest.ipynb
+!important_notebook.ipynb
+summary-statistics/
 
 *.csv
+data/
+datasets/
+datasets_test/
 datasets/*.csv
 datasets/*.xml
 datasets/pdb/*.csv
@@ -94,3 +100,5 @@ models/tsne_chart.json
 models/umap_chart.json
 my_summary.txt
 your_file.txt
+
+data.zip
