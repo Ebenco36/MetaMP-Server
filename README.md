@@ -38,8 +38,8 @@ We aim to provide a streamlined and intuitive experience for exploring our machi
 3. [Key Features](#key-features)
 4. [Built With](#built-with)
 5. [Requirements](#requirements)
-6. [Environment Setup](#environment-setup)
-7. [Installation](#installation)
+6. [Getting started](#getting-started)
+7. [Installation and Running](#installation-and-running)
 8. [Project Folder Structure](#project-folder-structure)
 9. [Application Setup and Configuration](#application-setup-and-configuration)
 10. [Seeding Process](#seeding-process)
@@ -124,14 +124,14 @@ Utilizes AI to suggest categorizations of MP structures into predefined groups b
 To minimize installation issues and version conflicts, we have deployed a Docker image for both the frontend and backend, ensuring that everyone can easily test the complete application.
 
 
-#### Environment Setup
+### Environment Setup
 
 To set up the development environment, follow these steps:
 
 1. Install Python (3.8 or higher) from the [official Python website](https://www.python.org/).
 2. Install Docker and Docker Compose from the [official Docker website](https://www.docker.com/).
 
-## Installation & Running
+## Installation and Running
 ### Stable
 The easiest way to install the tool is by using our latest Docker image:
 
@@ -159,9 +159,7 @@ You can use the localhost IP or your own custom hostname to access the app.
 - **Password:** password
 
 ### Unstable
-*Caution! Use at your own 
-
-## Installation
+*Caution! Use at your own
 
 Step 1: Clone the repository
     ```bash
