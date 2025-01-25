@@ -73,6 +73,7 @@ ARS.csv
 *.png
 # Exempt a specific PNG file from being ignored
 !public/MetaMPArchitecture.png
+!public/backend-completion-status.png
 
 dataAll.csv
 *.ipynb
