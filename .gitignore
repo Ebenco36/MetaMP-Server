@@ -74,7 +74,9 @@ ARS.csv
 # Exempt a specific PNG file from being ignored
 !public/MetaMPArchitecture.png
 !public/backend-completion-status.png
-
+celery-beat
+DB.json
+obsolete
 dataAll.csv
 *.ipynb
 !JupyterNotebookTest.ipynb
