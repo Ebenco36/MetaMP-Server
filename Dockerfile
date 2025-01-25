@@ -1,66 +1,80 @@
-# Use an Ubuntu base image with the latest Python 3.11
-FROM ubuntu:20.04
+# Stage 1: Builder
+FROM python:3.10-slim as builder
 
-# setting environment variables
-ENV FLASK_ENV=production \
-    DEBUG=False \
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     NUMBA_DISABLE_CACHING=1 \
-    DEBIAN_FRONTEND=noninteractive
+    NUMBA_CACHE_DIR=/tmp/numba_cache \
+    MPLCONFIGDIR=/tmp/MPLCONFIGDIR/ \
+    NUMBA_DEBUG=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    sudo \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y \
+# Install only build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    libffi-dev \
+    libssl-dev \
+    libpq-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set the working directory
+WORKDIR /var/app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir supervisor
+
+
+# Ensure /tmp is writable
+RUN mkdir -p /tmp/numba_cache && chmod -R 777 /tmp/numba_cache
+
+RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/site-packages/umap/layouts.py
+
+# Stage 2: Final Image
+FROM python:3.10-slim
+
+# Environment variables
+ENV FLASK_DEBUG=production \
+    DEBUG=False \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive\
+    NUMBA_DISABLE_CACHING=1 \
+    NUMBA_CACHE_DIR=/tmp/numba_cache \
+    MPLCONFIGDIR=/tmp/MPLCONFIGDIR/ \
+    NUMBA_DEBUG=1
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libev-dev \
     libevent-dev \
-    python3.11 \
-    python3.11-venv \
-    python3-pip \
-    gcc \
-    g++ \
-    python3.11-dev \
-    libc-dev \
     libffi-dev \
     libssl-dev \
     libpq-dev \
     nginx \
     supervisor \
-    build-essential \
-    libpcre3-dev \
-    gfortran \
-    libopenblas-dev \
-    liblapack-dev \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.11 as the default Python version
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2 && \
-    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
-    python3 get-pip.py && \
-    rm get-pip.py
-
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /var/app
 
-# Copy the rest of the application code into the container
-COPY . /var/app
+# Copy application code and dependencies from builder stage
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+COPY --from=builder /usr/local/bin /usr/local/bin
+COPY . .
 
-RUN pip install -r requirements.txt \
-    && pip install apache-airflow[kubernetes] \
-    && pip install supervisor
-
-# Create Airflow directories and ensure the right permissions
-RUN mkdir -p /var/app/airflow_home/logs/scheduler && \
-    chown -R www-data:www-data /var/app /var/app/airflow_home && \
-    chmod -R 775 /var/app/airflow_home && \
-    mv serverConfig/supervisord.conf /etc/supervisor/conf.d/supervisord.conf && \
+# Configure directories and permissions
+RUN mv serverConfig/supervisord.conf /etc/supervisor/conf.d/supervisord.conf && \
     mv nginx/nginx.conf /etc/nginx/sites-available/mpvis.com && \
     ln -s /etc/nginx/sites-available/mpvis.com /etc/nginx/sites-enabled/ && \
     rm /etc/nginx/sites-enabled/default
 
+# Ensure /tmp is writable
+RUN mkdir -p /tmp/numba_cache && chmod -R 777 /tmp/numba_cache
+
+RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/site-packages/umap/layouts.py
 
 # Make the entrypoint script executable
 COPY serverConfig/entrypoint.sh /entrypoint.sh
@@ -69,5 +83,5 @@ RUN chmod +x /entrypoint.sh
 # Set the script to be executed when the container starts
 ENTRYPOINT ["/entrypoint.sh"]
 
-# Expose the port the app runs on
+# Expose required ports
 EXPOSE 8081 8090

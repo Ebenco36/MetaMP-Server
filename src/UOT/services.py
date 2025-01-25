@@ -1,6 +1,5 @@
 import os
-
-import umap
+# import umap
 import pandas as pd
 import altair as alt
 from datetime import timedelta
@@ -107,18 +106,18 @@ class MachineLearningService:
         self.dr['target'] = self.data_['target']
         return self.dr
     
-    def apply_umap(self, n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean', method="barnes_hut"):
-        self.impute_data()
-        self.normalize_data()
-        # Implement your t-SNE logic here
-        umap_ = umap.UMAP(
-            n_neighbors=n_neighbors, min_dist=min_dist, 
-            n_components=n_components, metric=metric, method=method
-        )
-        umap_result = umap_.fit_transform(self.normalized_data)
-        self.dr = pd.DataFrame(umap_result, columns=['Feature1', 'Feature2'])
-        self.dr['target'] = self.data_['target']
-        return self.dr
+    # def apply_umap(self, n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean', method="barnes_hut"):
+    #     self.impute_data()
+    #     self.normalize_data()
+    #     # Implement your t-SNE logic here
+    #     umap_ = umap.UMAP(
+    #         n_neighbors=n_neighbors, min_dist=min_dist, 
+    #         n_components=n_components, metric=metric, method=method
+    #     )
+    #     umap_result = umap_.fit_transform(self.normalized_data)
+    #     self.dr = pd.DataFrame(umap_result, columns=['Feature1', 'Feature2'])
+    #     self.dr['target'] = self.data_['target']
+    #     return self.dr
 
     def apply_kmeans(
         self, n_clusters=2, max_iter=300, n_init="auto", dimension_method="tsne",
@@ -129,11 +128,11 @@ class MachineLearningService:
             self.apply_tsne(
                 n_components=n_components, learning_rate=learning_rate, 
                 metric=metric, perplexity=perplexity, early_exaggeration=early_exaggeration)
-        elif(dimension_method == "umap"):
-            self.apply_umap(
-                n_neighbors=n_neighbors, min_dist=min_dist, 
-                n_components=n_components, metric=metric, method=method
-            )
+        # elif(dimension_method == "umap"):
+        #     self.apply_umap(
+        #         n_neighbors=n_neighbors, min_dist=min_dist, 
+        #         n_components=n_components, metric=metric, method=method
+        #     )
         else:
             self.apply_pca(n_components=n_components)
         # Implement your KMeans clustering logic here
@@ -157,11 +156,11 @@ class MachineLearningService:
             self.apply_tsne(
                 n_components=n_components, learning_rate=learning_rate, 
                 metric=metric, perplexity=perplexity, early_exaggeration=early_exaggeration)
-        elif(dimension_method == "umap"):
-            self.apply_umap(
-                n_neighbors=n_neighbors, min_dist=min_dist, 
-                n_components=n_components, metric=metric, method=method
-            )
+        # elif(dimension_method == "umap"):
+        #     self.apply_umap(
+        #         n_neighbors=n_neighbors, min_dist=min_dist, 
+        #         n_components=n_components, metric=metric, method=method
+        #     )
         else:
             self.apply_pca(n_components=n_components)
         # Implement your DBSCAN clustering logic here
@@ -194,11 +193,11 @@ class MachineLearningService:
             self.apply_tsne(
                 n_components=n_components, learning_rate=learning_rate, 
                 metric=metric, perplexity=perplexity, early_exaggeration=early_exaggeration)
-        elif(dimension_method == "umap"):
-            self.apply_umap(
-                n_neighbors=n_neighbors, min_dist=min_dist, 
-                n_components=n_components, metric=metric, method=method
-            )
+        # elif(dimension_method == "umap"):
+        #     self.apply_umap(
+        #         n_neighbors=n_neighbors, min_dist=min_dist, 
+        #         n_components=n_components, metric=metric, method=method
+        #     )
         else:
             self.apply_pca(n_components=n_components)
         # Implement your DBSCAN clustering logic here

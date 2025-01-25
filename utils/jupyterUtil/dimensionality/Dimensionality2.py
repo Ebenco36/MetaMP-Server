@@ -4,8 +4,7 @@ from jupyterUtil.Helpers import create_dir
 import pandas as pd
 import altair as alt
 import os
-os.environ["NUMBA_CACHE_DIR"] = "/tmp"
-import umap
+# import umap
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
@@ -31,7 +30,7 @@ datasets = {
 dim_reduction_techniques = {
     'PCA': PCA(n_components=2),
     't-SNE': TSNE(n_components=2),
-    'UMAP': umap.UMAP(n_components=2),
+    # 'UMAP': umap.UMAP(n_components=2),
 }
 
 

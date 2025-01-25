@@ -383,8 +383,7 @@ import pandas as pd
 import requests
 import os
 
-data_path = os.environ.get("AIRFLOW_HOME", ".")
-modified_path = data_path.replace("/airflow_home", "") if data_path else "."
+modified_path = "."
 
 class UniProtDataFetcher:
     def __init__(self):
@@ -609,6 +608,10 @@ class UniProtDataFetcher:
 
     def fetch_and_process(self, df, pdb_code_column, function_file):
         
+        check_file = modified_path + "/datasets/Uniprot_functions.csv"
+        if os.path.exists(check_file):
+            print(f"Error: File {check_file} already downloaded. You can delete to download new one.")
+            return
         
         function_file_path = function_file + ".csv"
         # Check if the old file exists
@@ -617,6 +620,7 @@ class UniProtDataFetcher:
             # Rename the file
             current_date = datetime.now().strftime('%Y-%m-%d')
             new_data_function_file = function_file + "_" + current_date + ".csv"
+            new_data_function_file = function_file + ".csv"
             os.rename(function_file_path, new_data_function_file)
             print(f"File has been renamed from '{function_file_path}' to '{new_data_function_file}'.")
         else:

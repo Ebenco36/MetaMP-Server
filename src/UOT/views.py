@@ -222,8 +222,7 @@ class MachineLearningView(Resource):
         
         return convert_chart(chart)
     
-    
-    
+
 class UseCases(Resource):
     def __init__(self):
         pass

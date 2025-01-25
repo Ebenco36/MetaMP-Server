@@ -365,11 +365,7 @@ correct_spelling_exptl_crystal = {
     "OIL-MICROBATCH METHOD": "MICROBATCH"
 }
 
-data_path = os.environ.get("AIRFLOW_HOME")
-if (data_path):
-    modified_path = data_path.replace("/airflow_home", "")
-else:
-    modified_path = "."
+modified_path = "."
 current_date = datetime.date.today().strftime('%Y-%m-%d')
 #Get the two prepared tables
 PDB = pd.read_csv(modified_path + "/datasets/PDB_data.csv")
@@ -473,7 +469,7 @@ class DataImport:
             merged_df = self.dataPrePreprocessing(merged_df)
             merged_df.to_csv(modified_path + '/datasets/Quantitative_data.csv', index=False)
         else:
-            merged_df = pd.read_csv("modified_path + /datasets/Quantitative_data.csv", low_memory=False)
+            merged_df = pd.read_csv(modified_path + "/datasets/Quantitative_data.csv", low_memory=False)
             merged_df.loc[merged_df['Group'] == 'TRANSMEMBRANE PROTEINS: BETA-BARREL', 'Group'] = 'TRANSMEMBRANE PROTEINS:BETA-BARREL'
             merged_df.loc[merged_df['Group'] == 'TRANSMEMBRANE PROTEINS: ALPHA-HELICAL', 'Group'] = 'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL'
             

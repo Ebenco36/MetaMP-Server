@@ -8,11 +8,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 
-data_path = os.environ.get("AIRFLOW_HOME")
-if (data_path):
-    modified_path = data_path.replace("/airflow_home", "")
-else:
-    modified_path = "."
+modified_path = "."
 
 def does_file_exist(file_path):
     return os.path.exists(file_path)
@@ -139,11 +135,16 @@ class PDBJOBS:
     def load_data(self):
         # create directory
         self.create_directory("datasets")
+        check_quant_file = does_file_exist(modified_path + "/datasets/PDB_data.csv")
+        if(check_quant_file):
+            print(f"Error: File /datasets/PDB_data.csv already downloaded. You can delete to download new one.")
+            return
         #Read the ids from the mpstruc
         current_date = datetime.date.today().strftime('%Y-%m-%d')
         self.ids = pd.read_csv(modified_path + "/datasets/mpstruct_ids.csv")
         protein_entries = []
-
+        # Load others
+        self.parse_data().loadFile()
         return self
 
     #Fetch the information on the ids 
@@ -208,7 +209,7 @@ class PDBJOBS:
             return self
         
     def fetch_data(self):
-        return self.load_data().parse_data().loadFile()
+        return self.load_data()
     
     def convert_month(self, mon):
         if (mon == "Jan"):

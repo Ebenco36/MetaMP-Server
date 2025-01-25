@@ -406,7 +406,7 @@ docker push ebenco36/mpvis:latest
 docker pull ebenco36/mtest_docker:latest
 
 
-docker-compose -f docker2-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 
 docker-compose exec redis redis-cli
 
@@ -828,3 +828,18 @@ Add file after exempting it in gitignore file
 git add -f  public/MetaMPArchitecture.png
 
 git remote set-url origin  https://github.com/Ebenco36/MetaMP-Server.git
+
+
+celery -A celery_app.celery worker --loglevel=info
+celery -A celery_app.celery beat --loglevel=info
+
+
+kill -9 $(lsof -t -i :5400)  
+
+
+docker tag mpvis-flask-app:latest ebenco36/mpvis_app:latest
+docker tag mpvis-frontend:latest ebenco36/mpfrontend:latest
+
+
+docker push ebenco36/mpvis_app:latest
+docker push ebenco36/mpfrontend:latest

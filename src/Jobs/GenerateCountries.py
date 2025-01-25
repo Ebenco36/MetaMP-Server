@@ -8,10 +8,13 @@ sys.path.append(os.getcwd())
 
 def countriesD():
     # File to store the country data
-    data_path = os.environ.get("AIRFLOW_HOME")
-    modified_path = data_path.replace("/airflow_home", "")
+    modified_path = "."
     data_file = modified_path + '/datasets/country_data.csv'
-    
+    check_file = modified_path + "/datasets/country_data.csv"
+    if os.path.exists(check_file):
+        print(f"Error: File {check_file} already downloaded. You can delete to download new one.")
+        return
+
     # Check if the data file exists
     if os.path.isfile(data_file):
         # If file exists, load the data from the file

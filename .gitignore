@@ -100,5 +100,5 @@ models/tsne_chart.json
 models/umap_chart.json
 my_summary.txt
 your_file.txt
-
+celerybeat-schedule
 data.zip

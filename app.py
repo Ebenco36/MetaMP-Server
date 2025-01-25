@@ -1,4 +1,6 @@
 import os
+os.environ["NUMBA_CACHE_DIR"] = "/tmp/"
+os.environ["NUMBA_DISABLE_CACHING"] = "1"
 import time
 import logging
 from flask import Flask, g
@@ -15,7 +17,7 @@ try:
 except ImportError as e:
     print(e)
     is_route_ready = False
-
+from celery_app import make_celery
 from utils.errors import BadRequestException
 from logging.handlers import RotatingFileHandler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -25,7 +27,7 @@ from src.middlewares.auth_middleware import token_required
 
 # load_dotenv()  # load env files
 # Determine which .env file to load
-env = os.environ.get('FLASK_ENV', 'development')
+env = os.environ.get('FLASK_DEBUG', 'development')
 if env == 'production':
     load_dotenv('.env.production')
 else:
@@ -78,6 +80,7 @@ def create_app():
     CORS(app)
     # Mail(app)
     admin = Admin(app)
+    celery = make_celery(app)
     
     # Configure logging to write to a file
     log_handler = RotatingFileHandler('error.log', maxBytes=1024 * 1024, backupCount=10)

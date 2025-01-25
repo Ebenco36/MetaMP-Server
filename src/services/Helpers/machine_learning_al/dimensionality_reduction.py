@@ -1,14 +1,13 @@
 import os
 
 from src.services.graphs.helpers import convert_chart
-os.environ["NUMBA_CACHE_DIR"] = "/tmp"
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.random_projection import GaussianRandomProjection
 from sklearn.manifold import LocallyLinearEmbedding
 from sklearn.decomposition import PCA, FastICA, TruncatedSVD, NMF, FactorAnalysis
 from sklearn.manifold import TSNE
-import umap
+# import umap
 from sklearn.manifold import Isomap
 import pandas as pd
 import numpy as np
@@ -89,24 +88,24 @@ class DimensionalityReduction:
         return data, explainable
     """
     
-    def umap_algorithm(
-        self, 
-        n_epochs=10,
-        min_dist=None,
-        n_neighbors=None, 
-        metric="euclidean"
-    ):
-        model = umap.UMAP(
-            metric=metric, 
-            min_dist=min_dist, 
-            n_neighbors=n_neighbors, 
-            n_components=self.n_features
-        )
-        model_data = model.fit_transform(self.X)
-        data = pd.DataFrame(model_data, columns=self.dr_columns)
-        explainable = ''
+    # def umap_algorithm(
+    #     self, 
+    #     n_epochs=10,
+    #     min_dist=None,
+    #     n_neighbors=None, 
+    #     metric="euclidean"
+    # ):
+    #     model = umap.UMAP(
+    #         metric=metric, 
+    #         min_dist=min_dist, 
+    #         n_neighbors=n_neighbors, 
+    #         n_components=self.n_features
+    #     )
+    #     model_data = model.fit_transform(self.X)
+    #     data = pd.DataFrame(model_data, columns=self.dr_columns)
+    #     explainable = ''
         
-        return data, explainable
+    #     return data, explainable
 
     def pca_contribution(self, data, data_  , n_components):
         # Access the principal components

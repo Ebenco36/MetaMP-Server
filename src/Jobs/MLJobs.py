@@ -18,7 +18,8 @@ from sklearn.metrics import (
     recall_score, 
     accuracy_score
 )
-from app import app
+# from app import app
+from flask import current_app
 import altair as alt
 from database.db import db
 from src.Dashboard.services import get_tables_as_dataframe, get_table_as_dataframe
@@ -53,7 +54,7 @@ class MLJob:
         
     def load_data(self):
         table_names = ['membrane_proteins', 'membrane_protein_opm']
-        with app.app_context():
+        with current_app.app_context():
             # Load data from tables
             self.all_data = get_tables_as_dataframe(table_names, "pdb_code")
             self.result_df_db = get_table_as_dataframe("membrane_proteins")
@@ -434,17 +435,3 @@ class MLJob:
         self.run_classification(X, y, ClassifierComparison, "supervised_no_dr")
         
         return self
-
-
-ml_job = MLJob()
-    
-# Run the steps sequentially
-ml_job.fix_missing_data()\
-        .variable_separation()\
-        .feature_selection()\
-        .dimensionality_reduction()\
-        .plot_charts()\
-        .semi_supervised_learning()\
-        .supervised_learning()
-
-print("Machine Learning Job completed successfully.")

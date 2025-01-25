@@ -2,11 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 
-data_path = os.environ.get("AIRFLOW_HOME")
-if (data_path):
-    modified_path = data_path.replace("/airflow_home", "")
-else:
-    modified_path = "."
+modified_path = "."
 
 def remove_columns_with_listlike_contents(df, exempt_columns=None):
     if exempt_columns is None:

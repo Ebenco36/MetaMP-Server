@@ -102,7 +102,7 @@ Supports interactive exploration of MP structure data through a dynamic dashboar
 ### 7. Grouping View
 Utilizes AI to suggest categorizations of MP structures into predefined groups based on attributes. Experts review and refine these AI-generated groupings to ensure accuracy, enabling efficient and nuanced data curation.
 
-## Built With
+## Built On
 
 <!-- - **Python**: Programming language used for backend development. -->
 - **Flask**: Web framework used for creating the server-side application.
@@ -114,45 +114,76 @@ Utilizes AI to suggest categorizations of MP structures into predefined groups b
 
 - Python 3.9+
 - Flask 2.0+
-- Docker
+- Docker (Docker version 27.4.0, build bde2b89)
 - Redis
 - RabbitMQ
-- PostgreSQL or MySQL (depending on your database choice)
+- PostgreSQL
 
-## Environment Setup
+
+## Getting started
+To minimize installation issues and version conflicts, we have deployed a Docker image for both the frontend and backend, ensuring that everyone can easily test the complete application.
+
+
+#### Environment Setup
 
 To set up the development environment, follow these steps:
 
 1. Install Python (3.8 or higher) from the [official Python website](https://www.python.org/).
 2. Install Docker and Docker Compose from the [official Docker website](https://www.docker.com/).
-3. Install Redis and RabbitMQ on your local machine or use Docker images.
-4. Set up a virtual environment:
-   ```bash
-   python -m venv venv_metamp
-   source venv_metamp/bin/activate  # On Windows use `venv_metamp\Scripts\activate`
-   ```
-5. Install required Python libraries:
-    ```bash
-    pip install -r requirements.txt
-    ```
+
+## Installation & Running
+### Stable
+The easiest way to install the tool is by using our latest Docker image:
+
+1. Install Docker and Docker Compose from the [official Docker website](https://www.docker.com/).
+2. Download the `docker-compose.yml` file to get started.
+
+Follow the steps above to quickly set up the tool with minimal effort.
+
+#### Docker Deployment for Backend and Frontend
+```
+docker compose -f docker-compose.yml up -d  
+```
+![Docker-Deployment-for-Backend](public/backend-completion-status.png)
+
+Once the command above has been successfully executed (as illustrated in the image above):
+
+- The backend will run at: [http://localhost:5400/api/v1/dashboard](http://localhost:5400/api/v1/dashboard)
+- The frontend will be accessible at: [http://localhost/#/dashboard](http://localhost/#/dashboard)
+
+### Note:
+You can use the localhost IP or your own custom hostname to access the app.
+
+#### Login Information:
+- **Username/Email:** admin01@gmail.com  
+- **Password:** password
+
+### Unstable
+*Caution! Use at your own 
 
 ## Installation
 
 Step 1: Clone the repository
     ```bash
-    git clone https://github.com/Ebenco36/MPVIS-V2.git
-    cd MetaMP
+        git clone https://github.com/Ebenco36/MPVIS-V2.git
+        cd MetaMP
     ```
 
-Step 2: Install Dependencies
+Step 2: Set up a virtual environment:
+   ```bash
+        python -m venv venv_metamp
+        source venv_metamp/bin/activate  # On Windows use `venv_metamp\Scripts\activate`
+   ```
+
+Step 3: Install Dependencies:
     ```bash
-    pip install -r requirements.txt
+        pip install -r requirements.txt
     ```
 
-Step 3: Configure Environment Variables
+Step 4: Configure Environment Variables:
     Copy .env content from our example env.
     ```bash
-    cp env_example .env
+        cp env_example .env
     ```
 
 ## Project Folder Structure
@@ -179,8 +210,8 @@ Step 3: Configure Environment Variables
 |-- /tests          # test are written here
 |-- /utils          # MetaMP utils
 |-- Dockerfile        # Docker configuration
-|-- docker-compose.yml        # Docker configuration
-|-- docker-compose.yml # Docker Compose file for multi-container setup
+|-- docker-compose-dev.yml        # Dev Containers
+|-- docker-compose.yml # Deployed Containers
 |-- README.md         # Documentation file
 |-- requirements.txt  # Python dependencies
 |-- env_example      # Example environment configuration
@@ -218,7 +249,7 @@ To run the application using Waitress:
     ```
 2. Start the application using Docker Compose:
     ```bash
-    docker-compose -f docker2-compose.yml up -d
+    docker-compose -f docker-compose.yml up -d
     ```
 3. Free up space by pruning Docker system:
     ```bash

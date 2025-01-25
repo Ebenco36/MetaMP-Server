@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import pandas as pd
 import altair as alt
-from umap import UMAP
+# from umap import UMAP
 # import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.utils import shuffle
@@ -319,8 +319,8 @@ def evaluate_dimensionality_reduction(data, methods_params):
             reducer = PCA(**param_list)
         elif method == 't-SNE':
             reducer = TSNE(**param_list, random_state=42)
-        elif method == 'UMAP':
-            reducer = UMAP(**param_list)
+        # elif method == 'UMAP':
+        #     reducer = UMAP(**param_list)
             
         else:
             raise ValueError(f"Unsupported method: {method}")
@@ -895,8 +895,8 @@ class DimensionalityReduction:
             self.model = IncrementalPCA(n_components=n_components, **kwargs)
         elif method == 'tsne':
             self.model = TSNE(n_components=n_components, **kwargs)
-        elif method == 'umap':
-            self.model = UMAP(n_components=n_components, **kwargs)
+        # elif method == 'umap':
+        #     self.model = UMAP(n_components=n_components, **kwargs)
     
     def fit_transform(self, X):
         return self.model.fit_transform(X)

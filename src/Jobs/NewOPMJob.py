@@ -2,11 +2,7 @@ import os
 import requests
 import pandas as pd
 
-data_path = os.environ.get("AIRFLOW_HOME")
-if (data_path):
-    modified_path = data_path.replace("/airflow_home", "")
-else:
-    modified_path = "."
+modified_path = "."
 
 class NEWOPM:
     def __init__(self):
@@ -61,6 +57,11 @@ class NEWOPM:
     def fetch(self):
         # Load PDB codes from a CSV file
         csv_file_path = modified_path + "/datasets/Quantitative_data.csv"
+        check_file = modified_path + "/datasets/NEWOPM.csv"
+        if os.path.exists(check_file):
+            print(f"Error: File {check_file} already downloaded. You can delete to download new one.")
+            return
+        
         df = pd.read_csv(csv_file_path, low_memory=False)
         #df = df.head(2)  # Limit to 2 rows for testing
         

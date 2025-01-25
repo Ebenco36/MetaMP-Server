@@ -1,0 +1,115 @@
+services:
+
+  flask-app:
+    container_name: mpvis_app
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${FLASK_RUN_PORT}:8081"
+      - "8090:8090"
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - .env.development
+    volumes:
+       - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  postgres:
+    container_name: "metaMPDB"
+    image: postgres:latest
+    deploy:
+      resources:
+        limits:
+          memory: 3G 
+    environment:
+      POSTGRES_DB: mpvis_db
+      POSTGRES_USER: mpvis_user
+      POSTGRES_PASSWORD: mpvis_user
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # - ./serverConfig/init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount the init script
+    env_file: 
+      - .env
+    networks:
+      - app-networks
+
+  frontend:
+    build: ../MPvisualization
+    container_name: MPfrontend
+    ports:
+      - "80:80" # Expose frontend on localhost:3000
+    networks:
+      - app-networks
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:${FLASK_RUN_PORT} # Use Docker service name
+
+  #pgadmin:
+  #  image: dpage/pgadmin4:latest
+  #  deploy:
+  #    resources:
+  #      limits:
+  #        memory: 1G 
+  #  environment:
+  #    PGADMIN_DEFAULT_EMAIL: admin@example.com
+  #    PGADMIN_DEFAULT_PASSWORD: admin
+  #  ports:
+  #    - "5050:80"
+  #  depends_on:
+  #    - postgres
+  #  networks:
+  #    - app-networks
+
+
+  redis:
+    image: redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G 
+    container_name: metaMPRedis
+    ports:
+      - "6379:6379"  # Expose the Redis port
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-networks
+
+
+  #redis-commander:
+  #  image: rediscommander/redis-commander:latest
+  #  deploy:
+  #    resources:
+  #      limits:
+  #        memory: 1G 
+  #  container_name: metaMPRedisManagement
+  #  environment:
+  #    - REDIS_HOSTS=local:redis:6379
+  #  ports:
+  #    - "8083:8081"
+  #  networks:
+  #    - app-networks
+  #  depends_on:
+  #    - redis
+
+
+# shared network
+networks:
+  app-networks:
+    driver: bridge
+
+
+volumes:
+  flask-app-data:
+  pgdata:
+  redis-data:
+    driver: local

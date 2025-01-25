@@ -1,15 +1,11 @@
 import os
 import pandas as pd
-import urllib
+import urllib.request
 import shutil
 import datetime
 import xml.etree.ElementTree as et
 
-data_path = os.environ.get("AIRFLOW_HOME")
-if (data_path):
-    modified_path = data_path.replace("/airflow_home", "")
-else:
-    modified_path = "."
+modified_path = "."
 
 class MPSTRUCT:
 
@@ -23,6 +19,11 @@ class MPSTRUCT:
     def load_data(self):
         # create directory
         self.create_directory("datasets")
+        file_path = modified_path + "/datasets/mpstrucTblXml.xml"
+        if os.path.exists(file_path):
+            print(f"Error: File {file_path} already downloaded. You can delete to download new one.")
+            return
+    
         #Fetch update timne of the database from the thml content of the mpstruc website
         req = urllib.request.urlopen("https://blanco.biomol.uci.edu/mpstruc/")
         page = req.read()
@@ -64,15 +65,19 @@ class MPSTRUCT:
             with open(modified_path + "/datasets/mpstrucTblXml.xml", "wb") as outfile:
                 shutil.copyfileobj(new_mpstruc, outfile)
         print("What are we doing here: " + modified_path + "/datasets/mpstrucTblXml.xml")
+        # data passing
+        self.parse_data()
         return self
 
 
     def parse_data(self):
         # create directory
         self.create_directory("datasets")
+        
+        file_path = modified_path + "/datasets/mpstrucTblXml.xml"
         #Parse mpstruc xml received from 'Mpstuc Update' as an element tree
         current_date = datetime.date.today().strftime('%Y-%m-%d')
-        tree = et.parse(modified_path + "/datasets/mpstrucTblXml.xml")
+        tree = et.parse(file_path)
         root = tree.getroot()
 
         #Start the long journey of generating the .csv-table
@@ -133,7 +138,7 @@ class MPSTRUCT:
         
         
     def fetch_data(self):
-        return self.load_data().parse_data()
+        return self.load_data()
     
     
     def convert_month(self, mon):

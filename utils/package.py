@@ -10,15 +10,15 @@ import os
 from sklearn.metrics import silhouette_score
 from sklearn.model_selection import ParameterGrid
 import numpy as np
-
-os.environ["NUMBA_CACHE_DIR"] = "/tmp"
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 # import tensorflow as tf
-import umap
+os.environ["NUMBA_CACHE_DIR"] = "/tmp/numba_cache"
+os.environ["NUMBA_DISABLE_CACHING"] = "1"
+# import umap
 
 
 def drop_id_columns(dataframe):
@@ -327,8 +327,8 @@ def evaluate_dimensionality_reduction(data, methods_params):
             reducer = PCA(**param_list)
         elif method == 't-SNE':
             reducer = TSNE(**param_list, random_state=42)
-        elif method == 'UMAP':
-            reducer = umap.UMAP(**param_list)
+        # elif method == 'UMAP':
+        #     reducer = umap.UMAP(**param_list)
         else:
             raise ValueError(f"Unsupported method: {method}")
 
@@ -579,7 +579,10 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import silhouette_score
-from umap import UMAP
+import os
+os.environ["NUMBA_CACHE_DIR"] = "/tmp/numba_cache"
+os.environ["NUMBA_DISABLE_CACHING"] = "1"
+# from umap import UMAP
 import pandas as pd
 
 class DataImputation:
@@ -623,8 +626,8 @@ class DimensionalityReduction:
             self.model = IncrementalPCA(n_components=n_components, **kwargs)
         elif method == 'tsne':
             self.model = TSNE(n_components=n_components, **kwargs)
-        elif method == 'umap':
-            self.model = UMAP(n_components=n_components, **kwargs)
+        # elif method == 'umap':
+        #     self.model = UMAP(n_components=n_components, **kwargs)
     
     def fit_transform(self, X):
         return self.model.fit_transform(X)
