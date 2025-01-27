@@ -15,8 +15,6 @@ services:
     depends_on:
       - postgres
       - redis
-    env_file:
-      - .env.development
     volumes:
        - flask-app-data:/var/app/data
     networks:
@@ -30,16 +28,14 @@ services:
         limits:
           memory: 3G 
     environment:
-      POSTGRES_DB: mpvis_db
-      POSTGRES_USER: mpvis_user
-      POSTGRES_PASSWORD: mpvis_user
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       # - ./serverConfig/init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount the init script
-    env_file: 
-      - .env
     networks:
       - app-networks
 

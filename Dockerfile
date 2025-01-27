@@ -36,7 +36,7 @@ RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/
 FROM python:3.10-slim
 
 # Environment variables
-ENV FLASK_DEBUG=production \
+ENV FLASK_DEBUG=False \
     DEBUG=False \
     PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive\
@@ -79,6 +79,8 @@ RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/
 # Make the entrypoint script executable
 COPY serverConfig/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+COPY .env.production .env
 
 # Set the script to be executed when the container starts
 ENTRYPOINT ["/entrypoint.sh"]

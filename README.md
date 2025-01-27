@@ -2,60 +2,32 @@
 
 MetaMP is a web application designed to dynamically curate structure determination metadata for resolved Membrane Proteins (MPs). It provides several interactive views to explore enriched MP structure data and associated metadata, supporting advanced analysis and data-driven decision-making.
 
-
-## Jupyter Notebook Test
-
-### Overview
-We have developed a Jupyter Notebook, **JupyterNotebookTest.ipynb**, to test and visualize various implementations, including machine learning techniques such as Dimensionality Reduction and Semi-Supervised Learning. This notebook serves as an interactive tool to explore our methodologies and outcomes in detail.
-
-### Key Features
-1. **Visualization of Results**: The notebook includes a variety of interactive charts and visualizations designed to effectively communicate insights derived from our analyses.
-2. **Implementation Testing**: Evaluate the performance of Dimensionality Reduction and Semi-Supervised Learning models with provided sample datasets.
-
-### Accessing the Required Data
-To utilize the notebook, you will need to download the required dataset.
-
-[Click here to download the dataset](https://drive.google.com/file/d/1L7mArSRHRbpp6hq0z74XpyHYvJBM8Kjt/view?usp=drive_link)
-
-After downloading the dataset, ensure that the file is saved to the specified filepath mentioned in the notebook to guarantee seamless operation.
-
-### Instructions
-1. Download the dataset using the link above.
-2. Open the Jupyter Notebook **JupyterNotebookTest.ipynb** and verify that the filepath to the dataset matches your local setup.
-3. Follow the instructions in the notebook to execute the code cells and interact with the visualizations.
-
-We aim to provide a streamlined and intuitive experience for exploring our machine learning implementations and results.
-
-
-
-
-
-
 ## Table of Contents
 
 1. [About the Project](#about-the-project)
 2. [Abstract](#abstract)
 3. [Key Features](#key-features)
-4. [Built With](#built-with)
+4. [Built On](#built-on)
 5. [Requirements](#requirements)
-6. [Getting started](#getting-started)
-7. [Installation and Running](#installation-and-running)
-8. [Project Folder Structure](#project-folder-structure)
-9. [Application Setup and Configuration](#application-setup-and-configuration)
-10. [Seeding Process](#seeding-process)
-11. [Running the Application](#running-the-application)
+6. [Jupyter Notebook Test](#jupyter-notebook-test)
+7. [Getting started](#getting-started)
+8. [Installation and Running](#installation-and-running)
+9. [Project Folder Structure](#project-folder-structure)
+10. [Application Setup and Configuration](#application-setup-and-configuration)
+11. [Seeding Process](#seeding-process)
+12. [Running the Application](#running-the-application)
     - [Running with Flask Development Server](#running-with-flask-development-server)
     - [Running with Gunicorn (macOS/Linux)](#running-with-gunicorn-macoslinux)
     - [Running with Waitress (Windows)](#running-with-waitress-windows)
-12. [Using Docker](#using-docker)
-13. [Flask Database Commands](#flask-database-commands)
-14. [Working with Redis](#working-with-redis)
-15. [Working with RabbitMQ](#working-with-rabbitmq)
-16. [Performance Considerations](#performance-considerations)
-17. [Data Availability Statement](#data-availability-statement)
-18. [License](#license)
-19. [Contact](#contact)
-20. [Acknowledgments](#acknowledgments)
+13. [Using Docker](#using-docker)
+14. [Flask Database Commands](#flask-database-commands)
+15. [Working with Redis](#working-with-redis)
+16. [Working with RabbitMQ](#working-with-rabbitmq)
+17. [Performance Considerations](#performance-considerations)
+18. [Data Availability Statement](#data-availability-statement)
+19. [License](#license)
+20. [Contact](#contact)
+21. [Acknowledgments](#acknowledgments)
 
 ## About the Project
 
@@ -120,6 +92,31 @@ Utilizes AI to suggest categorizations of MP structures into predefined groups b
 - PostgreSQL
 
 
+## Jupyter Notebook Test
+
+### Overview
+We have developed a Jupyter Notebook, **JupyterNotebookTest.ipynb**, to test and visualize various implementations, including machine learning techniques such as Dimensionality Reduction and Semi-Supervised Learning. This notebook serves as an interactive tool to explore our methodologies and outcomes in detail.
+
+### Key Features
+1. **Visualization of Results**: The notebook includes a variety of interactive charts and visualizations designed to effectively communicate insights derived from our analyses.
+2. **Implementation Testing**: Evaluate the performance of Dimensionality Reduction and Semi-Supervised Learning models with provided sample datasets.
+
+### Accessing the Required Data
+To utilize the notebook, you will need to download the required dataset.
+
+[Click here to download the dataset](https://drive.google.com/file/d/1L7mArSRHRbpp6hq0z74XpyHYvJBM8Kjt/view?usp=drive_link)
+
+After downloading the dataset, ensure that the file is saved to the specified filepath mentioned in the notebook to guarantee seamless operation.
+
+### Instructions
+1. Download the dataset using the link above.
+2. Open the Jupyter Notebook **JupyterNotebookTest.ipynb** and verify that the filepath to the dataset matches your local setup.
+3. Follow the instructions in the notebook to execute the code cells and interact with the visualizations.
+
+We aim to provide a streamlined and intuitive experience for exploring our machine learning implementations and results.
+
+
+
 ## Getting started
 To minimize installation issues and version conflicts, we have deployed a Docker image for both the frontend and backend, ensuring that everyone can easily test the complete application.
 
@@ -142,7 +139,7 @@ Follow the steps above to quickly set up the tool with minimal effort.
 
 #### Docker Deployment for Backend and Frontend
 ```
-docker compose -f docker-compose.yml up -d  
+docker compose --env-file .env.docker.deployment -f docker-compose.yml up -d
 ```
 ![Docker-Deployment-for-Backend](public/backend-completion-status.png)
 

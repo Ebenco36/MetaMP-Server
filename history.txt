@@ -406,7 +406,7 @@ docker push ebenco36/mpvis:latest
 docker pull ebenco36/mtest_docker:latest
 
 
-docker compose -f docker-compose.yml up -d
+docker compose --env-file .env -f docker-compose.yml up -d
 
 docker-compose exec redis redis-cli
 

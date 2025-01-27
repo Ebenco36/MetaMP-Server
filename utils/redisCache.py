@@ -3,7 +3,13 @@ import redis
 import json
 from flask_limiter import Limiter
 from datetime import timedelta
+from dotenv import load_dotenv
 
+env_debug = os.environ.get('FLASK_DEBUG', True)
+if env_debug:
+    load_dotenv('.env.development')
+else:
+    load_dotenv('.env.production')
 class RedisCache:
     _instance = None
     host = os.getenv('REDIS_HOST')

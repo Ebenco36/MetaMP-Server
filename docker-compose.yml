@@ -7,8 +7,6 @@ services:
     depends_on:
       - postgres
       - redis
-    env_file:
-      - .env.development
     volumes:
       - flask-app-data:/var/app/data
     networks:
@@ -29,9 +27,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # - ./serverConfig/init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount the init script
-    env_file: 
-      - .env
     networks:
       - app-networks
 

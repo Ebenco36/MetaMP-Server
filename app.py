@@ -27,11 +27,11 @@ from src.middlewares.auth_middleware import token_required
 
 # load_dotenv()  # load env files
 # Determine which .env file to load
-env = os.environ.get('FLASK_DEBUG', 'development')
-if env == 'production':
-    load_dotenv('.env.production')
-else:
+env_debug = os.environ.get('FLASK_DEBUG', True)
+if env_debug:
     load_dotenv('.env.development')
+else:
+    load_dotenv('.env.production')
     
 def reload_dotenv():
     # Clear the current environment variables
