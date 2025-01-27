@@ -1,7 +1,7 @@
 services:
   flask-app:
     image: ebenco36/mpvis_app:latest
-    container_name: mpvis_app
+    container_name: testmpvis_app
     ports:
       - "${FLASK_RUN_PORT}:8081"
     depends_on:
@@ -13,7 +13,7 @@ services:
       - app-networks
 
   postgres:
-    container_name: "metaMPDB"
+    container_name: "testmetaMPDB"
     image: postgres:latest
     deploy:
       resources:
@@ -32,7 +32,7 @@ services:
 
   frontend:
     image: ebenco36/mpfrontend:latest
-    container_name: MPfrontend
+    container_name: testMPfrontend
     ports:
       - "80:80"
     environment:
@@ -46,7 +46,7 @@ services:
       resources:
         limits:
           memory: 2G 
-    container_name: metaMPRedis
+    container_name: testmetaMPRedis
     ports:
       - "6379:6379"  # Expose the Redis port
     volumes:
