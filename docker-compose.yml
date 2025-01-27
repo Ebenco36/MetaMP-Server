@@ -20,11 +20,11 @@ services:
         limits:
           memory: 3G 
     environment:
-      POSTGRES_DB: mpvis_db
-      POSTGRES_USER: mpvis_user
-      POSTGRES_PASSWORD: mpvis_user
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
