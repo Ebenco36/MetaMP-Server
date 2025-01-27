@@ -138,7 +138,17 @@ The easiest way to install the tool is by using our latest Docker image:
 Follow the steps above to quickly set up the tool with minimal effort.
 
 #### Docker Deployment for Backend and Frontend
-```
+```bash
+# Windows installation
+mkdir metamp_app && cd metamp_app && ^
+curl -o .env.docker.deployment https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/.env.docker.deployment && ^
+curl -o docker-compose.yml https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/docker-compose.yml && ^
+docker compose --env-file .env.docker.deployment -f docker-compose.yml up -d
+
+# Linux installation
+mkdir metamp_app && cd metamp_app && \
+curl -o .env.docker.deployment https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/.env.docker.deployment && \
+curl -o docker-compose.yml https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/docker-compose.yml && \
 docker compose --env-file .env.docker.deployment -f docker-compose.yml up -d
 ```
 ![Docker-Deployment-for-Backend](public/backend-completion-status.png)
