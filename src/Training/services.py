@@ -934,8 +934,10 @@ def outlier_detection_implementation(
     create_pairwise_plot_bool=False
 ):
     column_list = selected_attributes
-
+    
     df = prepare_data(numerical_data, categorical_data, column_list)
+    
+
     categorical_columns = [
         "group", "subgroup", 
         "rcsentinfo_experimental_method", 
@@ -955,7 +957,7 @@ def outlier_detection_implementation(
         methods_params = {
             'PCA': {'n_components': 2},
             't-SNE': {'n_components': 2, 'perplexity': 50},
-            'UMAP': {'n_components': 2, 'n_neighbors': 15}
+            # 'UMAP': {'n_components': 2, 'n_neighbors': 15}
         }
 
         combined_plot_data = perform_dimensionality_reduction(

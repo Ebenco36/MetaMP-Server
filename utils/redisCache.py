@@ -5,7 +5,7 @@ from flask_limiter import Limiter
 from datetime import timedelta
 from dotenv import load_dotenv
 
-env_debug = os.environ.get('FLASK_DEBUG', True)
+env_debug = os.environ.get('FLASK_ENV', "development")
 if env_debug:
     load_dotenv('.env.development')
 else:

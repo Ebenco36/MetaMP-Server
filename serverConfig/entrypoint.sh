@@ -6,6 +6,7 @@ set -e
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 export NUMBA_DISABLE_CACHING=1
 export MPLCONFIGDIR=/tmp/matplotlib
+export FLASK_ENV=production
 
 mkdir -p $MPLCONFIGDIR
 chown www-data:www-data /tmp/matplotlib
@@ -54,6 +55,9 @@ if [ -f ./celery-beat/celerybeat-schedule ]; then
     chown www-data:www-data ./celery-beat/celerybeat-schedule
     chmod 766 ./celery-beat/celerybeat-schedule
 fi
+
+echo "Updating VegaFusion runtime.py file..."
+python /var/app/serverConfig/fix_vegafusion_issues.py
 
 # Proceed with setup or server start commands
 echo "Starting services..."

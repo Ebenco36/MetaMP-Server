@@ -52,11 +52,11 @@ class MachineLearningView(Resource):
                 n_components=n_components, learning_rate=learning_rate, 
                 metric=metric, perplexity=perplexity, early_exaggeration=early_exaggeration
             )
-        elif action == 'apply_umap':
-            return self.post_apply_UMAP(
-                n_neighbors=n_neighbors, min_dist=min_dist, 
-                n_components=n_components, metric=metric, method=method
-            )
+        # elif action == 'apply_umap':
+        #     return self.post_apply_UMAP(
+        #         n_neighbors=n_neighbors, min_dist=min_dist, 
+        #         n_components=n_components, metric=metric, method=method
+        #     )
         elif action == 'apply_kmeans':
             return self.post_apply_kmeans(
                 n_clusters=n_clusters, max_iter=max_iter, 

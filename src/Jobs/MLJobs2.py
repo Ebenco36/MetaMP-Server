@@ -167,10 +167,10 @@ class MLJob:
                 'n_components': 2, 
                 'perplexity': 30
             },
-            'UMAP': {
-                'n_components': 2, 
-                'n_neighbors': 15
-            }
+            # 'UMAP': {
+            #     'n_components': 2, 
+            #     'n_neighbors': 15
+            # }
         }
         self.complete_numerical_data = self.over_sampling_data_selected_feature_data.iloc[:, :-1]
         categorical_data = self.over_sampling_data_selected_feature_data["group"]

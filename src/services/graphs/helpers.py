@@ -515,6 +515,7 @@ def replace_value(value):
     return value, value
 
 def convert_chart(chart):
+    print(str(alt.data_transformers.get()))
     try:
         # Get the currently active data transformer
         current_transformer = alt.data_transformers.get()

@@ -760,7 +760,7 @@ fb3f9a1e458efe3ce5832e4dcb870b38
 docker exec -it ccd5be56fdbe4b5b4eedc0360c5feedf334956bcf73b41be9bc1f45ef9d7174a redis-cli
 FLUSHALL
 
-
+docker exec -it 36246592d185a967afb794006f4d377bcfaf0d13b1bc0486c3ee749c2360bd97 redis-cli
 
 ((machine learning) AND (antimicrobial resistance OR antibiotic resistance OR pathogen resistance) AND (hospital) AND (public health surveillance OR epidemiology) AND (clinical data OR demographic data) NOT (DNA) NOT (sequencing) NOT (peptides) NOT (molecules) NOT (genome) NOT (discovery))
 

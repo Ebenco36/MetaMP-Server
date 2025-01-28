@@ -27,7 +27,7 @@ from src.middlewares.auth_middleware import token_required
 
 # load_dotenv()  # load env files
 # Determine which .env file to load
-env_debug = os.environ.get('FLASK_DEBUG', True)
+env_debug = os.environ.get('FLASK_ENV', "development")
 if env_debug:
     load_dotenv('.env.development')
 else:
