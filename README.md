@@ -128,6 +128,30 @@ To set up the development environment, follow these steps:
 1. Install Python (3.8 or higher) from the [official Python website](https://www.python.org/).
 2. Install Docker and Docker Compose from the [official Docker website](https://www.docker.com/).
 
+
+
+
+
+#### Supported Platforms
+
+Our Docker images are built to support the following platforms:
+
+##### Supported Architectures
+
+1. **Linux/amd64**  
+   - 64-bit architecture for most modern Linux desktops and servers.
+   - Commonly used on Intel and AMD processors.
+
+2. **Linux/arm64**  
+   - 64-bit ARM architecture.
+   - Supported on devices such as Raspberry Pi (64-bit models), ARM-based servers, and Apple Silicon (M1/M2).
+
+##### Compatibility
+
+- **Linux/amd64**: Compatible with distributions like Ubuntu, Debian, CentOS, Fedora, and others running on 64-bit Intel or AMD processors.
+
+- **Linux/arm64**: Compatible with ARM-based Linux distributions, including Ubuntu ARM, Debian ARM, and Raspberry Pi OS (64-bit).
+
 ## Installation and Running
 ### Stable
 The easiest way to install the tool is by using our latest Docker image:
@@ -139,13 +163,6 @@ Follow the steps above to quickly set up the tool with minimal effort.
 
 #### Docker Deployment for Backend and Frontend
 ```bash
-# Windows installation
-mkdir metamp_app && cd metamp_app && ^
-curl -o .env.docker.deployment https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/.env.docker.deployment && ^
-curl -o docker-compose.yml https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/docker-compose.yml && ^
-docker compose --env-file .env.docker.deployment -f docker-compose.yml up -d
-
-# Linux installation
 mkdir metamp_app && cd metamp_app && \
 curl -o .env.docker.deployment https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/.env.docker.deployment && \
 curl -o docker-compose.yml https://raw.githubusercontent.com/Ebenco36/MetaMP-Server/refs/heads/main/docker-compose.yml && \

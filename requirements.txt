@@ -13,7 +13,6 @@ appdirs==1.4.4
 appnope==0.1.3
 APScheduler==3.10.4
 argcomplete==3.2.1
-arro3-core==0.4.5
 asgiref==3.7.2
 asttokens==2.4.1
 async-timeout==4.0.3

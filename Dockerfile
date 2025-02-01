@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.10-slim as builder
+FROM python:3.10-slim AS builder
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -13,6 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gcc \
+    gfortran \
     libffi-dev \
     libssl-dev \
     libpq-dev \
@@ -23,7 +24,7 @@ WORKDIR /var/app
 
 # Copy requirements and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir -r requirements.txt --verbose\
     && pip install --no-cache-dir supervisor
 
 
@@ -54,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     nginx \
     supervisor \
+    gfortran \
     curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
