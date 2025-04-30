@@ -48,7 +48,7 @@ def apply_search_and_filter(query, search_terms, MP, OP, UP):
                 MP.name.ilike(f"%{search_term}%"),
                 MP.pdb_code.ilike(f"%{search_term}%"),
                 UP.uniprot_id.ilike(f"%{search_term}%"),
-                UP.comment_disease_name.ilike(f"%{search_term}%"),
+                UP.comment_disease.ilike(f"%{search_term}%"),
             )
         )
     if group and group != "All":
@@ -475,14 +475,21 @@ def all_merged_databases():
     table_names = ['membrane_proteins', 'membrane_protein_opm']
     result_df = get_tables_as_dataframe(table_names, "pdb_code")
     result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
-    all_data = pd.merge(right=result_df, left=result_df_uniprot, on="pdb_code", how="outer")
+
+    # find columns in common other than the key
+    common = set(result_df.columns) - {"pdb_code"} & set(result_df_uniprot.columns)
+
+    # drop them from the “right” frame
+    right_pruned = result_df_uniprot.drop(columns=list(common))
+
+    all_data = pd.merge(right=result_df, left=right_pruned, on="pdb_code", how="outer")
     
     return all_data
     
 def search_merged_databases(pdb_code):
     all_data = all_merged_databases()
     # all_data = all_data.where(pd.notnull(all_data), "")
-    return all_data[all_data["pdb_code"] == pdb_code].to_dict(orient='records')
+    return all_data[(all_data["pdb_code"].str.upper() == pdb_code.upper()) | (all_data["uniprot_id"].str.upper() == pdb_code.upper())].to_dict(orient='records')
 
 
 ######################################## LIST OF OPTION FOR FILTERS ################################

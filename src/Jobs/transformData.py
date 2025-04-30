@@ -131,7 +131,8 @@ def identify_categorical_columns(df, unique_threshold=2):
 
 
 merged_df = pd.read_csv(modified_path + '/datasets/Quantitative_data.csv',low_memory=False, encoding='utf-8')
-
+valid_dir = os.path.join(modified_path, 'datasets', 'valid')
+os.makedirs(valid_dir, exist_ok=True)
 valid_data_merged_df = report_and_clean_missing_values(merged_df, threshold=90)
 valid_data_merged_df.to_csv(modified_path + '/datasets/valid/Quantitative_data.csv', index=False)
 

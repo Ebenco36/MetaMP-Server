@@ -5,9 +5,11 @@ from src.Dashboard.view import (
     AboutMetaMP,
     WelcomePage,
     DashboardMap, 
+    RecordAnnotated,
     DashboardOthers,
     SummaryStatistics,  
     MembraneProteinList, 
+    RecordsListAnnotated,
     SearchMergedDatabases,
     AttributeVisualization,
     DashboardInconsistencies
@@ -28,6 +30,7 @@ from src.Filters.view import (
 def routes(api):
     api.add_resource(Filters, '/filters')
     api.add_resource(Dashboard, '/dashboard')
+    api.add_resource(RecordsListAnnotated, '/records')
     api.add_resource(UseCases, '/get-use-cases')
     api.add_resource(WelcomePage, '/welcome-page')
     api.add_resource(AboutMetaMP, '/about-metamp')
@@ -36,6 +39,7 @@ def routes(api):
     api.add_resource(MembraneProteinList, '/data-list')
     api.add_resource(GraphOptions, '/graph-options-kit')
     api.add_resource(DashboardOthers, '/dashboard-others')
+    api.add_resource(RecordAnnotated, '/records/<string:pdb_code>')
     api.add_resource(MissingFilterKit, '/missing-filter-kit')
     api.add_resource(allowMissingPerc, '/allow-missing-perc-kit')
     api.add_resource(SearchMergedDatabases, '/search-merged-db')

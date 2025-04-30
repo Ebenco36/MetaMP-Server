@@ -841,3 +841,34 @@ class OptionFilters(Resource):
         return generate_response(
             data=response, message="fetched filter options successfully", status=HTTPStatus.CREATED
         )
+
+# Load CSV once at startup
+DF = pd.read_csv('./datasets/expert_annotation_predicted.csv') 
+class RecordsListAnnotated(Resource):
+    def get(self):
+        df = DF
+
+        # Apply any query-param filters that match column names
+        for col in DF.columns:
+            val = request.args.get(col)
+            if val is not None:
+                df = df[df[col] == val]
+        # Replace NaN values with an empty string
+        df = df.fillna("")
+        records = df.to_dict(orient='records')
+        return ApiResponse.success(data=records)
+
+
+class RecordAnnotated(Resource):
+    def get(self, pdb_code: str):
+        rec = DF[DF['PDB Code'] == pdb_code]
+        if rec.empty:
+            
+            return ApiResponse.error(
+                message=f'PDB Code {pdb_code} not found',
+                status_code=404
+            )
+        # Replace NaN values with an empty string
+        rec = rec.fillna("")
+        record = rec.to_dict(orient='records')[0]
+        return ApiResponse.success(data=record)
