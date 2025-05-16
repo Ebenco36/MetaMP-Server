@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import pandas as pd
 import altair as alt
 from flask import abort
@@ -213,13 +214,13 @@ def extract_items_and_metadata(paginated_items, total_item_count = 0, MP=None, O
         ('species', mp_data.species),
         ('subgroup', mp_data.subgroup),
         ('pdb_code', mp_data.pdb_code),
-        ('uniprot_id', up_data.uniprot_id),
+        ('uniprot_id', up_data.uniprot_id if up_data else None),
         ('resolution', mp_data.resolution),
         ('exptl_method', mp_data.exptl_method),
         ('taxonomic_domain', mp_data.taxonomic_domain),
         ('expressed_in_species', mp_data.expressed_in_species),
         ('rcsentinfo_experimental_method', mp_data.rcsentinfo_experimental_method),
-        ('comment_disease_name', up_data.comment_disease_name)
+        ('comment_disease_name', up_data.comment_disease_name if up_data else None),
     ]) for mp_data, op_data, up_data in paginated_items.items]
     result = {
         'items': items_list,
@@ -489,7 +490,39 @@ def all_merged_databases():
 def search_merged_databases(pdb_code):
     all_data = all_merged_databases()
     # all_data = all_data.where(pd.notnull(all_data), "")
-    return all_data[(all_data["pdb_code"].str.upper() == pdb_code.upper()) | (all_data["uniprot_id"].str.upper() == pdb_code.upper())].to_dict(orient='records')
+    data = all_data[(all_data["pdb_code"].fillna('').str.upper() == pdb_code.upper()) | (all_data["uniprot_id"].fillna('').str.upper() == pdb_code.upper())].to_dict(orient='records')
+
+    # Clean NaN for display
+    for record in data:
+        for k, v in record.items():
+            if pd.isna(v):
+                record[k] = None
+
+    return data
+
+
+def get_columns_by_pdb_codes(pdb_codes, columns):
+    """
+    Given a list of pdb_codes and a list of column names, 
+    returns those columns (plus pdb_code) for the matching rows.
+    """
+    # 1) pull in the full merged DataFrame
+    df = all_merged_databases()
+
+    # 2) normalize & filter by pdb_code (case-insensitive)
+    upc = [code.upper() for code in pdb_codes]
+    df = df[df["pdb_code"].fillna("").str.upper().isin(upc)]
+
+    # 3) validate requested columns
+    missing = set(columns) - set(df.columns)
+    if missing:
+        raise KeyError(f"Columns not found in merged DB: {missing}")
+
+    # 4) select only pdb_code + your columns, fill NaNs, and return
+    cols = ["pdb_code"] + columns
+    return df[cols].fillna("").to_dict(orient="records")
+
+
 
 
 ######################################## LIST OF OPTION FOR FILTERS ################################

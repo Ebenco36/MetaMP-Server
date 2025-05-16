@@ -244,3 +244,6 @@ class MembraneProteinData(db.Model):
     processed_resolution = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    TMbed_tm_count = db.Column(db.Integer)
+    DeepTMHMM_tm_count = db.Column(db.Integer)

@@ -67,7 +67,9 @@ class enrichedMPStrucDB(Migration):
                     setattr(protein, shortened_name, None)
                     delattr(protein, shortened_name)
                     file.write(f"    {shortened_name} = db.Column(db.{column_type.__name__})\n")
-                    
+            
+            file.write("    TMbed_tm_count = db.Column(db.Integer)\n")
+            file.write("    DeepTMHMM_tm_count = db.Column(db.Integer)\n")
             file.write("    created_at = db.Column(db.DateTime, default=datetime.utcnow)\n")
             file.write("    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)\n")
 

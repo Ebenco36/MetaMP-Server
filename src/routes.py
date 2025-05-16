@@ -4,6 +4,7 @@ from src.MP.routes import MP_routes
 from src.UOT.routes import UOT_routes
 from src.OPM.routes import OPM_routes
 from src.Dashboard.routes import routes
+from src.sql2db.routes import text_to_db
 from src.Contact.routes import Contact_routes
 from src.Training.routes import training_routes
 from src.Feedbacks.routes import feedback_routes
@@ -30,6 +31,12 @@ class RouteInitialization:
                 "name": "UOT", 
                 "blueprint":  Blueprint('UOT', __name__, static_url_path="assets"), 
                 "register_callback": UOT_routes, 
+                "url_prefix": "/api/v1"
+            },
+            {
+                "name": "text_to_db", 
+                "blueprint":  Blueprint('text_to_db', __name__, static_url_path="assets"), 
+                "register_callback": text_to_db, 
                 "url_prefix": "/api/v1"
             },
             {

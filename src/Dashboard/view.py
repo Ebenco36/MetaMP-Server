@@ -44,7 +44,8 @@ from src.Dashboard.services import (
     molecular_function_filter_options, preprocessVariables, 
     search_merged_databases, species_filter_options, 
     subgroup_filter_options, super_family_class_type_filter_options, 
-    super_family_filter_options, taxonomic_domain_filter_options
+    super_family_filter_options, taxonomic_domain_filter_options,
+    get_columns_by_pdb_codes
 )
 from utils.redisCache import RedisCache
 
@@ -847,14 +848,22 @@ DF = pd.read_csv('./datasets/expert_annotation_predicted.csv')
 class RecordsListAnnotated(Resource):
     def get(self):
         df = DF
-
+        extra = get_columns_by_pdb_codes(pdb_codes=df['PDB Code'].tolist(), columns=["pdb_code", "TMbed_tm_count", "DeepTMHMM_tm_count"])
+        extra_df = pd.DataFrame(extra)
+        merged_df = df.merge(
+            extra_df,
+            how='left',
+            left_on='PDB Code',
+            right_on='pdb_code'
+        )
         # Apply any query-param filters that match column names
-        for col in DF.columns:
-            val = request.args.get(col)
-            if val is not None:
-                df = df[df[col] == val]
+        # for col in DF.columns:
+        #     val = request.args.get(col)
+        #     if val is not None:
+        #         df = df[df[col] == val]
         # Replace NaN values with an empty string
-        df = df.fillna("")
+        df = merged_df.fillna("")
+        # merged_df.to_csv("expert_annotation_predicted.csv", index=False)
         records = df.to_dict(orient='records')
         return ApiResponse.success(data=records)
 

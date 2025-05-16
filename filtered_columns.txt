@@ -237,6 +237,8 @@ MP columns:
   - membrane_proteins.exptl_crystal_grow_method1
   - membrane_proteins.exptl_crystal_grow_method2
   - membrane_proteins.processed_resolution
+  - membrane_proteins.TMbed_tm_count
+  - membrane_proteins.DeepTMHMM_tm_count
 
 OP columns:
   - membrane_protein_opm.pdbid
