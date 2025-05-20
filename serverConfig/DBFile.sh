@@ -14,7 +14,7 @@ python $PARENT_DIR/src/Jobs/MergeDB.py
 python $PARENT_DIR/src/Jobs/NewOPMJob.py
 python $PARENT_DIR/src/Jobs/UniprotJob.py
 python $PARENT_DIR/src/Jobs/GenerateCountries.py
-# python $PARENT_DIR/src/Jobs/transformData.py  
+python $PARENT_DIR/src/Jobs/transformData.py  
 
 # Start the Flask app or other necessary services
 echo "Running Flask sync-protein-database..."

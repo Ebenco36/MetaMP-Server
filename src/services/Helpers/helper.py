@@ -717,10 +717,41 @@ def countriesDOld():
 
     return country_df
 
+import os
+import glob
+import re
+import pandas as pd
+import datetime
+from math import ceil
+def get_latest_master_file():
+    """
+    Return the path to the most recent country_data_YYYY-MM-DD.csv in datasets/.
+    If none exist, returns None.
+    """
+    DATASETS_PATH = os.path.join('.', 'datasets')
+    os.makedirs(DATASETS_PATH, exist_ok=True)
+    pattern = os.path.join(DATASETS_PATH, 'country_data_*.csv')
+    files = glob.glob(pattern)
+    latest = None
+    latest_date = datetime.date.min
+    for f in files:
+        m = re.search(r'country_data_(\d{4}-\d{2}-\d{2})\.csv$', f)
+        if not m:
+            continue
+        try:
+            d = datetime.datetime.strptime(m.group(1), '%Y-%m-%d').date()
+        except ValueError:
+            continue
+        if d > latest_date:
+            latest_date = d
+            latest = f
+    return latest
+
 def countriesD():
     # File to store the country data
-    data_file = './datasets/country_data.csv'
-    
+    # data_file = './datasets/country_data.csv'
+    data_file = get_latest_master_file()
+    print(data_file)
     # Check if the data file exists
     if os.path.isfile(data_file):
         # If file exists, load the data from the file

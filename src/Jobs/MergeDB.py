@@ -368,7 +368,28 @@ correct_spelling_exptl_crystal = {
 modified_path = "."
 current_date = datetime.date.today().strftime('%Y-%m-%d')
 #Get the two prepared tables
-PDB = pd.read_csv(modified_path + "/datasets/PDB_data.csv")
+
+import glob
+# 1. List all matching files
+pattern = modified_path + "/datasets/PDB_data_*.csv"
+files = glob.glob(pattern)
+
+# 2. Extract dates and find the latest
+date_file_map = {}
+for f in files:
+    m = re.search(r"PDB_data_(\d{4}-\d{2}-\d{2})\.csv$", f)
+    if m:
+        dt = datetime.datetime.strptime(m.group(1), "%Y-%m-%d").date()
+        date_file_map[dt] = f
+
+if not date_file_map:
+    raise FileNotFoundError(f"No files matching {pattern}")
+
+latest_date = max(date_file_map)
+latest_file = date_file_map[latest_date]
+
+
+PDB = pd.read_csv(latest_file, low_memory=False)
 Mpstruc = pd.read_csv(modified_path + "/datasets/Mpstruct_dataset.csv")
 
 #merge them

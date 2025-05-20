@@ -19,7 +19,12 @@ class MPSTRUCT:
     def load_data(self):
         # create directory
         self.create_directory("datasets")
-        file_path = modified_path + "/datasets/mpstrucTblXml.xml"
+
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        xml_name = f"mpstrucTblXml_{today}.xml"
+        file_path = os.path.join(modified_path + "/" + "datasets", xml_name)
+
+        # file_path = modified_path + "/datasets/mpstrucTblXml.xml"
         if os.path.exists(file_path):
             print(f"Error: File {file_path} already downloaded. You can delete to download new one.")
             return
@@ -62,7 +67,7 @@ class MPSTRUCT:
 
         current_date = datetime.date.today().strftime('%Y-%m-%d')
         if update_token:
-            with open(modified_path + "/datasets/mpstrucTblXml.xml", "wb") as outfile:
+            with open(modified_path + "/datasets/" + xml_name, "wb") as outfile:
                 shutil.copyfileobj(new_mpstruc, outfile)
         print("What are we doing here: " + modified_path + "/datasets/mpstrucTblXml.xml")
         # data passing
@@ -73,8 +78,9 @@ class MPSTRUCT:
     def parse_data(self):
         # create directory
         self.create_directory("datasets")
-        
-        file_path = modified_path + "/datasets/mpstrucTblXml.xml"
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        xml_name = f"mpstrucTblXml_{today}.xml"
+        file_path = modified_path + "/datasets/" + xml_name
         #Parse mpstruc xml received from 'Mpstuc Update' as an element tree
         current_date = datetime.date.today().strftime('%Y-%m-%d')
         tree = et.parse(file_path)

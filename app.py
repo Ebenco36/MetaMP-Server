@@ -25,6 +25,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from utils.http import bad_request, not_found, not_allowed, internal_error
 from src.middlewares.auth_middleware import token_required
 
+
 # load_dotenv()  # load env files
 # Determine which .env file to load
 env_debug = os.environ.get('FLASK_ENV', "development")
@@ -81,11 +82,13 @@ def create_app():
     # Mail(app)
     admin = Admin(app)
     celery = make_celery(app)
-    
     # Configure logging to write to a file
     log_handler = RotatingFileHandler('error.log', maxBytes=1024 * 1024, backupCount=10)
     log_handler.setLevel(logging.ERROR)
     app.logger.addHandler(log_handler)
+
+    logging.basicConfig(level=logging.DEBUG)
+    app.logger.setLevel(logging.DEBUG)
 
     @app.errorhandler(500)
     def internal_server_error(e):
@@ -99,6 +102,8 @@ def create_app():
     if(is_route_ready):
         init_route = RouteInitialization()
         init_route.init_app(app)
+
+    print(app.url_map)
     
     @app.route('/api/v1/protected_route')
     @token_required

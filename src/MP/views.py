@@ -945,3 +945,62 @@ class MLPredictionPost(Resource):
             return send_file(output, mimetype='text/csv', download_name='predictions.csv', as_attachment=True)
         else:
             return ApiResponse.error("Validation Error", 400, "File must be a CSV file")
+        
+
+from src.Jobs.LoadProteinPredictions import TMbedPredictor, DeepTMHMMPredictor, MultiModelAnalyzer
+class SequenceTMResource(Resource):
+    def post(self):
+        # 1) check upload
+        if 'file' not in request.files:
+            return ApiResponse.error("No file part in request", 400)
+        up = request.files['file']
+        filename = secure_filename(up.filename)
+        if not filename:
+            return ApiResponse.error("No selected file", 400)
+        if not filename.lower().endswith('.csv'):
+            return ApiResponse.error("File must be a CSV", 400)
+
+        # 2) parse CSV
+        try:
+            df = pd.read_csv(up)
+        except Exception as e:
+            return ApiResponse.error(f"Failed to parse CSV: {e}", 400)
+
+        # 3) validate
+        if 'sequence' not in df.columns:
+            return ApiResponse.error("Missing required column: 'sequence'", 400)
+        n = len(df)
+        if not (1 <= n <= 4):
+            return ApiResponse.error(f"Upload between 1 and 4 sequences; you sent {n}", 400)
+
+        # 4) ensure an ID column
+        if 'id' not in df.columns:
+            df = df.reset_index().rename(columns={'index':'id'})
+
+        # 5) run predictors
+        analyzer = MultiModelAnalyzer(
+            db_params={},
+            table='unused',       
+            batch_size=10,
+            max_workers=2,
+            max_sequences=4,
+            use_db=False,
+            write_csv=False
+        )
+        analyzer.register(TMbedPredictor())
+        analyzer.register(DeepTMHMMPredictor())
+
+        try:
+            result_df = analyzer.analyze(
+                df,
+                id_col='id',
+                seq_col='sequence',
+                csv_out='/tmp/tm_counts.csv'
+            )
+        except Exception as e:
+            return ApiResponse.error(str(e), 500)
+
+        # 6) return JSON
+        records = result_df[['id','sequence','TMbed_tm_count','DeepTMHMM_tm_count']]\
+                      .to_dict(orient='records')
+        return ApiResponse.success(records, "TM segment counts computed successfully.")

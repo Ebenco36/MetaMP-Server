@@ -3,12 +3,13 @@ from src.MP.views import (
     DataFilterResource, getFilterBasedOnMethodResource,
     GroupSubGroupResource, MLPrediction, MLPredictionPost,
     MLPredictionAccuracy, MLDimensionalityReductionCharts,
-    GenerateRealSampleDataTest
+    GenerateRealSampleDataTest, SequenceTMResource
 )
 
 def MP_routes(api):
     api.add_resource(DataResource, '/data-view')
     api.add_resource(MLPrediction, '/ml-predictions')
+    api.add_resource(SequenceTMResource, '/predict_tm')
     api.add_resource(UsupervisedResource, '/data-view-ML')
     api.add_resource(MLPredictionPost, '/ml-predictions-post')
     api.add_resource(DataFilterResource, '/data-view-filters')

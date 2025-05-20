@@ -1,76 +1,102 @@
-import os, sys
+import os
 import pandas as pd
+import datetime
 import pycountry
 from geopy.geocoders import Nominatim
+from math import ceil
 
-sys.path.append(os.getcwd())
+# Base directories
+DATASETS_PATH = os.path.join('.', 'datasets')
+BATCH_PATH = os.path.join(DATASETS_PATH, 'Countries')
 
+class CountriesFetcher:
+    def __init__(self, user_agent='country-fetcher'):
+        # Geocoder setup
+        self.geolocator = Nominatim(user_agent=user_agent)
 
-def countriesD():
-    # File to store the country data
-    modified_path = "."
-    data_file = modified_path + '/datasets/country_data.csv'
-    check_file = modified_path + "/datasets/country_data.csv"
-    if os.path.exists(check_file):
-        print(f"Error: File {check_file} already downloaded. You can delete to download new one.")
-        return
+    def create_directories(self):
+        """Ensure datasets and Countries subdirs exist."""
+        os.makedirs(DATASETS_PATH, exist_ok=True)
+        os.makedirs(BATCH_PATH, exist_ok=True)
 
-    # Check if the data file exists
-    if os.path.isfile(data_file):
-        # If file exists, load the data from the file
-        country_df = pd.read_csv(data_file)
-        # Find the last country index processed
-        last_country_index = country_df.index[-1] + 1
-    else:
-        # If file doesn't exist, create an empty DataFrame
-        country_df = pd.DataFrame(columns=['location', 'country', 'flag', 'country_number', 'latitude', 'longitude'])
-        # Start from the first country
-        last_country_index = 0
+    def fetch(self, batch_size: int = 200) -> pd.DataFrame:
+        """
+        Batch-geocode all ISO countries in groups of `batch_size`.
+        Saves each batch to datasets/Countries/country_data_YYYY-MM-DD_batchN.csv,
+        then merges into datasets/country_data_YYYY-MM-DD.csv.
+        Returns the combined DataFrame.
+        """
+        self.create_directories()
+        # Today stamp
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        master_name = f"country_data_{today}.csv"
+        master_fp = os.path.join(DATASETS_PATH, master_name)
 
-    # Set the batch size
-    batch_size = 20
-    
-    # Iterate over all countries in batches
-    for i in range(last_country_index, len(pycountry.countries), batch_size):
-        batch_countries = list(pycountry.countries)[i:i+batch_size]
-        # Iterate over countries in the current batch
-        for country in batch_countries:
-            # Get country name, ISO country code (alpha-3), and numeric code
-            country_name = country.flag + ' ' + country.name
-            flag = country.flag
-            iso_code_3 = country.alpha_3
-            iso_code_2 = country.alpha_2
-            country_number = country.numeric
+        # List of countries
+        countries = list(pycountry.countries)
+        total = len(countries)
+        batch_count = ceil(total / batch_size)
+        print(f"Total countries: {total}; batching into {batch_count} of {batch_size} each.")
 
-            # Geocode country to get latitude and longitude
-            try:
-                geolocator = Nominatim(user_agent="APIH")
-                location = geolocator.geocode(country_name)
-            except Exception as e:
-                print(f"Geocoding failed for {country_name}: {e}")
+        # Process each batch
+        for batch_idx in range(batch_count):
+            start = batch_idx * batch_size
+            end = min(start + batch_size, total)
+            batch_countries = countries[start:end]
+            batch_name = f"country_data_{today}_batch{batch_idx+1}.csv"
+            batch_fp = os.path.join(BATCH_PATH, batch_name)
+
+            if os.path.exists(batch_fp):
+                print(f"✓ Batch {batch_idx+1} exists; skipping.")
                 continue
 
-            # Append country information to the DataFrame
-            data = {
-                'country': country_name, 
-                'flag': flag, 
-                'iso_code_2': iso_code_2, 
-                'iso_code_3': iso_code_3, 
-                'country_number': country_number,
-                'latitude': location.latitude if location else None, 
-                'longitude': location.longitude if location else None
-            }
-            country_df = pd.concat([country_df, pd.DataFrame([data])], ignore_index=True)
-            print("Processed:", country_name)
-        
-        # Save the DataFrame to the data file after processing each batch
-        country_df.to_csv(data_file, index=False)
-        print("Country data saved to:", data_file)
+            print(f"→ Processing batch {batch_idx+1}: indices {start+1}-{end}")
+            rows = []
+            for country in batch_countries:
+                name = country.name
+                alpha2 = country.alpha_2
+                alpha3 = country.alpha_3
+                numeric = country.numeric
+                # Geocode
+                try:
+                    loc = self.geolocator.geocode(name)
+                    lat, lon = (loc.latitude, loc.longitude) if loc else (None, None)
+                except Exception as e:
+                    print(f"  ✗ Geocode failed for {name}: {e}")
+                    lat, lon = None, None
+                rows.append({
+                    'country': name,
+                    'iso_code_2': alpha2,
+                    'iso_code_3': alpha3,
+                    'country_number': numeric,
+                    'latitude': lat,
+                    'longitude': lon
+                })
+                print(f"  ✔ {name}")
 
-    return country_df
+            # Save batch file
+            batch_df = pd.DataFrame(rows)
+            batch_df.to_csv(batch_fp, index=False)
+            print(f"★ Saved batch file Countries/{batch_name}")
 
+        # Merge all batches
+        part_files = sorted(
+            f for f in os.listdir(BATCH_PATH)
+            if f.startswith(f"country_data_{today}_batch") and f.endswith('.csv')
+        )
+        if not part_files:
+            print("No batch files found to merge.")
+            return pd.DataFrame()
 
-def generateCountries():
-    return countriesD()
+        combined = pd.concat(
+            [pd.read_csv(os.path.join(BATCH_PATH, f)) for f in part_files],
+            ignore_index=True
+        )
+        combined.to_csv(master_fp, index=False)
+        print(f"✅ Combined all into {master_name}")
+        return combined
 
-generateCountries()
+# Example usage
+if __name__ == '__main__':
+    fetcher = CountriesFetcher()
+    df = fetcher.fetch(batch_size=200)
