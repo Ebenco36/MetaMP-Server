@@ -407,6 +407,7 @@ docker pull ebenco36/mtest_docker:latest
 
 
 docker compose --env-file .env -f docker-compose.yml up -d
+docker compose --env-file .env -f docker-compose-new.yml up -d
 
 docker-compose exec redis redis-cli
 
@@ -881,3 +882,31 @@ Step three (Push image)
 docker buildx build --platform linux/amd64,linux/arm64, linux/386,windows/amd64,windows/386 -t ebenco36/mpvis_app:latest . --push
 
 docker buildx build --platform linux/amd64,linux/arm64, linux/386,windows/amd64,windows/386 -t ebenco36/mpfrontend:latest . --push
+
+
+
+
+torch==2.7.0
+torchaudio==2.7.0
+torchvision==0.22.0
+tmbed @ git+https://github.com/BernhoferM/TMbed.git@bbbee7a2f960f4641a21394cbd88fb4ab15c031d
+
+
+
+docker exec -t testmetaMPDB pg_dump -U mpvis_user -F c -d mpvis_db -f /tmp/all_tables.dump
+docker cp metaMPDB:/tmp/all_tables.dump ./all_tables.dump
+
+
+docker exec -u postgres metaMPDB pg_dump -U mpvis_user -F c -d mpvis_db -f /var/lib/postgresql/all_tables.dump
+docker cp metaMPDB:/var/lib/postgresql/all_tables.dump ./all_tables.dump
+
+
+docker build -f DockerFile2 -t deeptmhmm-local .
+
+docker run --rm \
+  -v "$PWD":/app \
+  deeptmhmm-local \
+  --fasta /app/myseq.fasta --output-dir /app/output
+
+
+docker compose --env-file .env -f docker-compose-dev.yml up -d

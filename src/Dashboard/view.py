@@ -235,11 +235,18 @@ class WelcomePage(Resource):
             filter_value="MasterProtein"
         ).get("data", [{}])
         unique_trend = data_flow(unique_data, "Unique membrane proteins from MPstruc")
-        
+        from datetime import datetime
+        latest_datetime = max(
+            datetime.strptime(item['updated_at_readable'], "%Y-%m-%d %H:%M:%S")
+            for item in all_data.get("data", {}) if 'updated_at_readable' in item
+        )
+        # Convert to string
+        latest_date_str = latest_datetime.strftime("%Y-%m-%d %H:%M:%S")
         result = {
             "trend": trend,
             "map_chart": map,
             "all_data": all_data,
+            "latest_date": latest_date_str,
             "group_chart": convert_chart(chart),
             "method_chart": convert_chart(chart_method),
             "outlier_chart": convert_chart(chart_outlier),

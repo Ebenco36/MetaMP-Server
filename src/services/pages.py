@@ -498,7 +498,7 @@ class Pages:
                 title="Comparative Annual Contributions by PDB, OPM, and UniProt Databases",
             )
         )
-        # lines.properties(width=1000).save('annualContribution.png', scale_factor=2.0)
+        lines.properties(width=1000).save('annualContribution.png', scale_factor=2.0)
         return convert_chart(lines)
     
     
@@ -556,14 +556,15 @@ class Pages:
         # d_melted.to_csv("DBContribution.csv")
         # Create the 100% stacked bar chart using Altair
         chart = alt.Chart(d_melted).mark_bar().encode(
-            x=alt.X('bibliography_year:O', title='Year'),
+            x=alt.X('bibliography_year:O', title='Year', scale=alt.Scale(paddingInner=0.2, paddingOuter=0.2)),
             y=alt.Y('percentage:Q', title='Proportional Representation of Databases Entries (%)', scale=alt.Scale(domain=[0, 100])),
             color=alt.Color(
                 'database:N',
                 scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())),
                 legend=alt.Legend(
-                    title="Database", labelLimit=0, orient="bottom", direction="vertical",
-                    symbolStrokeColor="black", symbolStrokeWidth=0.5
+                    title="Database", labelLimit=0, orient="bottom", direction="horizontal",
+                    symbolStrokeColor="black", symbolStrokeWidth=0.6, titleAlign="center",
+                    titleAnchor="middle"
                 ),
                 sort=[
                     'MPstruc (Membrane Protein Structures)', 
@@ -582,14 +583,18 @@ class Pages:
             stroke=alt.condition(
                 alt.datum.database == 'MPstruc (Membrane Protein Structures)',  # Condition for sub_category 'X'
                 alt.value('black'),              # Border color for selected
-                alt.value('transparent')          # No border for unselected
+                alt.value('black')          # No border for unselected
             ),
             strokeWidth=alt.condition(
                 alt.datum.database == 'MPstruc (Membrane Protein Structures)',  # Same condition for sub_category 'X'
-                alt.value(1),                    # Border width for selected
-                alt.value(0)                     # No border width for unselected
+                alt.value(0.2),                    # Border width for selected
+                alt.value(0.2)                     # No border width for unselected
             )
-        ).properties(
+        )
+        
+        chart.properties(width=800, height=400).save("DBContributions.png", scale_factor=10.0)
+        
+        chart = chart.properties(
             width=800,
             height=400,
             title="Comparative Annual Representation of Membrane Protein Entries from the MPstruc, PDB, OPM, and UniProt Databases."
@@ -603,7 +608,6 @@ class Pages:
 
         # # Combine the base chart with the legend
         # final_chart = chart + mpstruc_legend
-
                 
         return convert_chart((chart))
 
@@ -695,7 +699,7 @@ class Pages:
             symbolType='square'
         )
         
-        # chart.properties(width=1000).save("averageResolution.png", scale_factor=2.0)
+        chart.properties(width=1000).save("averageResolution.png", scale_factor=2.0)
         return convert_chart(chart)
 
     def view_dashboard(self, get_query_params, conf={}, ranges_={}):

@@ -22,7 +22,7 @@ def delete_file(file_path):
         print(f"File '{file_path}' deleted successfully.")
     except OSError as e:
         print(f"Error deleting file '{file_path}': {e}")
-    
+
 @app.cli.command("sync-protein-database")
 @click.option('--clear_db', default="n", help='Do you really want to clear the DB')
 def init_migrate_mpstruct_upgrade(clear_db):

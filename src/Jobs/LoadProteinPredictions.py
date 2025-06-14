@@ -77,7 +77,7 @@ def TMbedDeepTMHMM():
 
     required_cols = ["pdb_code", "sequence_sequence", "TMbed_tm_count", "DeepTMHMM_tm_count"]
     available = [c for c in required_cols if c in all_data.columns]
-    all_data = all_data[required_cols]
+    all_data = all_data[available]
     all_data = all_data.loc[
         all_data[["TMbed_tm_count", "DeepTMHMM_tm_count"]]
             .fillna("")
@@ -108,6 +108,12 @@ def TMbedDeepTMHMM():
         df=all_data,
         id_col="pdb_code",
         seq_col="sequence_sequence",
-        csv_out="tm_summary.csv"
+        csv_out="tm_summary.csv",
+        resume_from_csv="tm_summary.csv"
     )
 # 
+if __name__ == "__main__":
+    from app import create_app
+    app = create_app()
+    with app.app_context():
+        TMbedDeepTMHMM()

@@ -17,7 +17,7 @@ from sklearn.manifold import TSNE
 # import tensorflow as tf
 os.environ["NUMBA_CACHE_DIR"] = "/tmp/numba_cache"
 os.environ["NUMBA_DISABLE_CACHING"] = "1"
-import umap
+# import umap
 
 
 def drop_id_columns(dataframe):
@@ -326,8 +326,8 @@ def evaluate_dimensionality_reduction(data, methods_params):
             reducer = PCA(**param_list)
         elif method == 't-SNE':
             reducer = TSNE(**param_list, random_state=42)
-        elif method == 'UMAP':
-            reducer = umap.UMAP(**param_list)
+        # elif method == 'UMAP':
+        #     reducer = umap.UMAP(**param_list)
         else:
             raise ValueError(f"Unsupported method: {method}")
 

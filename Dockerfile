@@ -1,52 +1,59 @@
 # Stage 1: Builder
 FROM python:3.10-slim AS builder
 
-# Environment variables
 ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    NUMBA_DISABLE_CACHING=1 \
+    NUMBA_CACHE_DIR=/tmp/numba_cache \
+    MPLCONFIGDIR=/tmp/MPLCONFIGDIR/ \
+    NUMBA_DEBUG=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=300 \
+    PIP_RETRIES=10
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    gcc \
+    gfortran \
+    libffi-dev \
+    libssl-dev \
+    libpq-dev \
+    curl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/app
+
+COPY requirements.txt .
+
+# Upgrade pip + install Python dependencies
+RUN pip install --upgrade pip==25.1.1 setuptools wheel --verbose && \
+    pip install Babel==2.13.1 --no-deps && \
+    pip install -r requirements.txt supervisor \
+        --no-deps --trusted-host pypi.org --trusted-host files.pythonhosted.org
+
+# Install TMbed
+RUN git clone --depth=1 https://github.com/BernhoferM/TMbed.git tmbed && \
+    cd tmbed && \
+    pip install .
+
+# Writable /tmp for numba
+RUN mkdir -p /tmp/numba_cache && chmod -R 777 /tmp/numba_cache
+
+# Stage 2: Runtime
+FROM python:3.10-slim
+
+ENV FLASK_DEBUG=False \
+    DEBUG=False \
+    PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     NUMBA_DISABLE_CACHING=1 \
     NUMBA_CACHE_DIR=/tmp/numba_cache \
     MPLCONFIGDIR=/tmp/MPLCONFIGDIR/ \
     NUMBA_DEBUG=1
 
-# Install only build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    gfortran \
-    libffi-dev \
-    libssl-dev \
-    libpq-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory
-WORKDIR /var/app
-
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt --verbose\
-    && pip install --no-cache-dir supervisor
-
-
-# Ensure /tmp is writable
-RUN mkdir -p /tmp/numba_cache && chmod -R 777 /tmp/numba_cache
-
-RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/site-packages/umap/layouts.py
-
-# Stage 2: Final Image
-FROM python:3.10-slim
-
-# Environment variables
-ENV FLASK_DEBUG=False \
-    DEBUG=False \
-    PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive\
-    NUMBA_DISABLE_CACHING=1 \
-    NUMBA_CACHE_DIR=/tmp/numba_cache \
-    MPLCONFIGDIR=/tmp/MPLCONFIGDIR/ \
-    NUMBA_DEBUG=1
-
-# Install only runtime dependencies
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libev-dev \
     libevent-dev \
@@ -59,33 +66,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
 WORKDIR /var/app
 
-# Copy application code and dependencies from builder stage
+# Copy from builder
 COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY . .
 
-# Configure directories and permissions
+# Configure nginx and supervisor
 RUN mv serverConfig/supervisord.conf /etc/supervisor/conf.d/supervisord.conf && \
     mv nginx/nginx.conf /etc/nginx/sites-available/mpvis.com && \
     ln -s /etc/nginx/sites-available/mpvis.com /etc/nginx/sites-enabled/ && \
     rm /etc/nginx/sites-enabled/default
 
-# Ensure /tmp is writable
+# Patch UMAP for Numba compatibility
+RUN python -c "import umap, os; path=os.path.join(os.path.dirname(umap.__file__), 'layouts.py'); \
+               data=open(path).read().replace('@numba.njit', '@numba.njit(cache=False)'); \
+               open(path, 'w').write(data)"
+
+# Create writable cache dir
 RUN mkdir -p /tmp/numba_cache && chmod -R 777 /tmp/numba_cache
 
-RUN sed -i 's/@numba.njit/@numba.njit(cache=False)/g' /usr/local/lib/python3.10/site-packages/umap/layouts.py
-
-# Make the entrypoint script executable
+# Entrypoint setup
 COPY serverConfig/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 COPY .env.production .env
 
-# Set the script to be executed when the container starts
 ENTRYPOINT ["/entrypoint.sh"]
-
-# Expose required ports
 EXPOSE 8081 8090

@@ -182,7 +182,10 @@ def get_items(request = {}):
     
 def extract_items_and_metadata(paginated_items, total_item_count = 0, MP=None, OP=None, UP=None):
     # Compute total_columns from the result tuple
-    remove_list = ["created_at", "updated_at", "id"]
+    remove_list = [
+        "created_at", "updated_at", 
+        "id"
+    ]
     mp_columns = [column for column in MP.__table__.columns if column.name not in remove_list]
     op_columns = [column for column in OP.__table__.columns if column.name not in remove_list]
     up_columns = [column for column in UP.__table__.columns if column.name not in remove_list]
@@ -339,6 +342,8 @@ def get_table_as_dataframe_exception(table_name, filter_column=None, filter_valu
         df = pd.DataFrame(paginated_data, columns=result.keys())
         
         # Identify date columns
+        df['updated_at_readable'] = pd.to_datetime(df['updated_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        df['created_at_readable'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
         date_columns = df.select_dtypes(include=['datetime64[ns]']).columns
 
         # Drop date columns

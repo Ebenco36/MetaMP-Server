@@ -103,7 +103,7 @@ def create_app():
         init_route = RouteInitialization()
         init_route.init_app(app)
 
-    print(app.url_map)
+    # print(app.url_map)
     
     @app.route('/api/v1/protected_route')
     @token_required

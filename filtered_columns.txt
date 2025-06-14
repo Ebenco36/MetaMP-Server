@@ -20,8 +20,12 @@ MP columns:
   - membrane_proteins.cell_length_c
   - membrane_proteins.cell_zpdb
   - membrane_proteins.pdbdatstatus_pdb_format_compatible
+  - membrane_proteins.pdbdatstatus_process_site
   - membrane_proteins.pdbdatstatus_recvd_initial_deposition_date
   - membrane_proteins.pdbdatstatus_status_code
+  - membrane_proteins.pdbvrpsummary_attempted_validation_steps
+  - membrane_proteins.pdbvrpsummary_ligands_for_buster_report
+  - membrane_proteins.pdbvrpsummary_report_creation_date
   - membrane_proteins.rcsaccinfo_deposit_date
   - membrane_proteins.rcsaccinfo_has_released_experimental_data
   - membrane_proteins.rcsaccinfo_initial_release_date
@@ -78,10 +82,8 @@ MP columns:
   - membrane_proteins.rcspricitation_page_first
   - membrane_proteins.rcspricitation_page_last
   - membrane_proteins.rcspricitation_rcsb_journal_abbrev
-  - membrane_proteins.struct_pdbx_descriptor
   - membrane_proteins.symmetry_int_tables_number
   - membrane_proteins.symspagroup_name_hm
-  - membrane_proteins.pdbdatstatus_process_site
   - membrane_proteins.pdbdatstatus_deposit_site
   - membrane_proteins.rcsentinfo_diffrn_radiation_wavelength_maximum
   - membrane_proteins.rcsentinfo_diffrn_radiation_wavelength_minimum
@@ -104,15 +106,14 @@ MP columns:
   - membrane_proteins.pdbaudrevision_details_provider
   - membrane_proteins.pdbaudrevision_details_revision_ordinal
   - membrane_proteins.pdbaudrevision_details_type
-  - membrane_proteins.pdbaudrevision_group_data_content_type
-  - membrane_proteins.pdbaudrevision_group_group
-  - membrane_proteins.pdbaudrevision_group_ordinal
-  - membrane_proteins.pdbaudrevision_group_revision_ordinal
-  - membrane_proteins.pdbaudrevision_history_data_content_type
-  - membrane_proteins.pdbaudrevision_history_major_revision
-  - membrane_proteins.pdbaudrevision_history_minor_revision
-  - membrane_proteins.pdbaudrevision_history_ordinal
-  - membrane_proteins.pdbaudrevision_history_revision_date
+  - membrane_proteins.pdbvrpsummary_geometry_angles_rmsz
+  - membrane_proteins.pdbvrpsummary_geometry_bonds_rmsz
+  - membrane_proteins.pdbvrpsummary_geometry_clashscore
+  - membrane_proteins.pdbvrpsummary_geometry_num_hreduce
+  - membrane_proteins.pdbvrpsummary_geometry_num_angles_rmsz
+  - membrane_proteins.pdbvrpsummary_geometry_num_bonds_rmsz
+  - membrane_proteins.pdbvrpsummary_geometry_percent_ramachandran_outliers
+  - membrane_proteins.pdbvrpsummary_geometry_percent_rotamer_outliers
   - membrane_proteins.refine_details
   - membrane_proteins.refine_ls_rfactor_rfree
   - membrane_proteins.refine_ls_rfactor_rwork
@@ -188,9 +189,34 @@ MP columns:
   - membrane_proteins.reflns_shell_pdbx_redundancy
   - membrane_proteins.refshemean_iover_sig_iobs
   - membrane_proteins.refshenumber_unique_obs
-  - membrane_proteins.reflns_shell_pdbx_cchalf
   - membrane_proteins.pdbdatrelated_content_type
   - membrane_proteins.pdbdatrelated_db_name
+  - membrane_proteins.pdbvrpsummary_diffraction_babinet_b
+  - membrane_proteins.pdbvrpsummary_diffraction_babinet_k
+  - membrane_proteins.pdbvrpsummary_diffraction_dcc_r
+  - membrane_proteins.pdbvrpsummary_diffraction_eds_r
+  - membrane_proteins.pdbvrpsummary_diffraction_fo_fc_correlation
+  - membrane_proteins.pdbvrpsummary_diffraction_padilla_yeates_l2_mean
+  - membrane_proteins.pdbvrpsummary_diffraction_padilla_yeates_lmean
+  - membrane_proteins.pdbvrpsummary_diffraction_wilson_bestimate
+  - membrane_proteins.pdbvrpsummary_diffraction_acentric_outliers
+  - membrane_proteins.pdbvrpsummary_diffraction_bulk_solvent_b
+  - membrane_proteins.pdbvrpsummary_diffraction_bulk_solvent_k
+  - membrane_proteins.pdbvrpsummary_diffraction_centric_outliers
+  - membrane_proteins.pdbvrpsummary_diffraction_data_anisotropy
+  - membrane_proteins.pdbvrpsummary_diffraction_data_completeness
+  - membrane_proteins.pdbvrpsummary_diffraction_exp_method
+  - membrane_proteins.pdbvrpsummary_diffraction_num_miller_indices
+  - membrane_proteins.pdbvrpsummary_diffraction_number_reflns_rfree
+  - membrane_proteins.pdbvrpsummary_diffraction_percent_rsrzoutliers
+  - membrane_proteins.pdbvrpsummary_diffraction_percent_free_reflections
+  - membrane_proteins.pdbvrpsummary_diffraction_trans_ncsdetails
+  - membrane_proteins.pdbvrpsummary_diffraction_bfactor_type
+  - membrane_proteins.pdbvrpsummary_diffraction_dccrfree
+  - membrane_proteins.pdbvrpsummary_diffraction_edsres_high
+  - membrane_proteins.pdbvrpsummary_diffraction_edsres_low
+  - membrane_proteins.pdbvrpsummary_diffraction_iover_sigma
+  - membrane_proteins.pdbvrpsummary_diffraction_twin_fraction
   - membrane_proteins.pdbinirefinement_model_accession_code
   - membrane_proteins.pdbinirefinement_model_source_name
   - membrane_proteins.pdbinirefinement_model_type
@@ -232,6 +258,23 @@ MP columns:
   - membrane_proteins.em_vitrification_chamber_temperature
   - membrane_proteins.em_vitrification_humidity
   - membrane_proteins.em_vitrification_instrument
+  - membrane_proteins.pdbvrpsummary_em_atom_inclusion_all_atoms
+  - membrane_proteins.pdbvrpsummary_em_atom_inclusion_backbone
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_halfbit
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_onebit
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_pt143
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_pt333
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_pt5
+  - membrane_proteins.pdbvrpsummary_em_author_provided_fsc_resolution_by_cutoff_threesigma
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_halfbit
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_onebit
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_pt143
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_pt333
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_pt5
+  - membrane_proteins.pdbvrpsummary_em_calculated_fsc_resolution_by_cutoff_threesigma
+  - membrane_proteins.pdbvrpsummary_em_contour_level_primary_map
+  - membrane_proteins.pdbvrpsummary_em_exp_method
+  - membrane_proteins.pdbvrpsummary_em_qscore
   - membrane_proteins.emsinparticle_entity_point_symmetry
   - membrane_proteins.bibliography_year
   - membrane_proteins.exptl_crystal_grow_method1

@@ -129,7 +129,7 @@ def data_flowxxxx(protein_db, title="Cumulative sum of resolved Membrane Protein
         width="container",
         title=title
     )
-    # chart_with_regression.properties(width=1000).save('cumulativeChart.png', scale_factor=2.0)
+    chart_with_regression.properties(width=1000).save('cumulativeChart.png', scale_factor=2.0)
     return convert_chart(chart_with_regression)
 
 def data_flow(protein_db, title="Cumulative sum of resolved Membrane Protein (MP) Structures over time"):
@@ -242,7 +242,7 @@ def group_data_by_methods(df, columns=['bibliography_year', 'rcsentinfo_experime
 
     # Configure x-axis
     bin = alt.Bin(maxbins=int(bin_value)) if bin_value else None
-    axis = alt.Axis(labelAngle=-45, tickCount=15, values=tick_positions if not bin_value else None)
+    axis = alt.Axis(labelAngle=-45, tickCount=len(tick_positions), values=tick_positions if not bin_value else None)
 
     # Define custom colors
     if "rcsentinfo_experimental_method" in group_subtype_count:
@@ -279,7 +279,7 @@ def group_data_by_methods(df, columns=['bibliography_year', 'rcsentinfo_experime
         title=["Cumulative MP(s) resolved via various experimental methods over time,", " with each line representing a distinct method"]
     )
     
-    # chart.properties(width=1000).save('by_methods.png', scale_factor=2.0)
+    chart.properties(width=1000).save('by_methods.png', scale_factor=2.0)
         
     return convert_chart(chart)
 
