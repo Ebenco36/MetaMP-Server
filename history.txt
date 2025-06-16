@@ -869,8 +869,8 @@ docker buildx build \
 
 Use this instead
 
-docker tag mpvis-flask-app:latest ebenco36/mpvis_app:latest
-docker tag mpvis-frontend:latest ebenco36/mpfrontend:latest
+docker tag metamp-server-flask-app:latest ebenco36/mpvis_app:latest
+docker tag metamp-server-frontend:latest ebenco36/mpfrontend:latest
 
 step one
 docker buildx create --name mybuilder --use
@@ -879,10 +879,34 @@ Step two (start instance)
 docker buildx inspect --bootstrap
 
 Step three (Push image)
-docker buildx build --platform linux/amd64,linux/arm64, linux/386,windows/amd64,windows/386 -t ebenco36/mpvis_app:latest . --push
+docker buildx build --platform linux/amd64,linux/arm64,linux/386,windows/amd64,windows/386 -t ebenco36/mpvis_app:latest . --push
 
-docker buildx build --platform linux/amd64,linux/arm64, linux/386,windows/amd64,windows/386 -t ebenco36/mpfrontend:latest . --push
+docker buildx build --platform linux/amd64,linux/arm64,linux/386,windows/amd64,windows/386 -t ebenco36/mpfrontend:latest . --push
 
+
+docker buildx create --name mp-builder --driver docker-container --bootstrap --use
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ebenco36/mpvis_app:latest \
+  --push .
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64,linux/386,windows/amd64,windows/386 \
+  -t ebenco36/mpvis_app:latest \
+  --push .
+
+
+docker buildx build \
+  --platform linux/amd64,linux/arm64,linux/386,windows/amd64,windows/386 \
+  -t ebenco36/mpfrontend:latest \
+  --push .
+
+
+docker buildx build --platform linux/amd64,linux/arm64,windows/amd64 -t ebenco36/mpfrontend:latest . --push
+
+docker buildx create --name multiplat --use
+docker buildx inspect --bootstrap
 
 
 
@@ -910,3 +934,25 @@ docker run --rm \
 
 
 docker compose --env-file .env -f docker-compose-dev.yml up -d
+
+
+restore to remote postgres
+
+pg_restore --clean --if-exists -U mpvis_user -h dpg-d176epodl3ps73a39ic0-a -p 5432 -d mpvis_db /all_tables.dump
+
+docker exec -u postgres metaMPDB pg_dump -U mpvis_user -F c --no-comments --no-acl --no-owner -d mpvis_db -f /var/lib/postgresql/all_tables_.dump
+
+docker exec -e PGPASSWORD=VdODHKJIak4MkrtkuHYwuy9M8J1N5m84 metaMPDB pg_restore \
+  --host=dpg-d176epodl3ps73a39ic0-a.oregon-postgres.render.com \
+  --port=5432 \
+  --username=mpvis_user \
+  --dbname=mpvis_db \
+  --clean --if-exists \
+  /var/lib/postgresql/all_tables_.dump
+
+
+
+docker-compose build
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d

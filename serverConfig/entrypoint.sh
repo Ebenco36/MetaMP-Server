@@ -59,6 +59,51 @@ fi
 echo "Updating VegaFusion runtime.py file..."
 python /var/app/serverConfig/fix_vegafusion_issues.py
 
+
+######################################################
+echo "Starting PostgreSQL..."
+service postgresql start
+
+# Wait for DB to be ready
+until pg_isready -U postgres > /dev/null 2>&1; do
+    echo "Waiting for PostgreSQL to start..."
+    sleep 1
+done
+
+# Create user and db only if not already created
+echo "Setting up PostgreSQL user/db..."
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='mpvis_user'\" | grep -q 1 || psql -c \"CREATE USER mpvis_user WITH PASSWORD 'mpvis_user';\""
+su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='mpvis_db'\" | grep -q 1 || psql -c \"CREATE DATABASE mpvis_db OWNER mpvis_user;\""
+
+# Restore if dump file exists
+if [ -f /var/app/initdb/all_tables.dump ]; then
+    echo "Restoring PostgreSQL database from dump..."
+
+    # Step 1: Copy to safe location
+    cp /var/app/initdb/all_tables.dump /tmp/all_tables.dump
+
+    # Step 2: Fix ownership and permissions
+    chown postgres:postgres /tmp/all_tables.dump
+    chmod 644 /tmp/all_tables.dump
+
+    echo "Checking file permissions for dump file..."
+    ls -l /tmp/all_tables.dump
+
+    # Step 3: Restore as postgres user
+    su - postgres -c "pg_restore -U postgres -d mpvis_db /tmp/all_tables.dump" || {
+        echo "Restore failed or already applied."
+    }
+
+    echo "Restoration complete (or skipped)."
+else
+    echo "No dump file found at /var/app/initdb/all_tables.dump"
+fi
+
+
+
+
+
+#########################################################
 # Proceed with setup or server start commands
 echo "Starting services..."
 
