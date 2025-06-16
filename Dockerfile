@@ -83,8 +83,8 @@ COPY --from=builder /var/app /var/app
 COPY . .
 
 # Patch UMAP for Numba compatibility
-RUN python -c "import umap, os; path=os.path.join(os.path.dirname(umap.__file__), 'layouts.py'); \
-    data=open(path).read().replace('@numba.njit', '@numba.njit(cache=False)'); open(path, 'w').write(data)"
+# RUN python -c "import umap, os; path=os.path.join(os.path.dirname(umap.__file__), 'layouts.py'); \
+#     data=open(path).read().replace('@numba.njit', '@numba.njit(cache=False)'); open(path, 'w').write(data)"
 
 # Copy dump file for restoration in entrypoint
 COPY all_tables.dump /var/app/initdb/all_tables.dump
