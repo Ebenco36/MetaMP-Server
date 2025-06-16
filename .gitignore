@@ -85,7 +85,7 @@ summary-statistics/
 
 *.csv
 data/
-datasets/
+# datasets/
 datasets_test/
 datasets/*.csv
 datasets/*.xml
@@ -105,3 +105,5 @@ my_summary.txt
 your_file.txt
 celerybeat-schedule
 data.zip
+!datasets/country_data_*.csv
+!datasets/expert_annotation_predicted.csv

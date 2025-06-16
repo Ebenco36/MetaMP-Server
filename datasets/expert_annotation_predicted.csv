@@ -1,0 +1,122 @@
+Year,PDB Code,Group (OPM),Group (MPstruc),Group (Predicted),Group (Expert),TM (Expert)
+1997,1PFO,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,0**
+1997,1FDM,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+1997,1AFO,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+1998,2CPB,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+1998,1B12,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2002,1GOS,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1
+2002,1MT5,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2002,1KN9,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2003,1OJA,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1
+2003,1MZT,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Bitopic,1
+2004,1O5W,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2004,1PJF,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2004,1UUM,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1 *
+2004,1T7D,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2005,2BXR,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2005,1YGM,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Not a Membrane Protein,
+2005,1ZLL,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2006,2GMH,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,
+2006,2J58,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Bitopic,1x8
+2006,2HAC,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2006,2J7A,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2007,2OLV,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1*
+2007,2JO1,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2007,2OQO,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1*
+2008,2QCU,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,
+2008,2PRM,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1*
+2008,2Z5X,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2008,2VQG,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,3
+2008,2JWA,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2008,2K1L,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2008,3BKD,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2008,2RLF,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2009,3HYW,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,
+2009,3I65,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Bitopic,1*
+2009,2KNC,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2009,3HD7,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2009,2KOG,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x1
+2009,2KIH,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2009,2KIX,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2009,3VMA,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2009,3JQO,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Bitopic,1x14
+2010,3NSJ,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,0**
+2010,2KSJ,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2010,2KS1,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2010,2K9Y,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2010,2L35,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2010,2L0J,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2010,3LBW,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2011,3ML3,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,15*
+2011,3PRW,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,
+2011,3P1L,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,
+2011,3Q7M,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,
+2011,2YH3,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,
+2011,3LIM,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Bitopic,1
+2011,2KPF,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2011,2L9U,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2011,2LJB,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2011,2KYV,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x5
+2012,3VMT,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2012,3Q54,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Monotopic,
+2012,2LCX,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2013,2LZL,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2013,2M8R,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2013,2LY0,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2013,2M3B,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x5
+2014,4LXJ,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2014,4HSC,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,0**
+2014,4CDB,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,0**
+2014,2MFR,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2014,2M59,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2015,4TSY,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2015,5EH4,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2015,4WOL,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2015,4QKC,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2016,5B49,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2016,5IMW,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,0**
+2016,5IMY,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,0**
+2016,2MIC,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2016,2N2A,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2016,5HK1,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2017,5LY6,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,4
+2017,5NUO,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,16x3
+2017,5LV6,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2017,5JOO,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2018,6BFG,Bitopic proteins,Monotopic membrane proteins,Monotopic membrane proteins,Monotopic membrane proteins,
+2018,6MLU,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,2
+2018,6DLW,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,88
+2018,6H03,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,72
+2018,6F2D,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,34
+2018,6HJR,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2018,6E10,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x7
+2018,6BKK,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2019,6NYF,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,12*
+2019,6MQU,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x5
+2019,6JXR,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x8
+2019,6MTI,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Bitopic,1*
+2019,6MJH,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2020,6S3S,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,34
+2020,6S3R,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,36
+2020,7K7A,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2020,7BV6,Bitopic proteins,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Bitopic,1*
+2020,6NV1,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2020,6PVR,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2020,7K3G,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x5
+2020,6Z0G,Bitopic proteins,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Bitopic,1
+2021,7OFM,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2021,7AGX,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,34
+2021,7OKN,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,Transmembrane proteins:beta-barrel,Bitopic,1x17
+2021,7KN0,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2021,7LQ6,Bitopic proteins,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Bitopic,1
+2021,6LKD,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2022,7RSL,Transmembrane proteins:alpha-helical,Monotopic membrane proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,2
+2022,8A1D,Monotopic membrane proteins,Transmembrane proteins:beta-barrel,Transmembrane proteins:alpha-helical,Transmembrane proteins:beta-barrel,64
+2022,7WSO,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2022,7XT6,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2022,7XQ8,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x4
+2022,7W2B,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x3
+2022,7FJD,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x8
+2022,7VU5,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1x2
+2022,7MPA,Bitopic proteins,Transmembrane proteins:alpha-helical,Transmembrane proteins:alpha-helical,Bitopic,1
+2023,8GI1,Bitopic proteins,Transmembrane proteins:beta-barrel,Monotopic membrane proteins,Bitopic,1x6
