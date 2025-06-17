@@ -26,79 +26,71 @@ def get_all_items():
 
 def apply_search_and_filter(query, search_terms, MP, OP, UP):
     data = search_terms.get("search_terms", {})
-    search_term = data.get('search_term', None)
-    group = data.get('group', None)
-    subgroup = data.get('subgroup', None)
-    taxonomic_domain = data.get('taxonomic_domain', None)
-    experimental_method = data.get('experimental_methods', None)
-    molecular_function = data.get('molecular_function', None)
-    cellular_component = data.get('cellular_component', None)
-    biological_process = data.get('biological_process', None)
-    family_name = data.get('family_name', None)
-    species = data.get('species', None)
-    membrane_name = data.get('membrane_name', None)
-    super_family = data.get('super_family', None)
-    superfamily_classtype_name = data.get('super_family', None)
     
+    # Get all values
+    search_term = data.get('search_term', '').strip()
+    group = data.get('group', '').strip()
+    subgroup = data.get('subgroup', '').strip()
+    taxonomic_domain = data.get('taxonomic_domain', '').strip()
+    experimental_method = data.get('experimental_methods', '').strip()
+    molecular_function = data.get('molecular_function', '').strip()
+    cellular_component = data.get('cellular_component', '').strip()
+    biological_process = data.get('biological_process', '').strip()
+    family_name = data.get('family_name', '').strip()
+    species = data.get('species', '').strip()
+    membrane_name = data.get('membrane_name', '').strip()
+    super_family = data.get('super_family', '').strip()
+    superfamily_classtype_name = data.get('super_family_class_type', '').strip()
+
     conditions = []
 
-    # Check and add conditions for MembraneProteinData
+    # Global search term
     if search_term:
-        conditions.append(
-            or_(
-                MP.name.ilike(f"%{search_term}%"),
-                MP.pdb_code.ilike(f"%{search_term}%"),
-                UP.uniprot_id.ilike(f"%{search_term}%"),
-                UP.comment_disease.ilike(f"%{search_term}%"),
-            )
-        )
-    if group and group != "All":
+        conditions.append(or_(
+            MP.name.ilike(f"%{search_term}%"),
+            MP.pdb_code.ilike(f"%{search_term}%"),
+            UP.uniprot_id.ilike(f"%{search_term}%"),
+            UP.comment_disease.ilike(f"%{search_term}%")
+        ))
+
+    # MembraneProteinData filters
+    if group != "All" and group:
         conditions.append(MP.group.ilike(f"%{group}%"))
-
-    if subgroup and subgroup != "All":
+    if subgroup != "All" and subgroup:
         conditions.append(MP.subgroup.ilike(f"%{subgroup}%"))
-
-    if taxonomic_domain and taxonomic_domain != "All":
+    if taxonomic_domain != "All" and taxonomic_domain:
         conditions.append(MP.taxonomic_domain.ilike(f"%{taxonomic_domain}%"))
-
-    if experimental_method and experimental_method != "All":
+    if experimental_method != "All" and experimental_method:
         conditions.append(MP.rcsentinfo_experimental_method.ilike(f"%{experimental_method}%"))
 
-    
-    # Check and add conditions for OPM
-    if family_name and family_name != "All":
+    # OPM filters
+    if family_name != "All" and family_name:
         conditions.append(OP.family_name_cache.ilike(f"%{family_name}%"))
-
-    if species and species != "All":
+    if species != "All" and species:
         conditions.append(OP.species_name_cache.ilike(f"%{species}%"))
-
-    if membrane_name and membrane_name != "All":
+    if membrane_name != "All" and membrane_name:
         conditions.append(OP.membrane_name_cache.ilike(f"%{membrane_name}%"))
-
-    if super_family and super_family != "All":
+    if super_family != "All" and super_family:
         conditions.append(OP.family_superfamily_name.ilike(f"%{super_family}%"))
-
-    if superfamily_classtype_name and superfamily_classtype_name != "All":
+    if superfamily_classtype_name != "All" and superfamily_classtype_name:
         conditions.append(OP.family_superfamily_classtype_name.ilike(f"%{superfamily_classtype_name}%"))
 
-    # Check and add conditions for Uniprot
-    if molecular_function and molecular_function != "All":
+    # Uniprot filters
+    if molecular_function != "All" and molecular_function:
         conditions.append(UP.molecular_function.ilike(f"%{molecular_function}%"))
-
-    if cellular_component and cellular_component != "All":
+    if cellular_component != "All" and cellular_component:
         conditions.append(UP.cellular_component.ilike(f"%{cellular_component}%"))
-
-    if biological_process and biological_process != "All":
+    if biological_process != "All" and biological_process:
         conditions.append(UP.biological_process.ilike(f"%{biological_process}%"))
 
-    # Compose final query using all non-empty conditions
     if conditions:
         query = query.filter(and_(*conditions))
-    
+
     # Print out the final SQL query
     # print(str(query.statement.compile(db.engine, compile_kwargs={"literal_binds": True})))
-    
+
     return query
+
 
 def apply_sorting(query, sort_by, sort_order, MP, OP, UP):
     if sort_by:
@@ -140,9 +132,10 @@ def get_items(request = {}):
     # Apply key search item to filter
     query = apply_search_and_filter(query, request, MP, OP, UP)
     items = apply_sorting(query, sort_by, sort_order, MP, OP, UP)
-    
+    print(download)
     if download in ["csv", "xlsx"]:
         items = items.all()  # Get filtered and sorted records
+        print(items)
         if items:
             def get_column_names(model):
                 return [column.name for column in model.__table__.columns]
@@ -167,7 +160,7 @@ def get_items(request = {}):
                     elif col in uniprot_columns:
                         record[prefixed_col] = getattr(up_data, col, None) if up_data else None
                 records.append(record)
-            
+            print(records)
             records_df = pd.DataFrame(records)
         else:
             records_df = pd.DataFrame()
