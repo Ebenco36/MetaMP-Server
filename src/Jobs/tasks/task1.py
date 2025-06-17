@@ -1,5 +1,5 @@
 from celery import shared_task
-# from src.Jobs.MLJobs import MLJob
+from src.Jobs.MLJobs import MLJob
 # import os, sys
 # sys.path.append(os.getcwd())
 from flask import current_app

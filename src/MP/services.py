@@ -10,7 +10,7 @@ import pandas as pd
 
 class DataService:
     @staticmethod
-    def get_data_by_column_search(table="membrane_proteins", column_name="rcsentinfo_experimental_method", value=None, page=1, per_page=10, distinct_column=None):
+    def  get_data_by_column_search(table="membrane_proteins", column_name="rcsentinfo_experimental_method", value=None, page=1, per_page=10, distinct_column=None):
         data = get_table_as_dataframe_exception(table, column_name, value, page, per_page, distinct_column)
         return data
     

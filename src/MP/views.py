@@ -720,7 +720,7 @@ class MLPredictionAccuracy(Resource):
     def get(self):
         dim_reduction = request.args.get('dim_reduction', "pca")
         # Convert DataFrame to CSV
-        accuracy = pd.read_csv("./models/semi-supervised/metrics" + dim_reduction + ".csv")
+        accuracy = pd.read_csv("./models/semi-supervised/semi_supervised_" + dim_reduction + "_0_main.csv")
         data = {
             "data": accuracy.to_dict(orient="records")
         }
@@ -742,7 +742,7 @@ class MLDimensionalityReductionCharts(Resource):
             tooltip=['Method', 'Parameter', "group"]
         ).properties(
             width="container",
-            height=600
+            # height=600
         ).interactive().configure_legend(orient='bottom', direction = 'vertical', labelLimit=0).to_dict(format="vega")
     
     def get(self):
@@ -879,7 +879,7 @@ class MLPredictionPost(Resource):
             ]]], axis=0)
             # Numerical columns
             filename_data_ = data_[[ 'subunit_segments', 'thickness', 'tilt']]
-            
+            # print(data_)
             """
                 Onehot encoding
             """
@@ -906,7 +906,7 @@ class MLPredictionPost(Resource):
             params = {
                 key: methods_params.get(key)
             }
-            
+            # print(params)
             _, plot_data = evaluate_dimensionality_reduction(complete_numerical_data, params)
             
             combined_plot_data = pd.concat(plot_data)
@@ -915,31 +915,36 @@ class MLPredictionPost(Resource):
             label = data_["pdb_code"].reset_index(drop=True)
             complete_merge = pd.concat([dm_data, label], axis=1)
             complete_merge = complete_merge[complete_merge["pdb_code"].isin(filename_data["pdb_code"].to_list())]
-            complete_merge.reset_index()
+            complete_merge = complete_merge.drop_duplicates(subset="pdb_code").reset_index(drop=True)
             
             # Load the saved model
             model_name = request.form.get("model")
             dim_reduction = request.form.get("dim_reduction")
-            model_path = f'./models/semi-supervised/{model_name}__{dim_reduction}.joblib'
+            model_path = f'./models/semi-supervised/{model_name}__semi_supervised_{dim_reduction}_0.joblib'
             first_model_search = './models/semi-supervised/Random Forest__semi_supervised_tsne_0.joblib'
             # Check if the file exists
-            if os.path.exists(first_model_search):
-                model = joblib.load(first_model_search)
-                print(f"Loaded model from {first_model_search}")
-            else:
+            
+            if model_path:
                 if os.path.exists(model_path):
                     model = joblib.load(model_path)
                     print(f"Loaded alternative model from {model_path}")
                 else:
-                    return ApiResponse.error("File Not Found", 404, f"Neither {model_path} nor {first_model_search} exists.")
-            
+                    return ApiResponse.error("File Not Found", 404, f"Model {model_path} doesn't exist.")
+            else:
+                if os.path.exists(first_model_search):
+                    model = joblib.load(first_model_search)
+                    print(f"Loaded model from {first_model_search}")
+                
             # Make predictions using the imputed DataFrame
+            print(complete_merge)
             predictions = model.predict(complete_merge[["Component 1", "Component 2"]])
+            print(predictions)
             filename_data["predicted_class"] = predictions
-            
+
             # Convert DataFrame to CSV
             output = io.BytesIO()
             filename_data.to_csv(output, index=False)
+
             output.seek(0)
 
             return send_file(output, mimetype='text/csv', download_name='predictions.csv', as_attachment=True)

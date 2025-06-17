@@ -64,7 +64,7 @@ junks/
 airflow_home/logs
 airflow_home/airflow.cfg
 
-*.joblib
+# *.joblib
 datasets/pdb/PDB_data.csv
 datasets/pdb/PDB_data_transformed.csv
 
@@ -83,9 +83,9 @@ dataAll.csv
 !important_notebook.ipynb
 summary-statistics/
 
-*.csv
+# *.csv
 data/
-# datasets/
+datasets/
 datasets_test/
 datasets/*.csv
 datasets/*.xml
@@ -107,3 +107,17 @@ celerybeat-schedule
 data.zip
 !datasets/country_data_*.csv
 !datasets/expert_annotation_predicted.csv
+
+# Ignore everything in models/
+models/**
+# Except this subfolder and its contents
+!models/semi-supervised/
+!models/semi-supervised/**
+
+# But re-ignore PNG files inside that folder
+models/semi-supervised/*.png
+
+Frame2.csv
+Frame3.csv
+protein_sequences.csv
+y_combined.csv

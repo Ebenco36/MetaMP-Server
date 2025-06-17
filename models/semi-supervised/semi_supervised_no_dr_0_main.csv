@@ -1,0 +1,8 @@
+,Classifier,Accuracy,Precision,Recall,F1-score
+0,Logistic Regression,0.975,0.972,0.975,0.973
+1,Decision Tree,0.96,0.957,0.96,0.958
+2,Random Forest,0.99,0.99,0.99,0.99
+3,KNeighbors Classifier,0.985,0.983,0.985,0.983
+4,Gradient Boosting Classifier,0.98,0.978,0.98,0.978
+5,Gaussian NB,0.955,0.961,0.955,0.957
+6,SVM,0.985,0.985,0.985,0.982

@@ -342,8 +342,11 @@ def get_table_as_dataframe_exception(table_name, filter_column=None, filter_valu
         df = pd.DataFrame(paginated_data, columns=result.keys())
         
         # Identify date columns
-        df['updated_at_readable'] = pd.to_datetime(df['updated_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df['created_at_readable'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        if 'updated_at' in df.columns:
+            df['updated_at_readable'] = pd.to_datetime(df['updated_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        if 'created_at' in df.columns:
+            df['created_at_readable'] = pd.to_datetime(df['created_at']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        
         date_columns = df.select_dtypes(include=['datetime64[ns]']).columns
 
         # Drop date columns
@@ -381,6 +384,8 @@ def get_table_as_dataframe_exception(table_name, filter_column=None, filter_valu
         return {'data': [], 'total_rows': 0, 'page': 10, 'per_page': 10}
     except Exception as e:
         # Handle other unexpected errors
+        # import traceback
+        # traceback.print_exc()
         print({'error': 'An unexpected error occurred: ' + str(e)})
         return {'data': [], 'total_rows': 0, 'page': 10, 'per_page': 10}
     

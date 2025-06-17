@@ -29,6 +29,11 @@ from src.Jobs.Utils import (
     evaluate_dimensionality_reduction
 )
 from src.Jobs.transformData import report_and_clean_missing_values
+import os
+
+def ensure_dir_exists(path):
+    os.makedirs(path, exist_ok=True)
+ensure_dir_exists("./models/semi-supervised")
 
 class MLJob:
     def __init__(self):

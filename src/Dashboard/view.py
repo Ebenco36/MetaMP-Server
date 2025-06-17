@@ -72,119 +72,119 @@ class WelcomePage(Resource):
             "rcsentinfo_experimental_method", "taxonomic_domain"
         ]
         
-        chart_data = dataset[view_data]
+        # chart_data = dataset[view_data]
         
         #########################Chart 1########################
         # Grouping data by 'exptl_method' and counting occurrences
-        variable_counts = chart_data["group"].value_counts().reset_index()
-        variable_counts.columns = ["group", 'Cumulative MP Structures']
+        # variable_counts = chart_data["group"].value_counts().reset_index()
+        # variable_counts.columns = ["group", 'Cumulative MP Structures']
 
-        chart = alt.Chart(variable_counts).mark_bar().encode(
-            x=alt.X(
-                "group:N", 
-                axis=alt.Axis(
-                    labelAngle=30, 
-                    title="group".title(),
-                    labelLimit=0
-                )
-            ),
-            y=alt.Y(
-                'Cumulative MP Structures:Q', 
-                axis=alt.Axis(
-                    title='Cumulative MP Structures'
-                )
-            ),
-            color=alt.Color("group:N", legend=alt.Legend(title="group".title())),
-            tooltip=["group:N", 'Cumulative MP Structures:Q']
-        ).properties(
-            width="container",
-            title="Membrane Protein Structures by Group"
-        ).interactive().configure_legend(
-            orient='bottom', 
-            direction = 'vertical', 
-            labelLimit=0
-        )
+        # chart = alt.Chart(variable_counts).mark_bar().encode(
+        #     x=alt.X(
+        #         "group:N", 
+        #         axis=alt.Axis(
+        #             labelAngle=30, 
+        #             title="group".title(),
+        #             labelLimit=0
+        #         )
+        #     ),
+        #     y=alt.Y(
+        #         'Cumulative MP Structures:Q', 
+        #         axis=alt.Axis(
+        #             title='Cumulative MP Structures'
+        #         )
+        #     ),
+        #     color=alt.Color("group:N", legend=alt.Legend(title="group".title())),
+        #     tooltip=["group:N", 'Cumulative MP Structures:Q']
+        # ).properties(
+        #     width="container",
+        #     title="Membrane Protein Structures by Group"
+        # ).interactive().configure_legend(
+        #     orient='bottom', 
+        #     direction = 'vertical', 
+        #     labelLimit=0
+        # )
         
         #########################Chart 2########################
         
         # Grouping data by 'rcsb_entry_info_experimental_method' and 'Group' and counting occurrences
-        group_method_year_counts = chart_data.groupby(["rcsentinfo_experimental_method", 'bibliography_year']).size().reset_index(name='count')
-        if("rcsentinfo_experimental_method" in group_method_year_counts):
-            group_method_year_counts['rcsentinfo_experimental_method'] = group_method_year_counts['rcsentinfo_experimental_method'].replace({
-                'EM': 'Cryo-Electron Microscopy (Cryo-EM)',
-                'X-ray': 'X-Ray Crystallography',
-                'NMR': 'Nuclear Magnetic Resonance (NMR)',
-                'Multiple methods': 'Multi-methods',
-            }) 
-            group_method_year_counts = group_method_year_counts.rename(columns={
-                'rcsentinfo_experimental_method': 'Experimental Method',
-            })
+        # group_method_year_counts = chart_data.groupby(["rcsentinfo_experimental_method", 'bibliography_year']).size().reset_index(name='count')
+        # if("rcsentinfo_experimental_method" in group_method_year_counts):
+        #     group_method_year_counts['rcsentinfo_experimental_method'] = group_method_year_counts['rcsentinfo_experimental_method'].replace({
+        #         'EM': 'Cryo-Electron Microscopy (Cryo-EM)',
+        #         'X-ray': 'X-Ray Crystallography',
+        #         'NMR': 'Nuclear Magnetic Resonance (NMR)',
+        #         'Multiple methods': 'Multi-methods',
+        #     }) 
+        #     group_method_year_counts = group_method_year_counts.rename(columns={
+        #         'rcsentinfo_experimental_method': 'Experimental Method',
+        #     })
             
-        chart_method = alt.Chart.from_dict(
-            group_data_by_methods(
-                chart_data, 
-                columns = [
-                    'bibliography_year', 
-                    'rcsentinfo_experimental_method'
-                ], 
-                col_color='rcsentinfo_experimental_method', 
-                chart_type="line",
-                bin_value=None,
-                interactive=True,
-                arange_legend="vertical"
-            )
-        )
+        # chart_method = alt.Chart.from_dict(
+        #     group_data_by_methods(
+        #         chart_data, 
+        #         columns = [
+        #             'bibliography_year', 
+        #             'rcsentinfo_experimental_method'
+        #         ], 
+        #         col_color='rcsentinfo_experimental_method', 
+        #         chart_type="line",
+        #         bin_value=None,
+        #         interactive=True,
+        #         arange_legend="vertical"
+        #     )
+        # )
         
         #########################Chart 3########################
-        if not dataset.empty:
-            # Convert 'Resolution' column to numeric, and filter out non-numeric values
-            dataset.loc[:, 'resolution'] = pd.to_numeric(dataset['resolution'], errors='coerce')
-            dataset = dataset.dropna(subset=['resolution'])
+        # if not dataset.empty:
+        #     # Convert 'Resolution' column to numeric, and filter out non-numeric values
+        #     dataset.loc[:, 'resolution'] = pd.to_numeric(dataset['resolution'], errors='coerce')
+        #     dataset = dataset.dropna(subset=['resolution'])
 
-            # Handle non-positive values before applying logarithmic scale
-            dataset['resolution'] = dataset['resolution'].apply(lambda x: max(x, 1e-10))
+        #     # Handle non-positive values before applying logarithmic scale
+        #     dataset['resolution'] = dataset['resolution'].apply(lambda x: max(x, 1e-10))
 
-            # Calculate group-specific median of 'Resolution'
-            group_median_resolution = dataset.groupby('group')['resolution'].median().reset_index()
-            group_median_resolution.columns = ['group', 'Group_Median_Resolution']
+        #     # Calculate group-specific median of 'Resolution'
+        #     group_median_resolution = dataset.groupby('group')['resolution'].median().reset_index()
+        #     group_median_resolution.columns = ['group', 'Group_Median_Resolution']
 
-            # Merge the median values back into the main dataframe
-            dataset = pd.merge(dataset, group_median_resolution, on='group')
+        #     # Merge the median values back into the main dataframe
+        #     dataset = pd.merge(dataset, group_median_resolution, on='group')
 
-            # Calculate group-specific z-scores
-            dataset['Resolution_Z'] = dataset.groupby('group')['resolution'].transform(lambda x: stats.zscore(x))
+        #     # Calculate group-specific z-scores
+        #     dataset['Resolution_Z'] = dataset.groupby('group')['resolution'].transform(lambda x: stats.zscore(x))
 
-            # Identify and filter potential outliers based on a z-score threshold and group-specific median resolution
-            outliers = dataset[(abs(dataset['Resolution_Z']) > dataset['Group_Median_Resolution']) & (dataset['resolution'] > dataset['Group_Median_Resolution'])]
+        #     # Identify and filter potential outliers based on a z-score threshold and group-specific median resolution
+        #     outliers = dataset[(abs(dataset['Resolution_Z']) > dataset['Group_Median_Resolution']) & (dataset['resolution'] > dataset['Group_Median_Resolution'])]
             
-            # Altair boxplot with logarithmic scale
-            dataset['group'] = dataset['group'].replace({
-                'MONOTOPIC MEMBRANE PROTEINS': 1,
-                'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL': 2,
-                'TRANSMEMBRANE PROTEINS:BETA-BARREL': 3,
-            })
-            chart_obj = alt.Chart(dataset).mark_boxplot().encode(
-                x=alt.X('group:N', title="Group", axis=alt.Axis(labelAngle=360)),
-                y=alt.Y('resolution:Q', title="Resolution (Angstrom (Å))", scale=alt.Scale(type='log')),
-                color=alt.value("#005EB8"),
-                tooltip=['group:N', 'resolution:Q', 'pdb_code:N']
-            ).properties(
-                width="container",
-                title='Boxplot of Resolution for all within Each Group (Log Scale)'
-            )
+        #     # Altair boxplot with logarithmic scale
+        #     dataset['group'] = dataset['group'].replace({
+        #         'MONOTOPIC MEMBRANE PROTEINS': 1,
+        #         'TRANSMEMBRANE PROTEINS:ALPHA-HELICAL': 2,
+        #         'TRANSMEMBRANE PROTEINS:BETA-BARREL': 3,
+        #     })
+        #     chart_obj = alt.Chart(dataset).mark_boxplot().encode(
+        #         x=alt.X('group:N', title="Group", axis=alt.Axis(labelAngle=360)),
+        #         y=alt.Y('resolution:Q', title="Resolution (Angstrom (Å))", scale=alt.Scale(type='log')),
+        #         color=alt.value("#005EB8"),
+        #         tooltip=['group:N', 'resolution:Q', 'pdb_code:N']
+        #     ).properties(
+        #         width="container",
+        #         title='Boxplot of Resolution for all within Each Group (Log Scale)'
+        #     )
             
-            chart_outlier = group_annotation(chart_obj)
-        else:
-            chart_outlier = {}
+        #     chart_outlier = group_annotation(chart_obj)
+        # else:
+        #     chart_outlier = {}
         
         #########################Chart 4########################
         # If not in cache, proceed with data retrieval and processing
         table_df = get_table_as_dataframe("membrane_proteins")
-        get_master_proteins = DataService.get_data_by_column_search(
-            column_name="is_master_protein", 
-            value="MasterProtein", 
-            page=1, per_page=1
-        )
+        # get_master_proteins = DataService.get_data_by_column_search(
+        #     column_name="is_master_protein", 
+        #     value="MasterProtein", 
+        #     page=1, per_page=1
+        # )
         
         all_data = DataService.get_data_by_column_search(
             column_name=None, 
@@ -225,9 +225,9 @@ class WelcomePage(Resource):
         
         
         # Get the DataFrame directly
-        pages = Pages(table_df)
-        _, map = pages.getMap()
-        trend = data_flow(table_df)
+        # pages = Pages(table_df)
+        # _, map = pages.getMap()
+        # trend = data_flow(table_df)
         
         unique_data = get_table_as_dataframe_download(
             table_name="membrane_proteins",
@@ -243,14 +243,14 @@ class WelcomePage(Resource):
         # Convert to string
         latest_date_str = latest_datetime.strftime("%Y-%m-%d %H:%M:%S")
         result = {
-            "trend": trend,
-            "map_chart": map,
+            # "trend": trend,
+            # "map_chart": map,
             "all_data": all_data,
             "latest_date": latest_date_str,
-            "group_chart": convert_chart(chart),
-            "method_chart": convert_chart(chart_method),
-            "outlier_chart": convert_chart(chart_outlier),
-            'get_master_proteins': get_master_proteins,
+            # "group_chart": convert_chart(chart),
+            # "method_chart": convert_chart(chart_method),
+            # "outlier_chart": convert_chart(chart_outlier),
+            # 'get_master_proteins': get_master_proteins,
             "all_data_uniprot": all_data_uniprot,
             "all_data_opm": all_data_opm,
             "all_data_mpstruc": all_data_mpstruc,
