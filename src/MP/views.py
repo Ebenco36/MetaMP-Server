@@ -21,7 +21,7 @@ from src.Jobs.Utils import (
     evaluate_dimensionality_reduction, 
     onehot_encoder
 )
-from src.Jobs.Utils import select_features_using_decision_tree
+from utils.package import select_features_using_decision_tree
 from src.Jobs.transformData import report_and_clean_missing_values
 from src.Dashboard.services import export_to_csv, export_to_excel
 from src.MP.machine_learning_services_old import UnsupervisedPipeline
