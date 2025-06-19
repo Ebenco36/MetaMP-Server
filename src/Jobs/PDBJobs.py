@@ -443,7 +443,7 @@ class PDBJOBS:
         df_list = [pd.read_csv(os.path.join(self.batch_dir, f), low_memory=False) for f in parts]
         master_df = pd.concat(df_list, ignore_index=True)
         master_df.to_csv(self.master_path, index=False)
-        print(f"✅ Merged into {self.file_name}")
+        print(f"Merged into {self.file_name}")
         return master_df
 
     def loadFile(self):

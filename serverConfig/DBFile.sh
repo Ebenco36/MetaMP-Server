@@ -21,7 +21,6 @@ PARENT_DIR=$(realpath "$SCRIPT_DIR/../")
 # flask sync-protein-database
 
 
-# Print completion message
 echo "==================================================================="
 echo "=====✅ All tasks completed successfully. The system is ready.====="
 echo "==================================================================="

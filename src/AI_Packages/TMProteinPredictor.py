@@ -148,7 +148,7 @@ class MultiModelAnalyzer:
 
         total = len(df)
         if total == 0:
-            print("✅ All sequences are already processed.")
+            print("All sequences are already processed.")
             return done_df
 
         print(f"🚀 Starting analysis of {total} sequences in batches of {self.batch_size}...")
@@ -192,7 +192,7 @@ class MultiModelAnalyzer:
                         update_seqs
                     )
                     conn.commit()
-                    print("✅ Sequences committed to DB")
+                    print("Sequences committed to DB")
 
                 # 2. Write FASTA
                 with NamedTemporaryFile("w+", suffix=".fasta", delete=True) as fasta:
@@ -204,11 +204,11 @@ class MultiModelAnalyzer:
                         try:
                             print(f"🔍 Running predictor: {p.name}")
                             result = p.predict(fasta.name)
-                            print(f"✅ {p.name} completed.")
+                            print(f"{p.name} completed.")
                             return p.name, result
                         except Exception as e:
                             traceback.print_exc()
-                            print(f"❌ {p.name} failed: {e}")
+                            print(f"{p.name} failed: {e}")
                             return p.name, {}
 
                     results_map = (
@@ -264,7 +264,7 @@ class MultiModelAnalyzer:
         if self.write_csv and csv_out:
             final_df.to_csv(csv_out, index=False)
 
-        print("✅ Finished all batches.")
+        print("Finished all batches.")
         return final_df
 
     

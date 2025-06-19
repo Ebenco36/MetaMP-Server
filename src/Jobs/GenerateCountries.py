@@ -113,10 +113,9 @@ class CountriesFetcher:
         )
         master_fp = os.path.join(DATASETS_PATH, f"country_data_{today}.csv")
         combined.to_csv(master_fp, index=False)
-        print(f"✅ Combined into {os.path.basename(master_fp)}")
+        print(f"Combined into {os.path.basename(master_fp)}")
         return combined
 
-# Example usage
 if __name__ == '__main__':
     fetcher = CountriesFetcher()
     df = fetcher.fetch(batch_size=20)

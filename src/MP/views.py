@@ -15,13 +15,13 @@ from flask_restful import Resource, reqparse
 from src.services.graphs.helpers import Graph
 from flask import jsonify, request, send_file
 from src.MP.Helpers import get_joblib_files_and_splits
-from utils.package import separate_numerical_categorical
+from src.Jobs.Utils import separate_numerical_categorical
 from src.Training.services import get_quantification_data
 from src.Jobs.Utils import (
     evaluate_dimensionality_reduction, 
     onehot_encoder
 )
-from utils.package import select_features_using_decision_tree
+from src.Jobs.Utils import select_features_using_decision_tree
 from src.Jobs.transformData import report_and_clean_missing_values
 from src.Dashboard.services import export_to_csv, export_to_excel
 from src.MP.machine_learning_services_old import UnsupervisedPipeline

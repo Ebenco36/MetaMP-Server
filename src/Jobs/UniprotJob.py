@@ -97,7 +97,7 @@ class UniProtDataFetcher:
             dfs.append(pd.read_csv(os.path.join(BATCH_PATH, fn)))
         master_df = pd.concat(dfs, ignore_index=True)
         master_df.to_csv(master_fp, index=False)
-        print(f"✅ Combined into {master_name}")
+        print(f"Combined into {master_name}")
         return master_df
 
     def fetch_from_uniparc(self, uid: str):

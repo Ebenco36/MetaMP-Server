@@ -699,7 +699,7 @@ def group_annotation(chart_obj:Chart, group_list=[1, 2, 3]):
 ########################################################
 ############# End Of Data Inconsistencies ##############
 ########################################################
-from utils.package import evaluate_dimensionality_reduction
+from src.Jobs.Utils import evaluate_dimensionality_reduction
 
 def clean_column_name(col):
     if col.startswith('rcsentinfo_'):

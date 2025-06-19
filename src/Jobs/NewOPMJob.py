@@ -125,7 +125,7 @@ class NEWOPM:
 
         master_df = pd.concat(combined_rows, ignore_index=True)
         master_df.to_csv(master_fp, index=False)
-        print(f"✅ Combined all into {master_fn}")
+        print(f"Combined all into {master_fn}")
 
         # 3) Expand taxonomy on the master file
         self.process_dataframe(master_df, master_fp)
