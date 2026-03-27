@@ -184,7 +184,7 @@ pooch==1.8.2
 portpicker==1.6.0
 prison==0.2.1
 prompt-toolkit==3.0.43
-protobuf==4.25.1
+protobuf==5.29.6
 psutil==5.9.6
 psycopg2-binary==2.9.9
 ptyprocess==0.7.0
