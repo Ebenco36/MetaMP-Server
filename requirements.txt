@@ -182,7 +182,7 @@ typer==0.4.2
 typing_extensions==4.13.2
 tzdata==2023.3
 uc-micro-py==1.0.2
-urllib3==2.1.0
+urllib3==2.6.3
 vega-datasets==0.9.0
 vegafusion==2.0.1
 vine==5.1.0
