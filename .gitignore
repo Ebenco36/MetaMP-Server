@@ -1,0 +1,148 @@
+node_modules
+.DS_Store
+context.txt
+.venv_mpvis
+.venv
+.venv/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+env/
+venv/
+jupyter_test/
+.env
+.env.development
+.env.production
+
+# Logs
+*.log
+
+# Local SQLite database files
+*.db
+
+# Compiled Python files
+*.pyc
+
+# Compiled C extensions
+*.so
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary files
+*.swp
+*~
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Flask migration directory
+migrations/
+
+:project.sqlite
+:project.sssqlite
+
+.ipynb_checkpoints/
+__pycache__/
+.vscode/
+.mpvis/
+Jupyter/
+junks/
+
+airflow_home/logs
+airflow_home/airflow.cfg
+
+# *.joblib
+datasets/pdb/PDB_data.csv
+datasets/pdb/PDB_data_transformed.csv
+
+ARS.csv
+
+*.png
+# Exempt a specific PNG file from being ignored
+!public/MetaMPArchitecture.png
+!public/backend-completion-status.png
+celery-beat
+DB.json
+obsolete
+dataAll.csv
+*.ipynb
+!JupyterNotebookTest.ipynb
+!important_notebook.ipynb
+summary-statistics/
+
+# *.csv
+data/
+datasets/
+datasets_test/
+datasets/*.csv
+datasets/*.xml
+datasets/pdb/*.csv
+datasets_test/*.csv
+datasets_test/*.xml
+
+requirementss.txt
+
+discrepancies.json
+experimental.json
+latex_output.tex
+models/pca_chart.json
+models/tsne_chart.json
+models/umap_chart.json
+my_summary.txt
+your_file.txt
+celerybeat-schedule
+data.zip
+!datasets/country_data_*.csv
+!datasets/expert_annotation_predicted.csv
+/.metamp-launcher.state
+
+# Ignore everything in models/
+models/**
+# Except this subfolder and its contents
+!models/semi-supervised/
+!models/semi-supervised/**
+
+# But re-ignore PNG files inside that folder
+models/semi-supervised/*.png
+
+Frame2.csv
+Frame3.csv
+protein_sequences.csv
+y_combined.csv
+
+# Local-only release helpers
+local-scripts/
+.metamp-publication/
+metamp-publication/
+
+REVIEW_RESPONSE_STATUS_REPORT.md
+REVIEW_RESPONSE_DRAFT.
+paper.tex
+TM_PREDICTOR_EXTERNAL_WORKFLOW.md
+tmbed_embeddings.h5
+tmbed_embeddings.hash
+tmbed_output.pred
+mpstruc_2026-03-25.csv
+mpstruc_2026-03-27.csv
+COMMANDS.md
+METAMP_UPDATE_REPORT.md
+REVIEW_RESPONSE_DRAFT.md
+metamp_new_references.bib
+papersaved.txt
+results.tex
+history.txt

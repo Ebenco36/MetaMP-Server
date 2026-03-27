@@ -1,0 +1,12 @@
+services:
+  flask-app:
+    environment:
+      FLASK_ENV: development
+      GUNICORN_WORKERS: 1
+    volumes:
+      - ./:/var/app
+      - flask-app-data:/var/app/data
+      - ./datasets:/var/app/datasets:ro
+    command: >
+      sh -c "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models /var/app/logs /tmp/matplotlib /tmp/numba_cache &&
+      exec gunicorn --reload --workers 1 --timeout ${GUNICORN_TIMEOUT:-180} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-60} --max-requests ${GUNICORN_MAX_REQUESTS:-200} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-25} --worker-tmp-dir /dev/shm -k gevent --bind 0.0.0.0:8081 --access-logfile - --error-logfile - server:app"

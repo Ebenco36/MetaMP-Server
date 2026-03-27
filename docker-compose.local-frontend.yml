@@ -1,0 +1,9 @@
+services:
+  frontend:
+    build:
+      context: ${FRONTEND_BUILD_CONTEXT:-../MPVisualization}
+      dockerfile: ../MetaMP-Server/docker/frontend.local.Dockerfile
+      args:
+        VITE_MPV_APP_URL: ${FRONTEND_VITE_API_URL:-http://localhost:5400/api/v1/}
+        VITE_APP_MPV_MOCK_URL: ${FRONTEND_VITE_MOCK_URL:-http://localhost:5400/api/v1/}
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:local

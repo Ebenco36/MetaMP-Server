@@ -1,0 +1,211 @@
+services:
+  flask-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INCLUDE_ML: "true"
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_app
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    ports:
+      - "${FLASK_RUN_PORT:-5400}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8081/api/v1/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    volumes:
+      - flask-app-data:/var/app/data
+      - ./datasets:/var/app/datasets:ro
+    networks:
+      - app-networks
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INCLUDE_ML: "false"
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_worker
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    command: >
+      sh -c "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models &&
+      exec celery -A celery_app:celery worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-1} --max-tasks-per-child=${CELERY_MAX_TASKS_PER_CHILD:-20} --max-memory-per-child=${CELERY_MAX_MEMORY_PER_CHILD_KB:-524288}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  celery-worker-ml:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INCLUDE_ML: "true"
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_worker_ml
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    command: >
+      sh -c "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models &&
+      exec celery -A celery_app:celery worker --loglevel=info --queues=ml --concurrency=${ML_CELERY_CONCURRENCY:-1} --max-tasks-per-child=${ML_CELERY_MAX_TASKS_PER_CHILD:-1} --max-memory-per-child=${ML_CELERY_MAX_MEMORY_PER_CHILD_KB:-1572864}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  celery-worker-tm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INCLUDE_ML: "true"
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_worker_tm
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    command: >
+      sh -c "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models &&
+      exec celery -A celery_app:celery worker --loglevel=info --queues=tm --concurrency=${TM_CELERY_CONCURRENCY:-1} --max-tasks-per-child=${TM_CELERY_MAX_TASKS_PER_CHILD:-1} --max-memory-per-child=${TM_CELERY_MAX_MEMORY_PER_CHILD_KB:-1572864}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        INCLUDE_ML: "false"
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_beat
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    command: >
+      sh -c "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models &&
+      exec celery -A celery_app:celery beat --loglevel=info"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  postgres:
+    container_name: "testmetaMPDB"
+    image: postgres:latest
+    restart: unless-stopped
+    env_file:
+      - .env.docker.deployment
+    deploy:
+      resources:
+        limits:
+          memory: 3G 
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mpvis_db}
+      POSTGRES_USER: ${DB_USER:-mpvis_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mpvis_user}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mpvis_user} -d ${DB_NAME:-mpvis_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-networks
+
+  frontend:
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:${FRONTEND_IMAGE_TAG:-latest}
+    container_name: testMPfrontend
+    restart: unless-stopped
+    depends_on:
+      flask-app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:${FLASK_RUN_PORT:-5400}
+    networks:
+      - app-networks
+
+  redis:
+    image: redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G 
+    container_name: testmetaMPRedis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"  # Expose the Redis port
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-networks
+
+
+networks:
+  app-networks:
+    driver: bridge
+
+volumes:
+  flask-app-data:
+  pgdata:
+  redis-data:

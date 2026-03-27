@@ -1,0 +1,1017 @@
+questions_data = [
+    {
+        "name": "Summary Statistics",
+        "description": """
+                <p>
+                In the field of structural biology, understanding the three-dimensional structure of 
+                membrane proteins are crucial for unraveling their functions and developing targeted therapies. 
+                Various methods are employed to resolve the structures of these proteins, including X-ray 
+                crystallography, electron microscopy (EM), and nuclear magnetic resonance (NMR). 
+                A cumulative sum chart has been generated to showcase the effectiveness of each method in 
+                resolving membrane proteins.
+                </p>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    Based on the cumulative sum chart showcasing the effectiveness of X-ray crystallography, 
+                    electron microscopy (EM), and nuclear magnetic resonance (NMR) in resolving membrane 
+                    proteins, which method appears to be most used
+                """,
+                "type": "training",
+                "item_order": 1,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Select Methods from the Group By input field to see the distribution of data.</li>
+                            <li> Use the mouseover event on the interactive chart object for more details.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "A. X-ray Crystallography", "is_correct": True},
+                    {"text": "B. NMR (Nuclear Magnetic Resonance)", "is_correct": False},
+                    {"text": "C. EM (Cryo-Electron Microsopy)", "is_correct": False},
+                    {"text": "D. Multiple Methods", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Group By: ",
+                        "name": "groupby",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Methods", "value": "rcsentinfo_experimental_method"},
+                            {"text": "Groups", "value": "group"},
+                            {"text": "Taxonomic Domain", "value": "taxonomic_domain"}
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Based on the cumulative sum chart showcasing the effectiveness of X-ray crystallography, 
+                    electron microscopy (EM), and nuclear magnetic resonance (NMR) in resolving membrane 
+                    proteins, which method appears to be currently experiencing a more rapid growth, 
+                    indicating potential advancements and success in this field
+                """,
+                "type": "test",
+                "item_order": 2,
+                "options": [
+                    {"text": "A. X-ray Crystallography", "is_correct": False},
+                    {"text": "B. NMR (Nuclear Magnetic Resonance)", "is_correct": False},
+                    {"text": "C. EM (Cryo-Electron Microsopy)", "is_correct": True},
+                    {"text": "D. Multiple Methods", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Group By: ", 
+                        "name": "groupby",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Methods", "value": "rcsentinfo_experimental_method"},
+                            {"text": "Groups", "value": "group"},
+                            {"text": "Taxonomic Domain", "value": "taxonomic_domain"}
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Switch between different chart views and visualize which of the two charts is more suitable 
+                    to understand which method appears to be currently experiencing a more rapid growth, 
+                    indicating potential advancements and success in this field  
+                """,
+                "type": "test",
+                "item_order": 3,
+                "instruction": """ """,
+                "options": [
+                    {"text": "A. Line Chart", "is_correct": False},
+                    {"text": "B. Bar Chart", "is_correct": True},
+                    {"text": "C. Both", "is_correct": False},
+                    {"text": "D. None", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Group By: ", 
+                        "name": "chartType",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Line Chart", "value": "line"},
+                            {"text": "Bar Chart", "value": "bar"}
+                        ]
+                    },
+                    {
+                        "title": "Set Bin: ", 
+                        "name": "bin_value",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Remove Bin", "value": None},
+                            {"text": "2 Bins", "value": 2},
+                            {"text": "3 Bins", "value": 3},
+                            {"text": "4 Bins", "value": 4},
+                            {"text": "5 Bins", "value": 5},
+                            {"text": "6 Bins", "value": 6},
+                            {"text": "7 Bins", "value": 7},
+                            {"text": "8 Bins", "value": 8},
+                            {"text": "9 Bins", "value": 9},
+                            {"text": "10 Bins", "value": 10},
+                            {"text": "11 Bins", "value": 11}
+                        ]
+                    }
+                ],
+            },
+        ]
+    },
+    {
+        "name": "Outliers",
+        "description": """
+                <p>
+                In the field of structural biology, achieving high-resolution structural information is pivotal 
+                for understanding the intricate details of biological macromolecules. Various techniques such 
+                as X-ray crystallography, electron microscopy (EM), and nuclear magnetic resonance (NMR) 
+                spectroscopy are employed to capture these structures at different scales. 
+                The resolution, representing the level of detail in these structures, is a critical parameter 
+                that influences the reliability and interpretability of the obtained data.
+                </p>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    Investigate cases where there are substantial discrepancies in resolution values 
+                    specifically within X-ray crystallography, focusing on the chart representing Monotopic 
+                    Membrane Protein structures. How many outlier do we have 
+                """,
+                "type": "training",
+                "item_order": 4,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Select Methods from the Group By input field to see the distribution of data.</li>
+                            <li> Use the mouseover event on the interactive chart object for more details.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "A. 3 (7ZSU, 9AKL, 8IWO)", "is_correct": False},
+                    {"text": "B. 4 (7ZSU, 0SJK, 4UIS, 1JAK)", "is_correct": False},
+                    {"text": "C. 2 (7ZSU, 0SJK)", "is_correct": False},
+                    {"text": "D. None", "is_correct": True},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Methods: ", 
+                        "name": "methods",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "X-ray crystallography", "value": "X-ray"},
+                            {"text": "Electron microscopy (EM)", "value": "EM"},
+                            {"text": "Nuclear magnetic resonance (NMR)", "value": "NMR"}
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Investigate cases where there are substantial discrepancies in resolution values 
+                    specifically within electron microscopy (EM), focusing on the chart representing Monotopic 
+                    Membrane Protein structures. How many outlier do we have 
+                """,
+                "type": "test",
+                "item_order": 5,
+                "options": [
+                    {"text": "A. 1 (3J0J)", "is_correct": False},
+                    {"text": "B. 1 (6ZG5)", "is_correct": True},
+                    {"text": "C. 1 (4UQJ)", "is_correct": False},
+                    {"text": "D. 2 (7RI7, 7LHI)", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Methods: ", 
+                        "name": "methods",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "X-ray crystallography", "value": "X-ray"},
+                            {"text": "Electron microscopy (EM)", "value": "EM"},
+                            {"text": "Nuclear magnetic resonance (NMR)", "value": "NMR"}
+                        ]
+                    }
+                ],
+            }
+        ]
+    },
+    {
+        "name": "Unsupervised Machine Learning (Dimensionality Reduction)",
+        "description": """
+                <p>
+                    In the field of structural biology, managing and interpreting large datasets derived from various 
+                    experimental techniques, such as X-ray crystallography, electron microscopy (EM), and nuclear 
+                    magnetic resonance (NMR) spectroscopy, poses a significant challenge. Unsupervised machine learning 
+                    techniques, particularly dimensionality reduction methods, play a crucial role in handling these 
+                    complex datasets. This aids in simplifying and visualizing high-dimensional 
+                    structural data, providing valuable insights into structural relationships, patterns, and potential outliers.
+                </p>
+                
+                <p>
+                    As a pivotal step in analysis, dimensionality reduction techniques such as t-Distributed 
+                    Stochastic Neighbor Embedding (t-SNE) and Uniform Manifold Approximation and Projection 
+                    (UMAP) come into play. Exploring the optimal number of clusters is a 
+                    crucial step in cluster analysis, and several factors influence this determination. 
+                    This process significantly enhances our ability to uncover meaningful patterns and 
+                    relationships within complex experimental datasets.
+                </p>
+                
+                <h5>Variables Indicative of Dataset Complexity:</h5>
+                <ul class='ml-10'>
+                    <li>PDB Variables:Resolution, Molecular_weight, Cell angle alpha, ..., 611-th (Total variable count)</li>
+                    <li>MPstruc Variables: Groups, Sub-Groups, Taxonomic Domain, ... 15-th variable</li>
+                </ul>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    In the exploration of experimental data using dimensionality reduction techniques in 
+                    structural biology, how many distinct clusters can be identified within the reduced 
+                    space derived from X-ray crystallography method?
+                """,
+                "type": "training",
+                "item_order": 6,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Select t-SNE from the option and see the number of cluster</li>
+                            <li> Set the perplexity to 50 and observe changes</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "A. 3 Clusters", "is_correct": True},
+                    {"text": "B. 4 Clusters", "is_correct": False},
+                    {"text": "C. 2 Clusters", "is_correct": True},
+                    {"text": "D. 1 Cluster", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Dimensionality Reduction Techniques: ", 
+                        "name": "DRT",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "t-Distributed Stochastic Neighbor Embedding (t-SNE)", "value": "tsne_algorithm"},
+                            {"text": "Uniform Manifold Approximation and Projection (UMAP)", "value": "umap_algorithm"}
+                        ]
+                    },
+                    {
+                        "title": "Perplexity: ", 
+                        "name": "perplexity",
+                        "parent": "tsne_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"Perplexity {perplexity}", "value": perplexity} for perplexity in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Neighbors: ", 
+                        "name": "n_neighbors",
+                        "parent": "umap_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_neighbors} Neighbors", "value": n_neighbors} for n_neighbors in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    In the exploration of experimental data using dimensionality reduction techniques in 
+                    structural biology, how many distinct clusters can be identified within the reduced 
+                    space derived from electron microscopy (EM) method?
+                """,
+                "type": "test",
+                "item_order": 7,
+                "options": [
+                    {"text": "A. 3 Clusters", "is_correct": True},
+                    {"text": "B. 4 Clusters", "is_correct": False},
+                    {"text": "C. 2 Clusters", "is_correct": True},
+                    {"text": "D. 1 Cluster", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Dimensionality Reduction Techniques: ", 
+                        "name": "DRT",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "t-Distributed Stochastic Neighbor Embedding (t-SNE)", "value": "tsne_algorithm"},
+                            {"text": "Uniform Manifold Approximation and Projection (UMAP)", "value": "umap_algorithm"}
+                        ]
+                    },
+                    {
+                        "title": "Perplexity: ", 
+                        "name": "perplexity",
+                        "parent": "tsne_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"Perplexity {perplexity}", "value": perplexity} for perplexity in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Neighbors: ", 
+                        "name": "n_neighbors",
+                        "parent": "umap_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_neighbors} Neighbors", "value": n_neighbors} for n_neighbors in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    }
+                ],
+            },
+        ]
+    },
+    {
+        "name": "Unsupervised Machine Learning (Clustering)",
+        "description": """
+                <p>
+                   In unsupervised learning, clustering is a fundamental technique that involves 
+                   grouping similar data points together based on certain criteria, without 
+                   explicit labels or predefined target outcomes. The primary goal of clustering 
+                   is to identify inherent patterns and structures within the data, allowing 
+                   for a natural organization of observations into distinct groups or clusters.
+                </p>
+                
+                <p>
+                    Cluster algorithms, such as K-means clustering, Agglomerative clustering, 
+                    and DBSCAN (Density-Based Spatial Clustering of Applications with Noise), 
+                    exhibit distinct characteristics. Each of these clustering methods comes 
+                    with its set of parameters that are adjusted to enhance the performance 
+                    and achieve optimal clustering outcomes.
+                </p>
+                
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                        Can you affirm that the clusters identified in the chart, 
+                        illustrating membrane protein data resolved using X-ray 
+                        Crystallography (X-ray) through unsupervised 
+                        machine learning and visualization techniques, genuinely 
+                        yield valuable insights into the structural and functional 
+                        attributes of the proteins? Additionally, kindly share 
+                        your observations in the feedback section.
+                    """,
+                "type": "training",
+                "item_order": 8,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Select Kmeans Clustering from the Machine Learning Techniques select input field.</li>
+                            <li> Specify the cluster count and visualize the resulting clusters to assess their meaningfulness.</li>
+                            <li> Feel at liberty to experiment with alternative machine learning methods and explore various parameters to assess the potential for extracting meaningful information.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "A. Yes", "is_correct": True},
+                    {"text": "B. No", "is_correct": True},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Machine Learning Techniques: ", 
+                        "name": "ML",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Agglomerative Clustering", "value": "agglomerative_clustering"},
+                            {"text": "Kmeans Clustering", "value": "kMeans_clustering"},
+                            {"text": "DBSCAN Clustering", "value": "dbscan_clustering"}
+                        ]
+                    },
+                    {
+                        "title": "Minimum Sample: ", 
+                        "name": "min_samples",
+                        "parent": "dbscan_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{min_samples}", "value": min_samples} for min_samples in [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Distance Threshold: ", 
+                        "name": "distance_threshold",
+                        "parent": "agglomerative_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{distance_threshold}", "value": distance_threshold} for distance_threshold in [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
+                        ]
+                    },
+                    {
+                        "title": "EPS (Epsilon): ", 
+                        "name": "eps",
+                        "parent": "dbscan_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{eps} EPS", "value": eps} for eps in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]]
+                        ]
+                    },
+                    {
+                        "title": "Clusters: ", 
+                        "name": "kmeans_n_clusters",
+                        "parent": "kMeans_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_clusters} Clusters", "value": n_clusters} for n_clusters in [2, 3, 4, 5, 6, 7, 8, 9, 10]]
+                        ]
+                    },
+                    {
+                        "title": "Clusters: ", 
+                        "name": "n_clusters",
+                        "parent": "agglomerative_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_clusters} Cluster", "value": n_clusters} for n_clusters in [2, 3, 4, 5, 6, 7, 8, 9, 10]]
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                        Can you affirm that the clusters identified in the chart, 
+                        illustrating membrane protein data resolved using electron 
+                        microscopy (EM) through unsupervised 
+                        machine learning and visualization techniques, genuinely 
+                        yield valuable insights into the structural and functional 
+                        attributes of the proteins? Additionally, kindly share 
+                        your observations in the feedback section.
+                    """,
+                "type": "test",
+                "item_order": 9,
+                "options": [
+                    {"text": "A. Yes", "is_correct": True},
+                    {"text": "B. No", "is_correct": True},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Machine Learning Techniques: ", 
+                        "name": "ML",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Agglomerative Clustering", "value": "agglomerative_clustering"},
+                            {"text": "Kmeans Clustering", "value": "kMeans_clustering"},
+                            {"text": "DBSCAN Clustering", "value": "dbscan_clustering"}
+                        ]
+                    },
+                    {
+                        "title": "Minimum Sample: ", 
+                        "name": "min_samples",
+                        "parent": "dbscan_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{min_samples}", "value": min_samples} for min_samples in [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Distance Threshold: ", 
+                        "name": "distance_threshold",
+                        "parent": "agglomerative_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{distance_threshold}", "value": distance_threshold} for distance_threshold in [5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]]
+                        ]
+                    },
+                    {
+                        "title": "EPS (Epsilon): ", 
+                        "name": "eps",
+                        "parent": "dbscan_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{eps} EPS", "value": eps} for eps in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]]
+                        ]
+                    },
+                    {
+                        "title": "Clusters: ", 
+                        "name": "kmeans_n_clusters",
+                        "parent": "kMeans_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_clusters} Clusters", "value": n_clusters} for n_clusters in [2, 3, 4, 5, 6, 7, 8, 9, 10]]
+                        ]
+                    },
+                    {
+                        "title": "Clusters: ", 
+                        "name": "n_clusters",
+                        "parent": "agglomerative_clustering",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_clusters} Cluster", "value": n_clusters} for n_clusters in [2, 3, 4, 5, 6, 7, 8, 9, 10]]
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+    
+]
+    
+
+
+
+
+    '''
+    {
+        "name": "Data Filtering",
+        "description": """
+                <p>
+                    You are tasked with evaluating the record filtering feature of MetaMP. 
+                    The system allows users to search and filter protein records based on various criteria.
+                </p>
+                
+                <h5>Interface:</h5>
+                <p>
+                    The interface displays the available filters as dropdown menus, 
+                    allowing you to select one or more filters. Once you've made your selections, 
+                    click the "Apply Filters" button to view the count of matching records.
+                </p>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    Select "Group: Monotopic" and report the count of proteins.
+                """,
+                "type": "training",
+                "item_order": 6,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Use the provided interface to select one or more filters for employee records. The available filters include:
+                                <ul>
+                                    <li>Group</li>
+                                    <li>Sub Group</li>
+                                    <li>Taxonomic Domain</li>
+                                </ul>
+                            </li>
+                            <li> After selecting the desired filters, determine the count of protein records that match the selected criteria.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "A. 20 Record(s)", "is_correct": False},
+                    {"text": "B. 4 Record(s)", "is_correct": False},
+                    {"text": "C. 5 Record(s)", "is_correct": False},
+                    {"text": "D. 30 Record(s)", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Groups: ", 
+                        "name": "groups",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "MONOTOPIC MEMBRANE PROTEINS", "value": "MONOTOPIC MEMBRANE PROTEINS"},
+                            {"text": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL", "value": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL"},
+                            {"text": "TRANSMEMBRANE PROTEINS:BETA-BARREL", "value": "TRANSMEMBRANE PROTEINS:BETA-BARREL"}
+                        ]
+                    },
+                    {
+                        "title": "Sub-groups: ", 
+                        "name": "sub_group",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Cyclooxygenases", "value": "Cyclooxygenases"},
+                            {"text": "Hydrolases", "value": "Hydrolases"},
+                            {"text": "Lipoxygenases", "value": "Lipoxygenases"},
+                            {"text": "Oxidases", "value": "Oxidases"}
+                        ]
+                    },
+                    {
+                        "title": "Taxonomic Domain: ", 
+                        "name": "taxonomic_domain",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Archaea", "value": "Archaea" },
+                            {"text": "Bacteria", "value": "Bacteria" },
+                            {"text": "Eukaryota", "value": "Eukaryota" },
+                            {"text": "Unclassified", "value": "Unclassified" },
+                            {"text": "Viruses", "value": "Viruses" },
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Select "Group: Monotopic" and "Taxonomic Domain: Viruses" then report the count of proteins.
+                """,
+                "type": "test",
+                "item_order": 7,
+                "options": [
+                    {"text": "A. 20 Record(s)", "is_correct": False},
+                    {"text": "B. 4 Record(s)", "is_correct": False},
+                    {"text": "C. 5 Record(s)", "is_correct": False},
+                    {"text": "D. 30 Record(s)", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Groups: ", 
+                        "name": "groups",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "MONOTOPIC MEMBRANE PROTEINS", "value": "MONOTOPIC MEMBRANE PROTEINS"},
+                            {"text": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL", "value": "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL"},
+                            {"text": "TRANSMEMBRANE PROTEINS:BETA-BARREL", "value": "TRANSMEMBRANE PROTEINS:BETA-BARREL"}
+                        ]
+                    },
+                    {
+                        "title": "Sub-groups: ", 
+                        "name": "sub_group",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Cyclooxygenases", "value": "Cyclooxygenases"},
+                            {"text": "Hydrolases", "value": "Hydrolases"},
+                            {"text": "Lipoxygenases", "value": "Lipoxygenases"},
+                            {"text": "Oxidases", "value": "Oxidases"}
+                        ]
+                    },
+                    {
+                        "title": "Taxonomic Domain: ", 
+                        "name": "taxonomic_domain",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Archaea", "value": "Archaea" },
+                            {"text": "Bacteria", "value": "Bacteria" },
+                            {"text": "Eukaryota", "value": "Eukaryota" },
+                            {"text": "Unclassified", "value": "Unclassified" },
+                            {"text": "Viruses", "value": "Viruses" },
+                        ]
+                    }
+                ],
+            },
+        ]
+    },
+
+    {
+        "name": "Unsupervised Machine Learning (Dimensionality Reduction)",
+        "description": """
+                <p>
+                    In structural biology, handling and analyzing extensive datasets obtained from different experimental methods like X-ray crystallography, electron microscopy (EM), and nuclear magnetic resonance (NMR) spectroscopy is notably challenging. Dimensionality reduction, an unsupervised machine learning technique, is employed to simplify intricate data by minimizing the number of variables while preserving key patterns and relationships. Examples of such techniques include Principal Component Analysis (PCA), t-Distributed Stochastic Neighbor Embedding (t-SNE), and Uniform Manifold Approximation and Projection (UMAP).
+                </p>
+                
+                <h5>Variables Indicative of Dataset Complexity:</h5>
+                <ul class='ml-10'>
+                    <li>PDB Variables:Resolution, Molecular_weight, Cell angle alpha, ..., 611-th (Total variable count)</li>
+                    <li>MPstruc Variables: Groups, Sub-Groups, Taxonomic Domain, ... 15-th variable</li>
+                </ul>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    How many distinct clusters do you see in the plot?
+                """,
+                "type": "training",
+                "item_order": 6,
+                "hints": """
+                    <p>
+                        <b>Hint(s)</b>
+                        <ol class='ml-5'>
+                            <li> Data filtered using the X-ray crystallography method. </li>
+                            <li> The scatter plot below shows each point as a membrane protein structure entry, with different colors representing various membrane protein structure groups. </li>
+                        </ol>
+                    </p>
+                """,
+                "instruction": """
+                    <p>
+                        <b>Instruction</b>
+                        <ol class='ml-5'>
+                            <li> Click on the “Dimensionality Reduction Techniques” field and choose the t-SNE option. </li>
+                            <li> Set the perplexity to 30 and note the changes.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "  3 Clusters", "is_correct": True},
+                    {"text": "  4 Clusters", "is_correct": False},
+                    {"text": "  2 Clusters", "is_correct": True},
+                    {"text": "  1 Cluster", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Dimensionality Reduction Techniques: ", 
+                        "name": "DRT",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Principal Component Analysis (PCA)", "value": "pca_algorithm"},
+                            {"text": "t-Distributed Stochastic Neighbor Embedding (t-SNE)", "value": "tsne_algorithm"},
+                            {"text": "Uniform Manifold Approximation and Projection (UMAP)", "value": "umap_algorithm"}
+                        ]
+                    },
+                    {
+                        "title": "Perplexity: ", 
+                        "name": "perplexity",
+                        "parent": "tsne_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"Perplexity {perplexity}", "value": perplexity} for perplexity in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Neighbors: ", 
+                        "name": "n_neighbors",
+                        "parent": "umap_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_neighbors} Neighbors", "value": n_neighbors} for n_neighbors in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Try out all the dimensionality reduction techniques, click the “Group by“ field, select the “Membrane Protein Structure Group“ option, and determine which method best fits our dataset.
+                """,
+                "type": "test",
+                "item_order": 7,
+                "hints": """""",
+                "options": [
+                    {"text": "  PCA ", "is_correct": False},
+                    {"text": "  PCA & t-SNE", "is_correct": False},
+                    {"text": "  t-SNE ", "is_correct": True},
+                    {"text": "  UMAP", "is_correct": True},
+                    {"text": "  t-SNE & UMAP", "is_correct": True},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Dimensionality Reduction Techniques: ", 
+                        "name": "DRT",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Principal Component Analysis (PCA)", "value": "pca_algorithm"},
+                            {"text": "t-Distributed Stochastic Neighbor Embedding (t-SNE)", "value": "tsne_algorithm"},
+                            {"text": "Uniform Manifold Approximation and Projection (UMAP)", "value": "umap_algorithm"},
+                        ]
+                    },
+                    {
+                        "title": "Perplexity: ", 
+                        "name": "perplexity",
+                        "parent": "tsne_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"Perplexity {perplexity}", "value": perplexity} for perplexity in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Neighbors: ", 
+                        "name": "n_neighbors",
+                        "parent": "umap_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_neighbors} Neighbors", "value": n_neighbors} for n_neighbors in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Group By: ", 
+                        "name": "group_by",
+                        "parent": "*",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Membrane Protein Structure Group", "value": "group"},
+                            {"text": "Taxonomic Domain", "value": "taxonomic_domain"}
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Do you notice significant overlaps between different “Membrane Protein Structure Group“ using t-SNE or UMAP?
+                """,
+                "type": "test",
+                "item_order": 8,
+                "hints": """""",
+                "options": [
+                    {"text": "  No overlap", "is_correct": False},
+                    {"text": "  Minimal overlap", "is_correct": True},
+                    {"text": "  Moderate overlap", "is_correct": True},
+                    {"text": "  Significant overlap", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Dimensionality Reduction Techniques: ", 
+                        "name": "DRT",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Principal Component Analysis (PCA)", "value": "pca_algorithm"},
+                            {"text": "t-Distributed Stochastic Neighbor Embedding (t-SNE)", "value": "tsne_algorithm"},
+                            {"text": "Uniform Manifold Approximation and Projection (UMAP)", "value": "umap_algorithm"},
+                        ]
+                    },
+                    {
+                        "title": "Perplexity: ", 
+                        "name": "perplexity",
+                        "parent": "tsne_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"Perplexity {perplexity}", "value": perplexity} for perplexity in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Neighbors: ", 
+                        "name": "n_neighbors",
+                        "parent": "umap_algorithm",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            *[{"text": f"{n_neighbors} Neighbors", "value": n_neighbors} for n_neighbors in [5, 10, 20, 30, 50, 100]]
+                        ]
+                    },
+                    {
+                        "title": "Group By: ", 
+                        "name": "group_by",
+                        "parent": "*",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "Membrane Protein Structure Group", "value": "group"},
+                            {"text": "Taxonomic Domain", "value": "taxonomic_domain"}
+                        ]
+                    }
+                ],
+            },
+        ]
+    },
+
+    {
+        "name": "Outlier Detection",
+        "description": """
+                <p>
+                In the study of membrane protein structures, databases like OPM and MPstruc provide crucial data on protein orientation within lipid bilayers. However, discrepancies can arise due to differences in annotation methods and interpretation of experimental results. These inconsistencies impact our understanding of protein functions, hindering drug development and computational modeling. In this section, we will identify discrepancies in membrane protein structure groups with respect to each experimental method over time. Resolving these discrepancies is vital for accurate structural insights and advancing research in membrane biology.
+                </p>
+            """,
+        "image": "cell_membrane_image.jpg",
+        "questions": [
+            {
+                "text": """
+                    Which of the following describes the fluctuating inconsistency patterns observed in the Orientations of Proteins in Membranes (OPM) and MPstruc databases from 2010 to 2020, particularly in relation to Cryo-Electron Microscopy (EM)?
+                """,
+                "type": "training",
+                "item_order": 4,
+                "hints": """
+                    <p>
+                        <b>Hint(s)</b>
+                        <ol class='ml-5'>
+                            <li> Click and drag your mouse over the chart area of interest.</li>
+                            <li> Release the mouse to highlight and view data within the selected section from the table below.</li>
+                            <li> Click outside the selected area to clear the highlight and return to the full chart view.</li>
+                        </ol>
+                    </p>
+                """,
+                "instruction": """
+                    <p>
+                        <b>Instruction (s)</b>
+                        <ol class='ml-5'>
+                            <li> Click the “Experimental Method” field and select the Cryo-Electron Microscopy (EM) option.</li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "  Inconsistencies decreased steadily over the years.", "is_correct": True},
+                    {"text": "  Inconsistencies increased steadily over the years.", "is_correct": False},
+                    {"text": "  Inconsistencies remained constant throughout the years.", "is_correct": False},
+                    {"text": "  There was no consistent pattern in the inconsistencies over time.", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Experimental Method: ", 
+                        "name": "methods",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "X-ray crystallography", "value": "X-ray"},
+                            {"text": "Electron microscopy (EM)", "value": "EM"},
+                            {"text": "Nuclear magnetic resonance (NMR)", "value": "NMR"}
+                        ]
+                    }
+                ],
+            },
+            {
+                "text": """
+                    Which of the following describes the fluctuating inconsistency patterns observed in the Orientations of Proteins in Membranes (OPM) and MPstruc databases from 2010 to 2020, particularly in relation to X-ray Crystallograhpy (X-ray)?
+                """,
+                "type": "test",
+                "item_order": 5,
+                "hints": """""",
+                "options": [
+                    {"text": "  Inconsistencies decreased steadily over the years.", "is_correct": False},
+                    {"text": "  Inconsistencies increased steadily over the years.", "is_correct": False},
+                    {"text": "  Inconsistencies remained constant throughout the years.", "is_correct": True},
+                    {"text": "  There was no consistent pattern in the inconsistencies over time.", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Experimental Method: ", 
+                        "name": "methods",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Select option", "value": ""},
+                            {"text": "X-ray crystallography", "value": "X-ray"},
+                            {"text": "Electron microscopy (EM)", "value": "EM"},
+                            {"text": "Nuclear magnetic resonance (NMR)", "value": "NMR"}
+                        ]
+                    }
+                ],
+            }
+        ]
+    }
+    '''
+
+
+    {
+                "text": """
+                    Use the scatter plot (outlier detection) and boxplot to identify top three points that are notably distant from the others.
+                """,
+                "type": "training",
+                "item_order": 5,
+                "hints": """
+                    <p>
+                        <b>Hint(s)</b>
+                        <ol class='ml-5'>
+                            <li> Please hover over the chart with your mouse to see more information.</li>
+                            <li> Hover over the features in the instruction section to understand the meaning of each feature.</li>
+                        </ol>
+                    </p>
+                """,
+                "instruction": """
+                    <p>
+                        <b>Instruction (s)</b>
+                        <ol class='ml-5'>
+                            <li> 
+                                We have chosen default features like 
+                                <span title="Mass of the molecule in Daltons"><b>'Molecular Weight'</b></span>, 
+                                <span title="Total number of particles used in the reconstruction"><b>'Number of Particles in Reconstruction'</b></span>, 
+                                and <span title="Level of detail of the protein structure (measured in Ångströms)"><b>'Resolution'</b></span>
+                                as shown in the "Feature" field. 
+                                These features are relevant to <strong>Cryo-Electron Microscopy (EM)</strong>.
+                            </li>
+                        </ol>
+                    </p>
+                """,
+                "options": [
+                    {"text": "   A. 6ZG5, 7Y5E, 7DRT", "is_correct": True},
+                    {"text": "   B. 8AFZ, 6H7W, 7CF9", "is_correct": False},
+                    {"text": "   C. 7Y5E, 7CF9, 6H7W", "is_correct": False},
+                    {"text": "   D. 6ZG5, 6TML, 7RH7", "is_correct": False},
+                ],
+                "filter_tool": [
+                    {
+                        "title": "Features: ", 
+                        "name": "features",
+                        "selectedOption": "", 
+                        "options": [
+                            {"text": "Molecular Weight", "value": "emt_molecular_weight"},
+                            {"text": "Number of Particles in Reconstruction", "value": "reconstruction_num_particles"},
+                            {"text": "Resolution", "value": "processed_resolution"}
+                        ]
+                    }
+                ],
+            },

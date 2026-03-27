@@ -1,0 +1,37 @@
+[project]
+name = "tmbed"
+version = "1.0.1"
+description = "Transmembrane protein predictor using embeddings"
+authors = [{name = "Michael Bernhofer", email = "Michael.Bernhofer@tum.de"}]
+maintainers = [{name = "Michael Bernhofer", email = "Michael.Bernhofer@tum.de"}]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "h5py >= 3.2.1",
+    "numpy >= 1.20.3",
+    "sentencepiece >= 0.1.96",
+    "torch >= 1.10.2",
+    "tqdm >= 4.62.3",
+    "transformers >= 4.11.3",
+    "typer >= 0.4.1",
+]
+
+[project.scripts]
+tmbed = "tmbed.tmbed:run"
+
+[project.urls]
+Homepage = "https://github.com/BernhoferM/TMbed"
+Issues = "https://github.com/BernhoferM/TMbed/issues"
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["tmbed"]
+
+[tool.setuptools.package-data]
+tmbed = ["models/cnn/*.pt"]

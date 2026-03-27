@@ -1,0 +1,18 @@
+[Unit]
+Description=Gunicorn instance to serve mpvis-app
+After=network.target
+
+[Service]
+User=root
+Group=www-data
+WorkingDirectory=/var/app
+ExecStart=gunicorn --workers 4 \
+  --graceful-timeout 30 -k gevent \
+  --bind unix:/var/app/mpvis-app.sock \
+  --access-logfile /var/app/logs/access.log \
+  --error-logfile /var/app/logs/error.log \
+  -m 007 server:app
+
+
+[Install]
+WantedBy=multi-user.target
