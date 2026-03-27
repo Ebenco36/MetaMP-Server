@@ -135,7 +135,7 @@ pycparser==2.21
 pydantic==2.5.2
 pydantic_core==2.14.5
 Pygments==2.17.2
-PyJWT==2.8.0
+PyJWT==2.12.0
 pynndescent==0.5.13
 pyparsing==3.1.1
 pyrsistent==0.20.0
