@@ -147,7 +147,7 @@ services:
 
   postgres:
     container_name: "testmetaMPDB"
-    image: postgres:latest
+    image: ${POSTGRES_IMAGE:-postgres:latest}
     restart: unless-stopped
     env_file:
       - .env.docker.deployment

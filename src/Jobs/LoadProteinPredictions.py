@@ -38,7 +38,7 @@ DEFAULT_OPTIONAL_TM_PREDICTION_BASE_DIR = "/var/app/data/tm_predictions/external
 DEFAULT_OPTIONAL_TM_TOOL_HOME = "/opt/metamp-optional-tools"
 OPTIONAL_TM_PREDICTORS = ("TMbed",) + TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS + ("TMDET", "CCTOP")
 VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS = ("TMbed", "DeepTMHMM", "TMHMM", "TMDET")
-BULK_SAFE_TM_FALLBACK_PREDICTORS = ("DeepTMHMM", "TMHMM", "TMbed")
+BULK_SAFE_TM_FALLBACK_PREDICTORS = ("DeepTMHMM", "TMHMM")
 VERIFIED_LOCAL_TM_FALLBACK_EXECUTION_ORDER = ("DeepTMHMM", "TMHMM", "TMDET", "TMbed")
 OPTIONAL_TM_PREDICTOR_SPECS = {
     "TMbed": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
@@ -3109,6 +3109,49 @@ def run_tm_prediction_backfill(
         ]
         current_run_records = current_run_records[preview_columns]
 
+    runtime_error_summaries = {}
+    for predictor_name in predictor_names:
+        count_col, region_col = tm_predictor_column_names(predictor_name)
+        if count_col not in result_df.columns and region_col not in result_df.columns:
+            continue
+        unresolved_codes = []
+        for _, row in current_run_records.iterrows():
+            pdb_code = str(row.get("pdb_code") or "").strip().upper()
+            if not pdb_code:
+                continue
+            count_value = row.get(count_col) if count_col in current_run_records.columns else None
+            region_value = row.get(region_col) if region_col in current_run_records.columns else None
+            count_missing = pd.isna(count_value)
+            region_missing = False
+            if region_col in current_run_records.columns:
+                if pd.isna(region_value):
+                    region_missing = True
+                else:
+                    region_text = str(region_value).strip()
+                    region_missing = region_text == ""
+            if count_missing and region_missing:
+                unresolved_codes.append(pdb_code)
+        unresolved_codes = list(dict.fromkeys(unresolved_codes))
+        if unresolved_codes and not include_completed:
+            runtime_error_summaries[predictor_name] = _persist_optional_tm_error_rows(
+                predictor_name=predictor_name,
+                error_rows=[
+                    {
+                        "pdb_code": pdb_code,
+                        "error_message": (
+                            "Local MetaMP fallback predictor finished without emitting a usable prediction."
+                        ),
+                    }
+                    for pdb_code in unresolved_codes
+                ],
+                provider="MetaMP",
+                progress_callback=progress_callback,
+            )
+            _emit_progress(
+                progress_callback,
+                f"Recorded {len(unresolved_codes)} runtime fallback error row(s) for {predictor_name}.",
+            )
+
     summary = {
         "queued_records": int(len(all_data)),
         "processed_records": int(processed_this_run) + (
@@ -3121,6 +3164,7 @@ def run_tm_prediction_backfill(
         "include_completed": bool(include_completed),
         "normalized_store": normalized_store,
         "missing_sequence_errors": missing_sequence_error_summaries,
+        "runtime_error_rows": runtime_error_summaries,
     }
     if not current_run_records.empty:
         summary["records"] = current_run_records.to_dict(orient="records")
