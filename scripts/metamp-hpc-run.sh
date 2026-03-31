@@ -4,7 +4,7 @@
 #SBATCH --error=metamp_full_release.err
 #SBATCH --time=5-00:00:00
 #SBATCH --partition=main
-#SBATCH --nodelist=hpc-node06
+#SBATCH --nodelist=hpc-node02
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
