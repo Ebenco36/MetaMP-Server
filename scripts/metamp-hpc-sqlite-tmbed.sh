@@ -27,11 +27,14 @@ SQLITE_PATH=""
 CSV_EXPORT_PATH=""
 VENV_DIR=""
 PYTHON_BIN=""
+BOOTSTRAP_PYTHON_BIN="${BOOTSTRAP_PYTHON_BIN:-}"
 REBUILD_DB=0
 INCLUDE_COMPLETED=0
 USE_GPU_MODE="${USE_GPU_MODE:-auto}"
 TMBED_BATCH_SIZE="${TMBED_BATCH_SIZE:-1}"
 TMBED_MAX_WORKERS="${TMBED_MAX_WORKERS:-1}"
+INSTALL_DEPS=1
+RECREATE_VENV=0
 
 log() {
   printf '[MetaMP SQLite TMbed] %s\n' "$*"
@@ -56,12 +59,16 @@ Options:
   --runtime-root PATH      Runtime working directory. Default: release-snapshots/sqlite-tmbed-runtime
   --sqlite-path PATH       SQLite database file path. Default: <runtime-root>/metamp_hpc.sqlite
   --csv-export PATH        CSV export path. Default: <runtime-root>/membrane_protein_tmalphafold_predictions.csv
-  --venv-dir PATH          Virtualenv directory to use. Default: auto-detect .venv, .venv_mpvis, then .mpvis
+  --venv-dir PATH          Virtualenv directory to create/use. Default: <runtime-root>/.venv
+  --python-bin PATH        Explicit Python interpreter to use. Overrides --venv-dir.
+  --bootstrap-python PATH  Python executable used to create the virtualenv. Default: python3
   --rebuild-db             Remove the SQLite DB and reload datasets before the TMbed run.
   --include-completed      Rerun TMbed even if MetaMP already has SQLite rows for a record.
   --gpu-mode MODE          One of: auto, on, off. Default: auto
   --tmbed-batch-size N     TMbed batch size. Default: 1
   --tmbed-max-workers N    TMbed worker count. Default: 1
+  --skip-install-deps      Reuse the virtualenv as-is without running pip install.
+  --recreate-venv          Remove and recreate the virtualenv before installing dependencies.
   -h, --help               Show this help.
 EOF
 }
@@ -70,31 +77,53 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+resolve_bootstrap_python() {
+  if [[ -n "$BOOTSTRAP_PYTHON_BIN" && -x "$BOOTSTRAP_PYTHON_BIN" ]]; then
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    BOOTSTRAP_PYTHON_BIN="$(command -v python3)"
+    return 0
+  fi
+  die "python3 is required to create the virtualenv. Pass --bootstrap-python if python3 is not on PATH."
+}
+
+prepare_virtualenv() {
+  if [[ -z "$VENV_DIR" ]]; then
+    VENV_DIR="$RUNTIME_ROOT/.venv"
+  fi
+
+  if [[ "$RECREATE_VENV" -eq 1 && -d "$VENV_DIR" ]]; then
+    log "Removing existing virtualenv at $VENV_DIR"
+    rm -rf "$VENV_DIR"
+  fi
+
+  if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    resolve_bootstrap_python
+    log "Creating virtualenv at $VENV_DIR using $BOOTSTRAP_PYTHON_BIN"
+    "$BOOTSTRAP_PYTHON_BIN" -m venv "$VENV_DIR"
+  fi
+
+  PYTHON_BIN="$VENV_DIR/bin/python"
+
+  if [[ "$INSTALL_DEPS" -eq 1 ]]; then
+    log "Installing MetaMP dependencies into $VENV_DIR"
+    "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
+    "$PYTHON_BIN" -m pip install -r "$ROOT_DIR/requirements.txt" -r "$ROOT_DIR/requirements-ml.txt"
+  fi
+}
+
 resolve_python_runtime() {
   if [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]]; then
     return 0
   fi
 
   if [[ -n "$VENV_DIR" ]]; then
-    [[ -x "$VENV_DIR/bin/python" ]] || die "Virtualenv python not found at $VENV_DIR/bin/python"
-    PYTHON_BIN="$VENV_DIR/bin/python"
+    prepare_virtualenv
     return 0
   fi
 
-  local candidate
-  for candidate in \
-    "$ROOT_DIR/.venv" \
-    "$ROOT_DIR/.venv_mpvis" \
-    "$ROOT_DIR/.mpvis"
-  do
-    if [[ -x "$candidate/bin/python" ]]; then
-      VENV_DIR="$candidate"
-      PYTHON_BIN="$candidate/bin/python"
-      return 0
-    fi
-  done
-
-  die "No project virtualenv was found. Create one first or pass --venv-dir /path/to/.venv."
+  prepare_virtualenv
 }
 
 resolve_gpu_flag() {
@@ -203,6 +232,7 @@ export_predictions_csv() {
 }
 
 main() {
+  prepare_runtime_paths
   resolve_python_runtime
   prepare_python_env
 
@@ -243,6 +273,14 @@ while [[ $# -gt 0 ]]; do
       VENV_DIR="$2"
       shift 2
       ;;
+    --python-bin)
+      PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --bootstrap-python)
+      BOOTSTRAP_PYTHON_BIN="$2"
+      shift 2
+      ;;
     --rebuild-db)
       REBUILD_DB=1
       shift
@@ -262,6 +300,14 @@ while [[ $# -gt 0 ]]; do
     --tmbed-max-workers)
       TMBED_MAX_WORKERS="$2"
       shift 2
+      ;;
+    --skip-install-deps)
+      INSTALL_DEPS=0
+      shift
+      ;;
+    --recreate-venv)
+      RECREATE_VENV=1
+      shift
       ;;
     -h|--help)
       usage
