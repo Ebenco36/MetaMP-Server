@@ -1,0 +1,1 @@
+sbatch scripts/metamp-hpc-sqlite-tmbed.sh --rebuild-db --runtime-root /scratch/$USER/metamp-sqlite

@@ -12,7 +12,12 @@
 
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  ROOT_DIR="$(cd "${SLURM_SUBMIT_DIR}" && pwd)"
+else
+  ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 DEFAULT_RUNTIME_ROOT="$ROOT_DIR/release-snapshots/sqlite-tmbed-runtime"
 
