@@ -1,6 +1,8 @@
 import click
 import json
+from pathlib import Path
 from importlib.util import find_spec
+import pandas as pd
 from celery.result import AsyncResult
 from flask.cli import FlaskGroup
 from flask_migrate import Migrate
@@ -121,6 +123,72 @@ def sync_protein_schema():
     click.echo("Syncing database schema...")
     SchemaSyncService().sync()
     click.echo("Protein schema synced.")
+
+
+@app.cli.command("export-tmalphafold-predictions-csv")
+@click.option(
+    "--output-path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="CSV path to write membrane_protein_tmalphafold_predictions into.",
+)
+@click.option(
+    "--provider",
+    "providers",
+    multiple=True,
+    help="Optional provider filter. Repeat the option to keep multiple providers.",
+)
+@click.option(
+    "--method",
+    "methods",
+    multiple=True,
+    help="Optional method filter. Repeat the option to keep multiple methods.",
+)
+def export_tmalphafold_predictions_csv(output_path, providers, methods):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    query = """
+        SELECT *
+        FROM membrane_protein_tmalphafold_predictions
+    """
+    filters = []
+    params = {}
+
+    normalized_providers = [str(value).strip() for value in providers if str(value).strip()]
+    normalized_methods = [str(value).strip() for value in methods if str(value).strip()]
+
+    if normalized_providers:
+        provider_placeholders = []
+        for index, value in enumerate(normalized_providers):
+            key = f"provider_{index}"
+            params[key] = value
+            provider_placeholders.append(f":{key}")
+        filters.append("provider IN (" + ", ".join(provider_placeholders) + ")")
+
+    if normalized_methods:
+        method_placeholders = []
+        for index, value in enumerate(normalized_methods):
+            key = f"method_{index}"
+            params[key] = value
+            method_placeholders.append(f":{key}")
+        filters.append("method IN (" + ", ".join(method_placeholders) + ")")
+
+    if filters:
+        query += " WHERE " + " AND ".join(filters)
+    query += " ORDER BY provider, method, pdb_code, uniprot_id"
+
+    frame = pd.read_sql_query(text(query), db.engine, params=params)
+    frame.to_csv(output_path, index=False)
+    click.echo(
+        json.dumps(
+            {
+                "output_path": str(output_path),
+                "row_count": int(len(frame)),
+                "providers": normalized_providers,
+                "methods": normalized_methods,
+            },
+            indent=2,
+        )
+    )
 
 
 @app.cli.command("drop-legacy-tm-predictor-columns")

@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 DEFAULT_SNAPSHOT_ROOT="$ROOT_DIR/release-snapshots"
 DOCKER_BIN="${DOCKER_BIN:-}"
+DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
+COMPOSE_RUNNER_MODE=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
 TOP_MODELS=5
@@ -45,6 +47,27 @@ resolve_docker_bin() {
   done
 
   die "Docker was not found on PATH. Set DOCKER_BIN explicitly if needed."
+}
+
+resolve_compose_runner() {
+  if [[ -n "$DOCKER_COMPOSE_BIN" && -x "$DOCKER_COMPOSE_BIN" ]]; then
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+
+  resolve_docker_bin
+  if "$DOCKER_BIN" compose version >/dev/null 2>&1; then
+    COMPOSE_RUNNER_MODE="plugin"
+    return 0
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+
+  die "Docker/Podman was found, but no Compose runner is available. Install 'docker compose' or 'docker-compose', or set DOCKER_COMPOSE_BIN explicitly."
 }
 
 usage() {
@@ -89,12 +112,16 @@ compose_args() {
 }
 
 run_compose() {
-  resolve_docker_bin
+  resolve_compose_runner
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
-  "$DOCKER_BIN" compose "${args[@]}" "$@"
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
 }
 
 wait_for_backend() {

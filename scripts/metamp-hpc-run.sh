@@ -17,6 +17,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 DEFAULT_RELEASE_ROOT="$ROOT_DIR/release-snapshots"
 DOCKER_BIN="${DOCKER_BIN:-}"
+DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
+COMPOSE_RUNNER_MODE=""
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
@@ -109,6 +111,24 @@ resolve_container_cli() {
   die "Missing required container CLI. Set DOCKER_BIN to docker or podman."
 }
 
+resolve_compose_runner() {
+  if [[ -n "$DOCKER_COMPOSE_BIN" && -x "$DOCKER_COMPOSE_BIN" ]]; then
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  resolve_container_cli
+  if "$DOCKER_BIN" compose version >/dev/null 2>&1; then
+    COMPOSE_RUNNER_MODE="plugin"
+    return 0
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  die "Docker is available, but no Compose runner is installed. Install 'docker compose' or 'docker-compose', or set DOCKER_COMPOSE_BIN explicitly."
+}
+
 resolve_gpu_flag() {
   case "$USE_GPU_MODE" in
     on)
@@ -193,12 +213,16 @@ compose_args() {
 }
 
 run_compose() {
-  resolve_container_cli
+  resolve_compose_runner
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
-  "$DOCKER_BIN" compose "${args[@]}" "$@"
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
 }
 
 flask_exec() {
@@ -285,6 +309,8 @@ main() {
   require_command python3
   resolve_container_cli
   export DOCKER_BIN
+  resolve_compose_runner
+  export DOCKER_COMPOSE_BIN
 
   prepare_runtime_env_file
   trap '[[ -n "$TEMP_ENV_FILE" && -f "$TEMP_ENV_FILE" ]] && rm -f "$TEMP_ENV_FILE"' EXIT

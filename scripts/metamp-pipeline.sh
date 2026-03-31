@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 STATE_FILE="$ROOT_DIR/.metamp-launcher.state"
+DOCKER_BIN="${DOCKER_BIN:-}"
+DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
+COMPOSE_RUNNER_MODE=""
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 WITH_FRONTEND=0
@@ -64,6 +67,47 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+resolve_docker_bin() {
+  if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
+    return 0
+  fi
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  for candidate in \
+    /Applications/Docker.app/Contents/Resources/bin/docker \
+    /usr/local/bin/docker \
+    /opt/homebrew/bin/docker
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKER_BIN="$candidate"
+      return 0
+    fi
+  done
+  die "No supported container CLI was found. Set DOCKER_BIN to docker or podman explicitly."
+}
+
+resolve_compose_runner() {
+  if [[ -n "$DOCKER_COMPOSE_BIN" && -x "$DOCKER_COMPOSE_BIN" ]]; then
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  resolve_docker_bin
+  if "$DOCKER_BIN" compose version >/dev/null 2>&1; then
+    COMPOSE_RUNNER_MODE="plugin"
+    return 0
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  die "Docker/Podman was found, but no Compose runner is available. Install 'docker compose' or 'docker-compose', or set DOCKER_COMPOSE_BIN explicitly."
+}
+
 load_env_file() {
   [[ -f "$ENV_FILE" ]] || die "Env file not found: $ENV_FILE"
   set -a
@@ -84,11 +128,16 @@ compose_args() {
 }
 
 run_compose() {
+  resolve_compose_runner
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
-  docker compose "${args[@]}" "$@"
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
 }
 
 wait_for_backend() {
@@ -158,8 +207,8 @@ show_stateful_task_status() {
 
 start_stack() {
   load_env_file
-  require_command docker
   require_command curl
+  resolve_docker_bin
 
   local services=(postgres redis flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
   local build_services=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)

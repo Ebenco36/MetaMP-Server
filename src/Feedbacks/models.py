@@ -1,7 +1,7 @@
 import datetime
+from sqlalchemy import JSON
 from database.db import db
 from src.User.model import UserModel
-from sqlalchemy.dialects.postgresql import JSON
 
 class FeedbackOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
