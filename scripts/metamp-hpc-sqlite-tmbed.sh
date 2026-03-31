@@ -28,6 +28,8 @@ CSV_EXPORT_PATH=""
 VENV_DIR=""
 PYTHON_BIN=""
 BOOTSTRAP_PYTHON_BIN="${BOOTSTRAP_PYTHON_BIN:-}"
+PIP_CERT_PATH="${PIP_CERT_PATH:-}"
+PIP_EXTRA_ARGS="${PIP_EXTRA_ARGS:-}"
 REBUILD_DB=0
 INCLUDE_COMPLETED=0
 USE_GPU_MODE="${USE_GPU_MODE:-auto}"
@@ -62,6 +64,8 @@ Options:
   --venv-dir PATH          Virtualenv directory to create/use. Default: <runtime-root>/.venv
   --python-bin PATH        Explicit Python interpreter to use. Overrides --venv-dir.
   --bootstrap-python PATH  Python executable used to create the virtualenv. Default: python3
+  --pip-cert PATH          CA bundle path for pip/requests SSL verification.
+  --pip-extra-args TEXT    Extra arguments appended to pip install commands.
   --rebuild-db             Remove the SQLite DB and reload datasets before the TMbed run.
   --include-completed      Rerun TMbed even if MetaMP already has SQLite rows for a record.
   --gpu-mode MODE          One of: auto, on, off. Default: auto
@@ -106,10 +110,34 @@ prepare_virtualenv() {
 
   PYTHON_BIN="$VENV_DIR/bin/python"
 
+  if [[ -z "$PIP_CERT_PATH" ]]; then
+    for candidate in \
+      /etc/ssl/certs/ca-certificates.crt \
+      /etc/pki/tls/certs/ca-bundle.crt \
+      /etc/ssl/cert.pem
+    do
+      if [[ -f "$candidate" ]]; then
+        PIP_CERT_PATH="$candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -n "$PIP_CERT_PATH" ]]; then
+    export SSL_CERT_FILE="$PIP_CERT_PATH"
+    export REQUESTS_CA_BUNDLE="$PIP_CERT_PATH"
+    export PIP_CERT="$PIP_CERT_PATH"
+    log "Using CA bundle for pip: $PIP_CERT_PATH"
+  fi
+
   if [[ "$INSTALL_DEPS" -eq 1 ]]; then
     log "Installing MetaMP dependencies into $VENV_DIR"
-    "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
-    "$PYTHON_BIN" -m pip install -r "$ROOT_DIR/requirements.txt" -r "$ROOT_DIR/requirements-ml.txt"
+    local pip_args=()
+    if [[ -n "$PIP_EXTRA_ARGS" ]]; then
+      # shellcheck disable=SC2206
+      pip_args=($PIP_EXTRA_ARGS)
+    fi
+    "$PYTHON_BIN" -m ensurepip --upgrade
+    "$PYTHON_BIN" -m pip install "${pip_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$ROOT_DIR/requirements-ml.txt"
   fi
 }
 
@@ -279,6 +307,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bootstrap-python)
       BOOTSTRAP_PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --pip-cert)
+      PIP_CERT_PATH="$2"
+      shift 2
+      ;;
+    --pip-extra-args)
+      PIP_EXTRA_ARGS="$2"
       shift 2
       ;;
     --rebuild-db)
