@@ -4,6 +4,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -40,6 +41,9 @@ OPTIONAL_TM_PREDICTORS = ("TMbed",) + TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD
 VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS = ("TMbed", "DeepTMHMM", "TMHMM", "TMDET")
 BULK_SAFE_TM_FALLBACK_PREDICTORS = ("DeepTMHMM", "TMHMM")
 VERIFIED_LOCAL_TM_FALLBACK_EXECUTION_ORDER = ("DeepTMHMM", "TMHMM", "TMDET", "TMbed")
+OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZES = {
+    "TMDET": 100,
+}
 OPTIONAL_TM_PREDICTOR_SPECS = {
     "TMbed": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
     "DeepTMHMM": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
@@ -986,6 +990,231 @@ def _format_optional_tm_local_command(command_spec, *, predictor_name, fasta_pat
     return [str(item).format(**substitutions) for item in command_spec]
 
 
+def _get_optional_tm_local_command_batch_size(predictor_name):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    configured_value = (
+        current_app.config.get("OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZE")
+        if has_app_context()
+        else None
+    ) or os.getenv("OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZE")
+    if configured_value not in (None, ""):
+        try:
+            return max(int(configured_value), 1)
+        except (TypeError, ValueError):
+            pass
+    return int(OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZES.get(normalized_name) or 0)
+
+
+def _read_fasta_records(fasta_path):
+    records = []
+    current_header = None
+    current_sequence_parts = []
+    with Path(fasta_path).open() as handle:
+        for raw_line in handle:
+            line = str(raw_line or "").strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                if current_header is not None:
+                    records.append((current_header, "".join(current_sequence_parts)))
+                current_header = line[1:].strip()
+                current_sequence_parts = []
+                continue
+            current_sequence_parts.append(line)
+    if current_header is not None:
+        records.append((current_header, "".join(current_sequence_parts)))
+    return records
+
+
+def _write_fasta_records(fasta_path, records):
+    fasta_path = Path(fasta_path)
+    fasta_path.parent.mkdir(parents=True, exist_ok=True)
+    with fasta_path.open("w") as handle:
+        for header, sequence in records:
+            handle.write(f">{header}\n{sequence}\n")
+
+
+def _append_csv_rows(target_path, source_path, fieldnames):
+    target_path = Path(target_path)
+    source_path = Path(source_path)
+    if not source_path.exists():
+        return 0
+    try:
+        source_rows = pd.read_csv(source_path)
+    except pd.errors.EmptyDataError:
+        source_rows = pd.DataFrame(columns=fieldnames)
+    if source_rows.empty:
+        return 0
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    if target_path.exists():
+        try:
+            target_rows = pd.read_csv(target_path)
+        except pd.errors.EmptyDataError:
+            target_rows = pd.DataFrame(columns=fieldnames)
+    else:
+        target_rows = pd.DataFrame(columns=fieldnames)
+    combined = pd.concat([target_rows, source_rows], ignore_index=True)
+    if "pdb_code" in combined.columns:
+        combined["pdb_code"] = combined["pdb_code"].astype(str).str.strip().str.upper()
+        combined = combined.drop_duplicates(subset="pdb_code", keep="last")
+    combined.to_csv(target_path, index=False)
+    return int(len(source_rows))
+
+
+def _prepare_optional_tm_command_chunks(
+    predictor_name,
+    export_summary,
+    *,
+    chunk_size,
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    path_config = get_optional_tm_prediction_paths(normalized_name)
+    fasta_records = _read_fasta_records(export_summary["fasta_path"])
+    fasta_by_code = {
+        str(header or "").strip().upper(): (header, sequence)
+        for header, sequence in fasta_records
+        if str(header or "").strip()
+    }
+    results_df = pd.read_csv(export_summary["results_input_path"])
+    reference_df = pd.read_csv(export_summary["reference_input_path"])
+    structure_manifest_df = pd.read_csv(export_summary["structure_manifest_path"])
+    if structure_manifest_df.empty:
+        return []
+
+    structure_manifest_df["pdb_code"] = (
+        structure_manifest_df["pdb_code"].astype(str).str.strip().str.upper()
+    )
+    if not results_df.empty:
+        results_df["pdb_code"] = results_df["pdb_code"].astype(str).str.strip().str.upper()
+    if not reference_df.empty:
+        reference_df["pdb_code"] = reference_df["pdb_code"].astype(str).str.strip().str.upper()
+
+    chunk_root = path_config["predictor_dir"] / "chunks"
+    if chunk_root.exists():
+        shutil.rmtree(chunk_root)
+    chunk_root.mkdir(parents=True, exist_ok=True)
+
+    chunks = []
+    total_rows = int(len(structure_manifest_df))
+    total_chunks = int(math.ceil(total_rows / chunk_size))
+    for chunk_index, start in enumerate(range(0, total_rows, chunk_size), start=1):
+        end = min(start + chunk_size, total_rows)
+        manifest_chunk = structure_manifest_df.iloc[start:end].copy()
+        chunk_codes = manifest_chunk["pdb_code"].tolist()
+        chunk_dir = chunk_root / f"chunk-{chunk_index:04d}"
+        chunk_dir.mkdir(parents=True, exist_ok=True)
+
+        chunk_fasta_records = [
+            fasta_by_code[pdb_code]
+            for pdb_code in chunk_codes
+            if pdb_code in fasta_by_code
+        ]
+        fasta_path = chunk_dir / "pending.fasta"
+        results_path = chunk_dir / "results.csv"
+        failures_path = chunk_dir / "failures.csv"
+        reference_path = chunk_dir / "reference_from_tmalphafold.csv"
+        structure_manifest_path = chunk_dir / "structure_manifest.csv"
+        csv_template_path = chunk_dir / "template.csv"
+
+        _write_fasta_records(fasta_path, chunk_fasta_records)
+        chunk_results_df = (
+            results_df.loc[results_df["pdb_code"].isin(chunk_codes)].copy()
+            if not results_df.empty
+            else pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+        )
+        if chunk_results_df.empty:
+            chunk_results_df = pd.DataFrame(
+                {
+                    "pdb_code": chunk_codes,
+                    "tm_count": [None] * len(chunk_codes),
+                    "tm_regions": [""] * len(chunk_codes),
+                }
+            )
+        chunk_results_df.to_csv(csv_template_path, index=False)
+        chunk_results_df.to_csv(results_path, index=False)
+        pd.DataFrame(columns=["pdb_code", "error_message"]).to_csv(failures_path, index=False)
+
+        chunk_reference_df = (
+            reference_df.loc[reference_df["pdb_code"].isin(chunk_codes)].copy()
+            if not reference_df.empty
+            else pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+        )
+        chunk_reference_df.to_csv(reference_path, index=False)
+        manifest_chunk.to_csv(structure_manifest_path, index=False)
+
+        chunks.append(
+            {
+                "index": chunk_index,
+                "total_chunks": total_chunks,
+                "record_count": int(len(chunk_codes)),
+                "predictor_dir": chunk_dir,
+                "fasta_path": fasta_path,
+                "results_path": results_path,
+                "failures_path": failures_path,
+                "reference_path": reference_path,
+                "structure_manifest_path": structure_manifest_path,
+                "csv_template_path": csv_template_path,
+            }
+        )
+    return chunks
+
+
+def _execute_optional_tm_local_command_once(
+    *,
+    predictor_name,
+    command_spec,
+    input_paths,
+    progress_callback=None,
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    formatted_command = _format_optional_tm_local_command(
+        command_spec,
+        predictor_name=normalized_name,
+        fasta_path=input_paths["fasta_path"],
+        results_path=input_paths["results_path"],
+        reference_path=input_paths["reference_path"],
+        work_dir=input_paths["predictor_dir"],
+    )
+    _emit_progress(
+        progress_callback,
+        f"Running configured local command for {normalized_name} using {input_paths['fasta_path']}.",
+    )
+    completed = _run_optional_tm_command_with_live_output(
+        formatted_command=formatted_command,
+        cwd=input_paths["predictor_dir"],
+        predictor_name=normalized_name,
+        progress_callback=progress_callback,
+    )
+    executed_command = completed["executed_command"]
+    command_summary = {
+        "predictor": normalized_name,
+        "command": executed_command,
+        "return_code": int(completed["return_code"]),
+        "stdout": str(completed["combined_output"] or "").strip(),
+        "stderr": str(completed["combined_output"] or "").strip(),
+        "failures_path": str(input_paths["failures_path"]),
+    }
+    if completed["return_code"] != 0:
+        raise RuntimeError(
+            f"Local command execution failed for {normalized_name} with exit code {completed['return_code']}.\n"
+            f"Command: {executed_command}\n"
+            f"STDERR: {command_summary['stderr']}"
+        )
+
+    failure_summary = import_optional_tm_prediction_failures(
+        predictor_name=normalized_name,
+        failures_path=str(input_paths["failures_path"]),
+        provider="MetaMP",
+        progress_callback=progress_callback,
+    )
+    import_summary = import_optional_tm_prediction_results(
+        predictor_name=normalized_name,
+        input_path=str(input_paths["results_path"]),
+        progress_callback=progress_callback,
+    )
+    return command_summary, failure_summary, import_summary
+
+
 def _run_optional_tm_command_with_live_output(
     *,
     formatted_command,
@@ -1301,52 +1530,104 @@ def run_optional_tm_local_command(
         }
 
     path_config = get_optional_tm_prediction_paths(normalized_name)
-    formatted_command = _format_optional_tm_local_command(
-        command_spec,
-        predictor_name=normalized_name,
-        fasta_path=path_config["fasta_path"],
-        results_path=path_config["results_path"],
-        reference_path=path_config["reference_path"],
-        work_dir=path_config["predictor_dir"],
-    )
-    _emit_progress(
-        progress_callback,
-        f"Running configured local command for {normalized_name} using {path_config['fasta_path']}.",
-    )
-    completed = _run_optional_tm_command_with_live_output(
-        formatted_command=formatted_command,
-        cwd=path_config["predictor_dir"],
-        predictor_name=normalized_name,
-        progress_callback=progress_callback,
-    )
-    executed_command = completed["executed_command"]
-
-    command_summary = {
-        "predictor": normalized_name,
-        "command": executed_command,
-        "return_code": int(completed["return_code"]),
-        "stdout": str(completed["combined_output"] or "").strip(),
-        "stderr": str(completed["combined_output"] or "").strip(),
-        "failures_path": str(path_config["failures_path"]),
-    }
-    if completed["return_code"] != 0:
-        raise RuntimeError(
-            f"Local command execution failed for {normalized_name} with exit code {completed['return_code']}.\n"
-            f"Command: {executed_command}\n"
-            f"STDERR: {command_summary['stderr']}"
+    batch_size = _get_optional_tm_local_command_batch_size(normalized_name)
+    execution_mode = get_optional_tm_predictor_spec(normalized_name).get("execution_mode")
+    command_summary = None
+    failure_summary = None
+    import_summary = None
+    processed_records = 0
+    if batch_size and execution_mode == "external_structure" and int(export_summary.get("record_count") or 0) > batch_size:
+        chunks = _prepare_optional_tm_command_chunks(
+            normalized_name,
+            export_summary,
+            chunk_size=batch_size,
         )
-
-    failure_summary = import_optional_tm_prediction_failures(
-        predictor_name=normalized_name,
-        failures_path=str(path_config["failures_path"]),
-        provider="MetaMP",
-        progress_callback=progress_callback,
-    )
-    import_summary = import_optional_tm_prediction_results(
-        predictor_name=normalized_name,
-        input_path=str(path_config["results_path"]),
-        progress_callback=progress_callback,
-    )
+        _emit_progress(
+            progress_callback,
+            f"Running {normalized_name} in {len(chunks)} chunk(s) of up to {batch_size} record(s) with incremental imports.",
+        )
+        command_summaries = []
+        failure_summaries = []
+        import_summaries = []
+        for chunk in chunks:
+            _emit_progress(
+                progress_callback,
+                f"Starting {normalized_name} chunk {chunk['index']}/{chunk['total_chunks']} with {chunk['record_count']} record(s).",
+            )
+            chunk_command_summary, chunk_failure_summary, chunk_import_summary = _execute_optional_tm_local_command_once(
+                predictor_name=normalized_name,
+                command_spec=command_spec,
+                input_paths=chunk,
+                progress_callback=progress_callback,
+            )
+            command_summaries.append(chunk_command_summary)
+            failure_summaries.append(chunk_failure_summary)
+            import_summaries.append(chunk_import_summary)
+            _append_csv_rows(
+                path_config["results_path"],
+                chunk["results_path"],
+                ["pdb_code", "tm_count", "tm_regions"],
+            )
+            _append_csv_rows(
+                path_config["failures_path"],
+                chunk["failures_path"],
+                ["pdb_code", "error_message"],
+            )
+            chunk_processed = int(chunk_import_summary.get("processed_records") or 0) + int(
+                chunk_failure_summary.get("processed_records") or 0
+            )
+            processed_records += chunk_processed
+            _emit_progress(
+                progress_callback,
+                f"Persisted {normalized_name} chunk {chunk['index']}/{chunk['total_chunks']} to normalized storage ({chunk_processed} record(s) processed this chunk, {processed_records} total).",
+            )
+        command_summary = {
+            "predictor": normalized_name,
+            "chunked": True,
+            "chunk_count": int(len(command_summaries)),
+            "chunks": command_summaries,
+            "return_code": 0,
+            "failures_path": str(path_config["failures_path"]),
+        }
+        failure_summary = {
+            "predictor": normalized_name,
+            "chunked": True,
+            "chunk_count": int(len(failure_summaries)),
+            "processed_records": int(
+                sum(int(item.get("processed_records") or 0) for item in failure_summaries)
+            ),
+            "stored_rows": int(
+                sum(int(item.get("stored_rows") or 0) for item in failure_summaries)
+            ),
+            "inserted_rows": int(
+                sum(int(item.get("inserted_rows") or 0) for item in failure_summaries)
+            ),
+            "updated_rows": int(
+                sum(int(item.get("updated_rows") or 0) for item in failure_summaries)
+            ),
+            "chunks": failure_summaries,
+        }
+        import_summary = {
+            "predictor": normalized_name,
+            "chunked": True,
+            "chunk_count": int(len(import_summaries)),
+            "processed_records": int(
+                sum(int(item.get("processed_records") or 0) for item in import_summaries)
+            ),
+            "chunks": import_summaries,
+            "input_path": str(path_config["results_path"]),
+            "import_manifest_path": str(path_config["import_manifest_path"]),
+        }
+    else:
+        command_summary, failure_summary, import_summary = _execute_optional_tm_local_command_once(
+            predictor_name=normalized_name,
+            command_spec=command_spec,
+            input_paths=path_config,
+            progress_callback=progress_callback,
+        )
+        processed_records = int(import_summary.get("processed_records") or 0) + int(
+            failure_summary.get("processed_records") or 0
+        )
     return {
         "predictor": normalized_name,
         "command_configured": True,
@@ -1356,8 +1637,7 @@ def run_optional_tm_local_command(
         "failures": failure_summary,
         "import": import_summary,
         "processed_records": (
-            int(import_summary.get("processed_records") or 0)
-            + int(failure_summary.get("processed_records") or 0)
+            int(processed_records)
             + (
                 int(missing_sequence_summary.get("processed_records") or 0)
                 if missing_sequence_summary
@@ -1801,6 +2081,7 @@ def run_verified_tm_fallback_pipeline(
         "processed_records": 0,
         "per_predictor": {},
     }
+    unsupported_missing_predictors = []
     target_selection_codes = fallback_codes or selected_codes
     for predictor_name in execution_predictors:
         predictor_scope = determine_verified_tm_fallback_targets(
@@ -1842,12 +2123,35 @@ def run_verified_tm_fallback_pipeline(
         aggregate_fallback_summary["processed_records"] += int(
             predictor_summary.get("processed_records") or 0
         )
+        if (
+            predictor_scope.get("pdb_codes")
+            and predictor_name in (predictor_summary.get("unsupported_predictors") or [])
+        ):
+            unsupported_missing_predictors.append(
+                {
+                    "predictor": predictor_name,
+                    "missing_count": len(predictor_scope.get("pdb_codes") or []),
+                }
+            )
 
     if aggregate_fallback_summary["processed_records"] == 0:
-        aggregate_fallback_summary["message"] = (
-            "Selected verified fallback methods already have MetaMP coverage for the selected scope. "
-            "No local fallback run was needed."
-        )
+        if unsupported_missing_predictors:
+            aggregate_fallback_summary["unsupported_missing_predictors"] = unsupported_missing_predictors
+            unsupported_descriptions = ", ".join(
+                f"{item['predictor']} ({item['missing_count']} missing)"
+                for item in unsupported_missing_predictors
+            )
+            aggregate_fallback_summary["message"] = (
+                "Some selected verified fallback methods are still missing MetaMP coverage but are not "
+                "locally runnable in this MetaMP runtime: "
+                + unsupported_descriptions
+                + "."
+            )
+        else:
+            aggregate_fallback_summary["message"] = (
+                "Selected verified fallback methods already have MetaMP coverage for the selected scope. "
+                "No local fallback run was needed."
+            )
     summary["fallback"] = aggregate_fallback_summary
     return summary
 

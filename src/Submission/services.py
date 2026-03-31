@@ -55,7 +55,7 @@ class SQLAlchemySubmissionRepository(SubmissionRepository):
         return Submission.query.all()
 
     def get_by_id(self, submission_id: int) -> Optional[Submission]:
-        return Submission.query.get(submission_id)
+        return db.session.get(Submission, submission_id)
 
     def create(self, payload: dict) -> Submission:
         submission = Submission(**payload)

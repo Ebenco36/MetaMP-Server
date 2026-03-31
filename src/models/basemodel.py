@@ -1,4 +1,3 @@
-from flask_sqlalchemy import SQLAlchemy
 from slugify import slugify
 from datetime import datetime
 from database.db import db
@@ -23,7 +22,7 @@ class BaseModel(db.Model):
 
     @classmethod
     def find_by_id(cls, _id):
-        return cls.query.get(_id)
+        return db.session.get(cls, _id)
 
     @classmethod
     def find_latest(cls):

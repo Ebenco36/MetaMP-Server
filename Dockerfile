@@ -1,4 +1,6 @@
-FROM python:3.10-slim AS builder
+ARG PYTHON_VERSION=3.12.10
+
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 ARG INCLUDE_ML=false
 
@@ -37,7 +39,7 @@ RUN pip install --upgrade pip setuptools wheel && \
     fi
 
 
-FROM python:3.10-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     FLASK_DEBUG=False \
@@ -64,10 +66,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    clang \
     cmake \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
+    libc++-dev \
+    libc++abi-dev \
     libcairo2 \
     libcups2 \
     curl \
@@ -75,6 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdrm2 \
     libeigen3-dev \
     libexpat1 \
+    libfmt-dev \
     libcurl4-openssl-dev \
     libfontconfig1 \
     libgbm1 \
@@ -141,14 +147,27 @@ RUN PUGIXML_VERSION=1.14 && \
     rm v${PUGIXML_VERSION}.tar.gz && \
     ln -sfn pugixml-${PUGIXML_VERSION} pugixml
 
+COPY serverConfig/patch_tmdet_compat.py ./serverConfig/patch_tmdet_compat.py
+
 RUN TMDET_VERSION=4.1.2 && \
-    cd /tmp && \
-    git clone --branch ${TMDET_VERSION} --depth 1 https://github.com/brgenzim/TmDet.git && \
-    cd TmDet && \
-    cmake -B build && \
-    make -j"$(nproc)" -C build && \
-    make -C build install && \
-    ldconfig && \
+    mkdir -p /opt/metamp-optional-tools/tmdet && \
+    if bash -lc 'set -euo pipefail; \
+        cd /tmp; \
+        git clone --branch '"${TMDET_VERSION}"' --depth 1 https://github.com/brgenzim/TmDet.git; \
+        cd TmDet; \
+        python /var/app/serverConfig/patch_tmdet_compat.py /tmp/TmDet; \
+        CC=gcc CXX=g++ cmake -B build \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON; \
+        make -j"$(nproc)" -C build; \
+        make -C build install; \
+        ldconfig' > /opt/metamp-optional-tools/tmdet/build.log 2>&1; then \
+        printf 'TMDET build succeeded on %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /opt/metamp-optional-tools/tmdet/BUILD_STATUS.txt; \
+    else \
+        printf 'TMDET build failed on %s\nSee /opt/metamp-optional-tools/tmdet/build.log for compiler details.\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /opt/metamp-optional-tools/tmdet/BUILD_STATUS.txt; \
+    fi && \
     rm -rf /tmp/TmDet /tmp/contrib
 
 RUN set -eu; \
@@ -214,9 +233,10 @@ RUN set -eu; \
 RUN python /var/app/serverConfig/fix_vegafusion_issues.py || true
 RUN python /var/app/serverConfig/fix_tmbed_issues.py || true
 
-RUN if [ -d /opt/venv/lib/python3.10/site-packages/tmbed ]; then \
-        rm -rf /opt/venv/lib/python3.10/site-packages/tmbed/models && \
-        ln -sfn /var/app/data/tmbed-models /opt/venv/lib/python3.10/site-packages/tmbed/models; \
+RUN TMBED_SITE_PACKAGES="$(python -c 'import site; paths = [path for path in site.getsitepackages() if path.endswith("site-packages")]; print(paths[0] if paths else "")')" && \
+    if [ -n "$TMBED_SITE_PACKAGES" ] && [ -d "$TMBED_SITE_PACKAGES/tmbed" ]; then \
+        rm -rf "$TMBED_SITE_PACKAGES/tmbed/models" && \
+        ln -sfn /var/app/data/tmbed-models "$TMBED_SITE_PACKAGES/tmbed/models"; \
     fi && \
     find /var/app/vendor /opt/metamp-optional-tools -type f \( -name "*.sh" -o -name "metamp-*" -o -name "metamp-run-*" \) -exec chmod +x {} + || true && \
     chown -R appuser:appuser /var/app/data/tmbed-models /var/app/vendor /opt/metamp-optional-tools

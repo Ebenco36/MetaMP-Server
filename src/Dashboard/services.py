@@ -8,10 +8,11 @@ import hashlib
 from numbers import Number
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import altair as alt
-from flask import abort, current_app
+from flask import current_app
 from database.db import db
 from sqlalchemy import func
 from datetime import datetime, timedelta
@@ -22,7 +23,7 @@ from collections import OrderedDict
 from src.services.graphs.helpers import convert_chart
 from utils.redisCache import RedisCache
 from src.MP.model_uniprot import Uniprot
-from sqlalchemy.orm import Query, aliased
+from sqlalchemy.orm import aliased
 from sqlalchemy import select, func, Table
 from sqlalchemy.exc import SQLAlchemyError
 from src.MP.model import MembraneProteinData
@@ -42,9 +43,6 @@ from src.Jobs.TMAlphaFoldSync import (
 )
 from src.services.data.columns.quantitative.quantitative import cell_columns, rcsb_entries
 from src.services.data.columns.quantitative.quantitative_array import quantitative_array_column
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
 logger = logging.getLogger(__name__)
 
 
@@ -5865,7 +5863,7 @@ def get_items(request=None):
     if download in ["csv", "xlsx"]:
         return DashboardRecordPresenter.build_export_dataframe(items.all())
 
-    paginated_items = items.paginate(page=page, per_page=per_page, error_out=False)
+    paginated_items = _paginate_query(items, page=page, per_page=per_page)
     return extract_items_and_metadata(paginated_items, paginated_items.total, MP, OP, UP)
     
     
@@ -5903,18 +5901,19 @@ def get_tables_as_dataframe(table_names, common_id_field):
 
     return merged_df
 
-class PaginatedQuery(Query):
-    def paginate(self, page, per_page=10, error_out=True):
-        if error_out and page < 1:
-            abort(404)
-
-        items = self.limit(per_page).offset((page - 1) * per_page).all()
-        total = self.order_by(None).count()
-
-        return {'items': items, 'total': total, 'page': page, 'per_page': per_page}
-
-# Apply the PaginatedQuery to the SQLAlchemy session
-db.session.query_class = PaginatedQuery
+def _paginate_query(query, page=1, per_page=10):
+    page = max(int(page or 1), 1)
+    per_page = max(int(per_page or 10), 1)
+    total = query.order_by(None).count()
+    items = query.limit(per_page).offset((page - 1) * per_page).all()
+    pages = (total + per_page - 1) // per_page if total else 0
+    return SimpleNamespace(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
 
 def get_table_as_dataframe_exception(table_name, filter_column=None, filter_value=None, page=1, per_page=10, distinct_column=None):
     page = int(page)

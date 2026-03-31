@@ -81,15 +81,22 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+require_file() {
+  [[ -f "$1" ]] || die "Required file not found: $1"
+}
+
 resolve_bootstrap_python() {
   if [[ -n "$BOOTSTRAP_PYTHON_BIN" && -x "$BOOTSTRAP_PYTHON_BIN" ]]; then
     return 0
   fi
-  if command -v python3 >/dev/null 2>&1; then
-    BOOTSTRAP_PYTHON_BIN="$(command -v python3)"
-    return 0
-  fi
-  die "python3 is required to create the virtualenv. Pass --bootstrap-python if python3 is not on PATH."
+  local candidate
+  for candidate in python3.12 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      BOOTSTRAP_PYTHON_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  die "python3.12 or python3 is required to create the virtualenv. Pass --bootstrap-python if neither is on PATH."
 }
 
 prepare_virtualenv() {
@@ -198,6 +205,14 @@ prepare_runtime_paths() {
     "$RUNTIME_ROOT/data/tm_predictions/external"
 }
 
+validate_project_inputs() {
+  require_file "$ROOT_DIR/manage.py"
+  require_file "$ROOT_DIR/requirements.txt"
+  require_file "$ROOT_DIR/requirements-ml.txt"
+  require_file "$ROOT_DIR/datasets/expert_annotation_predicted.csv"
+  [[ -d "$ROOT_DIR/datasets" ]] || die "Required dataset directory not found: $ROOT_DIR/datasets"
+}
+
 prepare_python_env() {
   load_base_env
   prepare_runtime_paths
@@ -260,6 +275,8 @@ export_predictions_csv() {
 }
 
 main() {
+  cd "$ROOT_DIR"
+  validate_project_inputs
   prepare_runtime_paths
   resolve_python_runtime
   prepare_python_env

@@ -178,7 +178,7 @@ def addFeedbackQuestions():
 def addQuestion():
     try:
         # Begin a transaction
-        with db.session.begin(subtransactions=True):
+        with db.session.begin():
             # Add questions to the database
             j = 1
             for category_data in questions_data:
