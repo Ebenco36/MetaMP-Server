@@ -44,9 +44,11 @@ resolve_docker_bin() {
   if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
     return 0
   fi
-  if command -v docker >/dev/null 2>&1; then
-    DOCKER_BIN="$(command -v docker)"
-    return 0
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
   fi
   for candidate in \
     /Applications/Docker.app/Contents/Resources/bin/docker \

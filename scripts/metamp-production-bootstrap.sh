@@ -6,6 +6,7 @@ DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 STATE_FILE="$ROOT_DIR/.metamp-production-bootstrap.state"
 BOOTSTRAP_MARKER_PATH="/var/app/data/bootstrap/production-bootstrap-state.json"
 RUNTIME_DATASET_DIR=""
+DOCKER_BIN="${DOCKER_BIN:-}"
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 WITH_FRONTEND=0
@@ -66,6 +67,29 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+resolve_docker_bin() {
+  if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
+    return 0
+  fi
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  for candidate in \
+    /Applications/Docker.app/Contents/Resources/bin/docker \
+    /usr/local/bin/docker \
+    /opt/homebrew/bin/docker
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKER_BIN="$candidate"
+      return 0
+    fi
+  done
+  die "No supported container CLI was found. Set DOCKER_BIN to docker or podman explicitly."
+}
+
 load_env_file() {
   [[ -f "$ENV_FILE" ]] || die "Env file not found: $ENV_FILE"
   set -a
@@ -87,11 +111,12 @@ compose_args() {
 }
 
 run_compose() {
+  resolve_docker_bin
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
-  docker compose "${args[@]}" "$@"
+  "$DOCKER_BIN" compose "${args[@]}" "$@"
 }
 
 flask_exec() {
@@ -263,8 +288,8 @@ EOF
 
 start_stack() {
   load_env_file
-  require_command docker
   require_command curl
+  resolve_docker_bin
 
   local services=(postgres redis flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
   local build_services=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)

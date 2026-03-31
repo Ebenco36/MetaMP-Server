@@ -16,6 +16,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 DEFAULT_RELEASE_ROOT="$ROOT_DIR/release-snapshots"
+DOCKER_BIN="${DOCKER_BIN:-}"
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
@@ -83,6 +84,29 @@ EOF
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+resolve_container_cli() {
+  if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
+    return 0
+  fi
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  for candidate in \
+    /Applications/Docker.app/Contents/Resources/bin/docker \
+    /usr/local/bin/docker \
+    /opt/homebrew/bin/docker
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKER_BIN="$candidate"
+      return 0
+    fi
+  done
+  die "Missing required container CLI. Set DOCKER_BIN to docker or podman."
 }
 
 resolve_gpu_flag() {
@@ -169,11 +193,12 @@ compose_args() {
 }
 
 run_compose() {
+  resolve_container_cli
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
-  docker compose "${args[@]}" "$@"
+  "$DOCKER_BIN" compose "${args[@]}" "$@"
 }
 
 flask_exec() {
@@ -257,8 +282,8 @@ EOF
 
 main() {
   require_command bash
-  require_command docker
   require_command python3
+  resolve_container_cli
 
   prepare_runtime_env_file
   trap '[[ -n "$TEMP_ENV_FILE" && -f "$TEMP_ENV_FILE" ]] && rm -f "$TEMP_ENV_FILE"' EXIT
