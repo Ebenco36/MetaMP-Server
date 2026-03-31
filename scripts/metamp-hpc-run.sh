@@ -284,6 +284,7 @@ main() {
   require_command bash
   require_command python3
   resolve_container_cli
+  export DOCKER_BIN
 
   prepare_runtime_env_file
   trap '[[ -n "$TEMP_ENV_FILE" && -f "$TEMP_ENV_FILE" ]] && rm -f "$TEMP_ENV_FILE"' EXIT
