@@ -25,6 +25,8 @@ ENV_FILE="$DEFAULT_ENV_FILE"
 RUNTIME_ROOT="$DEFAULT_RUNTIME_ROOT"
 SQLITE_PATH=""
 CSV_EXPORT_PATH=""
+VENV_DIR=""
+PYTHON_BIN=""
 REBUILD_DB=0
 INCLUDE_COMPLETED=0
 USE_GPU_MODE="${USE_GPU_MODE:-auto}"
@@ -54,6 +56,7 @@ Options:
   --runtime-root PATH      Runtime working directory. Default: release-snapshots/sqlite-tmbed-runtime
   --sqlite-path PATH       SQLite database file path. Default: <runtime-root>/metamp_hpc.sqlite
   --csv-export PATH        CSV export path. Default: <runtime-root>/membrane_protein_tmalphafold_predictions.csv
+  --venv-dir PATH          Virtualenv directory to use. Default: auto-detect .venv, .venv_mpvis, then .mpvis
   --rebuild-db             Remove the SQLite DB and reload datasets before the TMbed run.
   --include-completed      Rerun TMbed even if MetaMP already has SQLite rows for a record.
   --gpu-mode MODE          One of: auto, on, off. Default: auto
@@ -65,6 +68,33 @@ EOF
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+resolve_python_runtime() {
+  if [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$VENV_DIR" ]]; then
+    [[ -x "$VENV_DIR/bin/python" ]] || die "Virtualenv python not found at $VENV_DIR/bin/python"
+    PYTHON_BIN="$VENV_DIR/bin/python"
+    return 0
+  fi
+
+  local candidate
+  for candidate in \
+    "$ROOT_DIR/.venv" \
+    "$ROOT_DIR/.venv_mpvis" \
+    "$ROOT_DIR/.mpvis"
+  do
+    if [[ -x "$candidate/bin/python" ]]; then
+      VENV_DIR="$candidate"
+      PYTHON_BIN="$candidate/bin/python"
+      return 0
+    fi
+  done
+
+  die "No project virtualenv was found. Create one first or pass --venv-dir /path/to/.venv."
 }
 
 resolve_gpu_flag() {
@@ -133,7 +163,7 @@ prepare_python_env() {
 }
 
 run_flask() {
-  python3 -m flask "$@"
+  "$PYTHON_BIN" -m flask "$@"
 }
 
 bootstrap_sqlite_db() {
@@ -173,9 +203,13 @@ export_predictions_csv() {
 }
 
 main() {
-  require_command python3
+  resolve_python_runtime
   prepare_python_env
 
+  log "Python runtime: $PYTHON_BIN"
+  if [[ -n "$VENV_DIR" ]]; then
+    log "Virtualenv: $VENV_DIR"
+  fi
   log "SQLite database: $SQLITE_PATH"
   log "CSV export path: $CSV_EXPORT_PATH"
   log "TMbed GPU enabled: $TM_PREDICTION_USE_GPU"
@@ -203,6 +237,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --csv-export)
       CSV_EXPORT_PATH="$2"
+      shift 2
+      ;;
+    --venv-dir)
+      VENV_DIR="$2"
       shift 2
       ;;
     --rebuild-db)
