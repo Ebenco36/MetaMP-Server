@@ -136,6 +136,27 @@ class QuantitativeDatasetBuilder:
             return None
         latest_run_date, dated_quantitative_path = latest_dataset
 
+        source_paths = [
+            context.layout.mpstruc_dataset_current,
+            context.layout.pdb_dataset_current,
+        ]
+        try:
+            quantitative_mtime = dated_quantitative_path.stat().st_mtime
+            newer_sources = [
+                path.name
+                for path in source_paths
+                if path.exists() and path.stat().st_mtime > quantitative_mtime
+            ]
+        except FileNotFoundError:
+            newer_sources = []
+
+        if newer_sources:
+            context.report(
+                "[quantitative] Skipping artifact reuse because upstream source data changed after the last quantitative build: "
+                + ", ".join(newer_sources)
+            )
+            return None
+
         if not context.layout.quantitative_dataset(context.run_date).exists():
             shutil.copyfile(
                 dated_quantitative_path,

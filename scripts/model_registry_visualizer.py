@@ -66,12 +66,12 @@ DR_DISPLAY: dict[str, str] = {
     "umap": "UMAP",
 }
 
-FONT_FAMILY = "Inter, Helvetica Neue, Arial, sans-serif"
+FONT_FAMILY = "Arial Black, Arial, Helvetica Neue, sans-serif"
 FONT_COLOR_FG = "#28251d"
 FONT_COLOR_MU = "#7a7974"
-BG_PAPER = "#f7f6f2"
-BG_PLOT = "#f9f8f5"
-GRID_COLOR = "#dcd9d5"
+BG_PAPER = "#ffffff"
+BG_PLOT = "#ffffff"
+GRID_COLOR = "#d7dde5"
 DR_ORDER = ["no_dr", "pca", "tsne", "umap"]
 
 
@@ -171,23 +171,24 @@ class ModelRecord:
 
 
 def _base_layout(title: str, subtitle: str = "") -> dict[str, Any]:
+    emphasized_title = f"<b>{title}</b>"
     full_title = (
-        f"{title}<br><span style='font-size:14px;font-weight:400;"
+        f"{emphasized_title}<br><span style='font-size:17px;font-weight:600;"
         f"color:{FONT_COLOR_MU};'>{subtitle}</span>"
         if subtitle
-        else title
+        else emphasized_title
     )
     return dict(
         title=dict(
             text=full_title,
-            font=dict(size=20, color=FONT_COLOR_FG, family=FONT_FAMILY),
+            font=dict(size=24, color=FONT_COLOR_FG, family=FONT_FAMILY),
             x=0.5,
             xanchor="center",
         ),
         paper_bgcolor=BG_PAPER,
         plot_bgcolor=BG_PLOT,
-        font=dict(family=FONT_FAMILY, color=FONT_COLOR_FG, size=13),
-        margin=dict(l=80, r=60, t=120, b=135),
+        font=dict(family=FONT_FAMILY, color=FONT_COLOR_FG, size=18),
+        margin=dict(l=90, r=70, t=135, b=145),
         width=FIGURE_WIDTH,
         height=FIGURE_HEIGHT,
         legend=dict(
@@ -196,10 +197,10 @@ def _base_layout(title: str, subtitle: str = "") -> dict[str, Any]:
             xanchor="center",
             y=-0.16,
             yanchor="top",
-            bgcolor="rgba(249,248,245,0.92)",
+            bgcolor="rgba(255,255,255,0.94)",
             bordercolor=GRID_COLOR,
             borderwidth=1,
-            font=dict(size=12),
+            font=dict(size=16),
         ),
     )
 
@@ -488,7 +489,7 @@ class ModelRegistryVisualizer:
                 showarrow=True,
                 arrowhead=2,
                 arrowcolor=TRAINING_MODE_PALETTE["supervised"],
-                font=dict(size=11, color=TRAINING_MODE_PALETTE["supervised"]),
+                font=dict(size=14, color=TRAINING_MODE_PALETTE["supervised"]),
                 xanchor="left",
             )
 
@@ -518,18 +519,28 @@ class ModelRegistryVisualizer:
         """Horizontal ranked bar chart — top-N by Expert F1 with CV F1 overlay."""
         df = self.df.copy()
         top = df.nlargest(n, "expert_f1_weighted").sort_values("expert_f1_weighted")
-        colours = [TRAINING_MODE_PALETTE.get(m, "#888") for m in top["training_mode"]]
+        top["rank_label"] = (
+            top["short_label"]
+            + " · "
+            + top["training_mode"].astype(str).str.replace("_", "-", regex=False).str.title()
+        )
+        bar_colours = ["#1f5a91"] * len(top.index)
+        selected_mask = top["selected_for_upload"] == True
+        for idx, is_selected in enumerate(selected_mask.tolist()):
+            if is_selected:
+                bar_colours[idx] = "#a13544"
+        mode_marker_colours = [TRAINING_MODE_PALETTE.get(m, "#888") for m in top["training_mode"]]
 
         fig = go.Figure()
         fig.add_trace(
             go.Bar(
-                y=top["short_label"],
+                y=top["rank_label"],
                 x=top["expert_f1_weighted"],
                 orientation="h",
                 name="Expert F1",
                 marker=dict(
-                    color=colours,
-                    opacity=0.88,
+                    color=bar_colours,
+                    opacity=0.9,
                     line=dict(color="white", width=0.6),
                 ),
                 hovertemplate="<b>%{y}</b><br>Expert F1: %{x:.4f}<extra></extra>",
@@ -537,18 +548,34 @@ class ModelRegistryVisualizer:
         )
         fig.add_trace(
             go.Scatter(
-                y=top["short_label"],
+                y=top["rank_label"],
                 x=top["cv_mean_f1"],
                 mode="markers",
                 name="CV F1",
                 marker=dict(
                     symbol="diamond",
-                    size=9,
-                    color=FONT_COLOR_FG,
-                    opacity=0.7,
+                    size=12,
+                    color="#d19900",
+                    opacity=0.9,
                     line=dict(color="white", width=0.8),
                 ),
                 hovertemplate="<b>%{y}</b><br>CV F1: %{x:.4f}<extra></extra>",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                y=top["rank_label"],
+                x=[0.782] * len(top.index),
+                mode="markers",
+                name="Training mode",
+                marker=dict(
+                    symbol="circle",
+                    size=12,
+                    color=mode_marker_colours,
+                    line=dict(color="white", width=0.8),
+                ),
+                customdata=top["training_mode"].astype(str).str.replace("_", "-", regex=False).str.title(),
+                hovertemplate="<b>%{y}</b><br>Training mode: %{customdata}<extra></extra>",
             )
         )
 
@@ -557,21 +584,22 @@ class ModelRegistryVisualizer:
             row = upload.iloc[0]
             fig.add_annotation(
                 x=row["expert_f1_weighted"] + 0.003,
-                y=row["short_label"],
+                y=row["rank_label"],
                 text="★ selected",
                 showarrow=False,
-                font=dict(size=11, color=TRAINING_MODE_PALETTE["supervised"]),
+                font=dict(size=15, color="#a13544"),
                 xanchor="left",
             )
 
         for mode, colour in TRAINING_MODE_PALETTE.items():
             fig.add_trace(
-                go.Bar(
-                    y=[None],
+                go.Scatter(
                     x=[None],
-                    orientation="h",
-                    marker=dict(color=colour),
+                    y=[None],
+                    mode="markers",
+                    marker=dict(color=colour, size=12),
                     name=mode.replace("_", "-").title(),
+                    legendgroup="training_mode",
                     showlegend=True,
                 )
             )
@@ -579,7 +607,7 @@ class ModelRegistryVisualizer:
         fig.update_layout(
             **_base_layout(
                 f"Top {n} Models by Expert F1",
-                "Bars = Expert F1 (colour = training mode)  ·  ◆ = CV F1",
+                "Blue bars = Expert F1  ·  gold diamonds = CV F1  ·  coloured circles = training mode  ·  red bar = selected upload bundle",
             )
         )
         fig.update_xaxes(
@@ -678,7 +706,7 @@ class ModelRegistryVisualizer:
                         y=i,
                         text=text,
                         showarrow=False,
-                        font=dict(size=13, color=font_color),
+                        font=dict(size=15, color=font_color),
                         xref="x",
                         yref="y",
                     )
@@ -887,7 +915,7 @@ class ModelRegistryVisualizer:
                     yref=f"y{col_idx} domain",
                     text="No production<br>registry bundle",
                     showarrow=False,
-                    font=dict(size=13, color=FONT_COLOR_MU),
+                    font=dict(size=15, color=FONT_COLOR_MU),
                     align="center",
                 )
                 continue
@@ -916,7 +944,7 @@ class ModelRegistryVisualizer:
                     x=[None],
                     y=[None],
                     mode="markers",
-                    marker=dict(size=10, color=colour),
+                    marker=dict(size=12, color=colour),
                     name=clf,
                     showlegend=True,
                 )
@@ -954,7 +982,18 @@ class ModelRegistryVisualizer:
                 if fmt in ("png", "pdf"):
                     fig.write_image(str(dest), scale=2 if fmt == "png" else 1)
                 elif fmt == "html":
-                    fig.write_html(str(dest), include_plotlyjs="cdn", full_html=True)
+                    fig.write_html(
+                        str(dest),
+                        include_plotlyjs="cdn",
+                        include_mathjax=False,
+                        full_html=True,
+                    )
+                    html_text = dest.read_text(encoding="utf-8")
+                    html_text = html_text.replace(
+                        "<script type=\"text/javascript\">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>",
+                        "",
+                    )
+                    dest.write_text(html_text, encoding="utf-8")
                 elif fmt == "json":
                     dest.write_text(fig.to_json())
                 paths["paths"][fmt] = str(dest)

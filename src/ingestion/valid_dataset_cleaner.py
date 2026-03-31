@@ -64,6 +64,7 @@ def report_and_clean_missing_values(df, threshold=20, protected_columns=None):
         "citation",
         "rcsb_entry_info_resolution_combined",
     ]
+    exempt.extend(protected)
     df = remove_columns_with_listlike_contents(df, exempt_columns=exempt)
     df = df.replace("NaN", np.nan)
 
@@ -234,7 +235,18 @@ def write_valid_datasets(layout: DatasetLayout, progress_callback=None) -> None:
                 continue
 
         df = pd.read_csv(src, low_memory=False, encoding="utf-8")
-        clean = report_and_clean_missing_values(df, threshold=90)
+        protected_columns = []
+        if out_name in {"Mpstruct_dataset.csv", "Quantitative_data.csv"}:
+            protected_columns = ["Related Pdb Entries", "related_pdb_entries"]
+        if out_name == "NEWOPM.csv":
+            # Preserve the full OPM source column set for database loading.
+            clean = df.replace("NaN", np.nan)
+        else:
+            clean = report_and_clean_missing_values(
+                df,
+                threshold=90,
+                protected_columns=protected_columns,
+            )
         deduplicated = deduplicate_valid_dataset(clean, out_name)
         removed_count = len(clean) - len(deduplicated)
         if removed_count > 0:

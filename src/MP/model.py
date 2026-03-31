@@ -19,6 +19,7 @@ class MembraneProteinData(db.Model):
     replacement_pdb_code = db.Column(db.Text)
     canonical_pdb_code = db.Column(db.Text)
     uniprot_id = db.Column(db.Text)
+    sequence_sequence = db.Column(db.Text)
     cell_angle_alpha = db.Column(db.Float)
     cell_angle_beta = db.Column(db.Float)
     cell_angle_gamma = db.Column(db.Float)

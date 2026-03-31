@@ -428,7 +428,10 @@ class DashboardAnnotationDatasetService:
     NORMALIZED_METHOD_FIELD_MAP = {
         "TMbed": ("TMbed_tm_count", "TMbed_tm_regions"),
         "DeepTMHMM": ("DeepTMHMM_tm_count", "DeepTMHMM_tm_regions"),
+        "TMDET": ("TMDET_tm_count", "TMDET_tm_regions"),
+        "TMHMM": ("TMHMM_tm_count", "TMHMM_tm_regions"),
         "Phobius": ("Phobius_tm_count", "Phobius_tm_regions"),
+        "Topcons2": ("TOPCONS_tm_count", "TOPCONS_tm_regions"),
         "TOPCONS": ("TOPCONS_tm_count", "TOPCONS_tm_regions"),
         "CCTOP": ("CCTOP_tm_count", "CCTOP_tm_regions"),
     }
@@ -484,6 +487,10 @@ class DashboardAnnotationDatasetService:
         "TMbed_tm_regions": ("tmbed", "predicted"),
         "DeepTMHMM_tm_count": ("deeptmhmm", "predicted"),
         "DeepTMHMM_tm_regions": ("deeptmhmm", "predicted"),
+        "TMDET_tm_count": ("tmdet", "predicted"),
+        "TMDET_tm_regions": ("tmdet", "predicted"),
+        "TMHMM_tm_count": ("tmhmm", "predicted"),
+        "TMHMM_tm_regions": ("tmhmm", "predicted"),
         "Phobius_tm_count": ("phobius", "predicted"),
         "Phobius_tm_regions": ("phobius", "predicted"),
         "TOPCONS_tm_count": ("topcons", "predicted"),
@@ -518,6 +525,10 @@ class DashboardAnnotationDatasetService:
             "TMbed_tm_regions",
             "DeepTMHMM_tm_count",
             "DeepTMHMM_tm_regions",
+            "TMDET_tm_count",
+            "TMDET_tm_regions",
+            "TMHMM_tm_count",
+            "TMHMM_tm_regions",
             "Phobius_tm_count",
             "Phobius_tm_regions",
             "TOPCONS_tm_count",
@@ -648,6 +659,7 @@ class DashboardAnnotationDatasetService:
     def _attach_normalized_tm_prediction_payload(cls, record, summaries_by_code=None):
         prepared_record = dict(record or {})
         normalized_code = cls._resolve_record_lookup_code(prepared_record)
+
         structure_context = prepared_record.get("structure_context") or {}
         if not structure_context:
             try:
@@ -660,22 +672,65 @@ class DashboardAnnotationDatasetService:
             normalized_summaries = get_normalized_tm_prediction_summaries(normalized_code)
         else:
             normalized_summaries = summaries_by_code.get(normalized_code, [])
-        prepared_record["normalized_tm_predictions"] = cls._enrich_normalized_tm_prediction_summaries(
+
+        normalized_predictions = cls._enrich_normalized_tm_prediction_summaries(
             normalized_summaries,
             structure_context,
         )
+
+        prepared_record["normalized_tm_predictions"] = normalized_predictions
+        prepared_record["tm_prediction_groups"] = cls._group_normalized_tm_predictions_by_provider(
+            normalized_predictions
+        )
         prepared_record["tmalphafold_predictions"] = [
-            item
-            for item in prepared_record["normalized_tm_predictions"]
+            item for item in normalized_predictions
             if item.get("provider") == "TMAlphaFold"
         ]
+        prepared_record["metamp_predictions"] = [
+            item for item in normalized_predictions
+            if item.get("provider") == "MetaMP"
+        ]
+
         prepared_record["tm_prediction_overview"] = cls._build_tm_prediction_overview(
-            prepared_record["normalized_tm_predictions"]
+            normalized_predictions
         )
         prepared_record["tm_prediction_summary_card"] = cls._build_tm_prediction_summary_card(
-            prepared_record["normalized_tm_predictions"]
+            normalized_predictions
         )
+
         return cls._apply_normalized_tm_prediction_fields(prepared_record)
+
+    @classmethod
+    def _group_normalized_tm_predictions_by_provider(cls, normalized_predictions):
+        grouped = OrderedDict()
+
+        for item in normalized_predictions or []:
+            provider = str(item.get("provider") or "Unknown").strip() or "Unknown"
+            grouped.setdefault(provider, [])
+            grouped[provider].append(item)
+
+        payload = []
+        for provider, items in grouped.items():
+            methods = [
+                str(entry.get("method") or "").strip()
+                for entry in items
+                if str(entry.get("method") or "").strip()
+            ]
+            payload.append(
+                {
+                    "provider": provider,
+                    "items": items,
+                    "method_count": len(methods),
+                    "methods": methods,
+                    "available_items": [
+                        entry
+                        for entry in items
+                        if (entry.get("derived_topology") or {}).get("available")
+                        or entry.get("tm_count") is not None
+                    ],
+                }
+            )
+        return payload
 
     @classmethod
     def _apply_normalized_tm_prediction_fields(cls, record):
@@ -717,6 +772,13 @@ class DashboardAnnotationDatasetService:
         record["tm_prediction_has_ambiguous_results"] = bool(
             summary_card.get("has_ambiguous_results")
         )
+        record["tm_prediction_groups"] = record.get("tm_prediction_groups") or cls._group_normalized_tm_predictions_by_provider(
+            normalized_predictions
+        )
+        record["tm_prediction_group_count"] = len(record["tm_prediction_groups"])
+        record["tm_prediction_available_providers"] = [
+            item.get("provider") for item in record["tm_prediction_groups"]
+        ]
         for method, (count_field, regions_field) in cls.NORMALIZED_METHOD_FIELD_MAP.items():
             summary = preferred_predictions_by_method.get(method)
             if not summary:
@@ -747,27 +809,38 @@ class DashboardAnnotationDatasetService:
     @classmethod
     def _build_tm_prediction_overview(cls, normalized_predictions):
         normalized_predictions = normalized_predictions or []
-        available_methods = []
+        available_provider_methods = []
         topology_labels = []
+
         for item in normalized_predictions:
+            provider = str(item.get("provider") or "").strip()
             method = str(item.get("method") or "").strip()
-            if method:
-                available_methods.append(method)
+            provider_method = f"{provider}:{method}" if provider and method else method or provider
+
+            if provider_method:
+                available_provider_methods.append(provider_method)
+
             derived = item.get("derived_topology") or {}
             topology_label = derived.get("topology_label")
             if topology_label:
                 topology_labels.append(
                     {
+                        "provider": provider,
                         "method": method,
-                        "provider": item.get("provider"),
+                        "provider_method": provider_method,
                         "topology_label": topology_label,
                         "compact_label": derived.get("compact_label"),
+                        "prediction_kind": item.get("prediction_kind"),
                     }
                 )
+
+        grouped = cls._group_normalized_tm_predictions_by_provider(normalized_predictions)
+
         return {
-            "available_method_count": len(available_methods),
-            "available_methods": available_methods,
+            "available_method_count": len(available_provider_methods),
+            "available_methods": available_provider_methods,
             "topology_labels": topology_labels,
+            "groups": grouped,
         }
 
     @classmethod
@@ -775,24 +848,37 @@ class DashboardAnnotationDatasetService:
         normalized_predictions = normalized_predictions or []
         preferred_order = [
             ("TMAlphaFold", "DeepTMHMM"),
+            ("MetaMP", "DeepTMHMM"),
             ("MetaMP", "TMbed"),
             ("TMAlphaFold", "Topcons2"),
+            ("MetaMP", "Topcons2"),
             ("TMAlphaFold", "Phobius"),
+            ("MetaMP", "Phobius"),
             ("TMAlphaFold", "TMHMM"),
+            ("MetaMP", "TMHMM"),
             ("TMAlphaFold", "ScampiMsa"),
+            ("MetaMP", "ScampiMsa"),
             ("TMAlphaFold", "Scampi"),
+            ("MetaMP", "Scampi"),
             ("TMAlphaFold", "Octopus"),
+            ("MetaMP", "Octopus"),
             ("TMAlphaFold", "Hmmtop"),
+            ("MetaMP", "Hmmtop"),
             ("TMAlphaFold", "Memsat"),
+            ("MetaMP", "Memsat"),
             ("TMAlphaFold", "Philius"),
+            ("MetaMP", "Philius"),
             ("TMAlphaFold", "Pro"),
+            ("MetaMP", "Pro"),
             ("TMAlphaFold", "Prodiv"),
+            ("MetaMP", "Prodiv"),
             ("TMAlphaFold", "TMDET"),
+            ("MetaMP", "TMDET"),
             ("TMAlphaFold", "SignalP"),
+            ("MetaMP", "SignalP"),
+            ("MetaMP", "CCTOP"),
         ]
-        order_lookup = {
-            key: index for index, key in enumerate(preferred_order)
-        }
+        order_lookup = {key: index for index, key in enumerate(preferred_order)}
 
         def sort_key(item):
             return (
@@ -802,6 +888,7 @@ class DashboardAnnotationDatasetService:
             )
 
         sorted_predictions = sorted(normalized_predictions, key=sort_key)
+
         preferred = None
         for item in sorted_predictions:
             derived = item.get("derived_topology") or {}
@@ -812,15 +899,26 @@ class DashboardAnnotationDatasetService:
             preferred = sorted_predictions[0]
 
         preferred_derived = (preferred or {}).get("derived_topology") or {}
-        available_methods = [
-            str(item.get("method") or "").strip()
-            for item in sorted_predictions
-            if str(item.get("method") or "").strip()
-        ]
+        available_methods = []
+        for item in sorted_predictions:
+            provider = str(item.get("provider") or "").strip()
+            method = str(item.get("method") or "").strip()
+            provider_method = f"{provider}:{method}" if provider and method else method or provider
+            if provider_method:
+                available_methods.append(provider_method)
+
         return {
             "available": bool(sorted_predictions),
             "method_count": len(available_methods),
             "available_methods": available_methods,
+            "grouped_methods": [
+                {
+                    "provider": group["provider"],
+                    "methods": group["methods"],
+                    "method_count": group["method_count"],
+                }
+                for group in cls._group_normalized_tm_predictions_by_provider(sorted_predictions)
+            ],
             "preferred_provider": (preferred or {}).get("provider"),
             "preferred_method": (preferred or {}).get("method"),
             "preferred_prediction_kind": (preferred or {}).get("prediction_kind"),
@@ -884,6 +982,50 @@ class DashboardAnnotationDatasetService:
         normalized["replacement_status_label"] = _replacement_status_label(
             normalized.get("is_replaced")
         )
+        normalized["related_pdb_entries"] = cls._deserialize_related_pdb_entries(
+            normalized.get("related_pdb_entries")
+        )
+        return normalized
+
+    @staticmethod
+    def _deserialize_related_pdb_entries(value):
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [
+                str(item).strip().upper()
+                for item in value
+                if str(item or "").strip()
+            ]
+
+        text = str(value).strip()
+        if not text or text.lower() in {"nan", "none", "null", "undefined"}:
+            return []
+
+        try:
+            loaded = json.loads(text)
+        except json.JSONDecodeError:
+            repaired = (
+                text.replace("'\"", '"')
+                .replace("\"'", '"')
+                .replace("''", "'")
+            )
+            try:
+                loaded = json.loads(repaired)
+            except json.JSONDecodeError:
+                return []
+
+        if not isinstance(loaded, list):
+            return []
+
+        normalized = []
+        seen = set()
+        for item in loaded:
+            code = str(item or "").strip().upper()
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            normalized.append(code)
         return normalized
 
     @classmethod
@@ -945,6 +1087,7 @@ class DashboardAnnotationDatasetService:
                     "group",
                     "Group (MPstruc)",
                     "Group (OPM)",
+                    "related_pdb_entries",
                     "subunit_segments",
                     "opm_tm_regions",
                     "famsupclasstype_type_name",
@@ -1010,6 +1153,7 @@ class DashboardAnnotationDatasetService:
             ("subgroup", "subgroup_y"),
             ("species", "species_y"),
             ("taxonomic_domain", "taxonomic_domain_y"),
+            ("related_pdb_entries", "related_pdb_entries_y"),
             ("rcsentinfo_experimental_method", "rcsentinfo_experimental_method_y"),
             ("rcsb_primary_citation_country", "rcsb_primary_citation_country_y"),
             ("is_replaced", "is_replaced_y"),
@@ -1045,6 +1189,7 @@ class DashboardAnnotationDatasetService:
                 "subgroup_y",
                 "species_y",
                 "taxonomic_domain_y",
+                "related_pdb_entries_y",
                 "rcsentinfo_experimental_method_y",
                 "rcsb_primary_citation_country_y",
                 "bibliography_year_y",
@@ -1090,6 +1235,7 @@ class DashboardAnnotationDatasetService:
             ("subgroup", "subgroup_current"),
             ("species", "species_current"),
             ("taxonomic_domain", "taxonomic_domain_current"),
+            ("related_pdb_entries", "related_pdb_entries_current"),
             (
                 "rcsentinfo_experimental_method",
                 "rcsentinfo_experimental_method_current",
@@ -1193,6 +1339,7 @@ class DashboardAnnotationDatasetService:
             "subgroup",
             "species",
             "taxonomic_domain",
+            "related_pdb_entries",
             "rcsentinfo_experimental_method",
             "rcsb_primary_citation_country",
             "bibliography_year",
@@ -1468,6 +1615,10 @@ class DashboardAnnotationDatasetService:
                     "TMbed_tm_regions",
                     "DeepTMHMM_tm_count",
                     "DeepTMHMM_tm_regions",
+                    "TMDET_tm_count",
+                    "TMDET_tm_regions",
+                    "TMHMM_tm_count",
+                    "TMHMM_tm_regions",
                 ]
                 if field in tm_summary_df.columns
             ]
@@ -1485,7 +1636,7 @@ class DashboardAnnotationDatasetService:
         else:
             merged["opm_tm_regions"] = None
 
-        for field in ["TMbed_tm_regions", "DeepTMHMM_tm_regions", "opm_tm_regions"]:
+        for field in ["TMbed_tm_regions", "DeepTMHMM_tm_regions", "TMDET_tm_regions", "opm_tm_regions"]:
             if field in merged.columns:
                 merged[field] = merged[field].apply(cls._normalize_tm_region_value)
 
@@ -1579,6 +1730,7 @@ class DashboardAnnotationDatasetService:
     @classmethod
     def _get_sources_present(cls, record):
         sources = []
+
         if cls._has_any_value(record, ["group", "subgroup", "name", "species"]):
             sources.append("mpstruc")
         if cls._has_any_value(record, ["struct_title", "rcsentinfo_experimental_method", "is_replaced"]):
@@ -1587,22 +1739,29 @@ class DashboardAnnotationDatasetService:
             sources.append("uniprot")
         if cls._has_any_value(record, ["family_name_cache", "thickness", "tilt", "membrane_topology_in", "opm_tm_regions"]):
             sources.append("opm")
-        if cls._has_any_value(record, ["TMbed_tm_count", "TMbed_tm_regions"]):
-            sources.append("tmbed")
-        if cls._has_any_value(record, ["DeepTMHMM_tm_count", "DeepTMHMM_tm_regions"]):
-            sources.append("deeptmhmm")
-        if cls._has_any_value(record, ["Phobius_tm_count", "Phobius_tm_regions"]):
-            sources.append("phobius")
-        if cls._has_any_value(record, ["TOPCONS_tm_count", "TOPCONS_tm_regions"]):
-            sources.append("topcons")
-        if cls._has_any_value(record, ["CCTOP_tm_count", "CCTOP_tm_regions"]):
-            sources.append("cctop")
-        if record.get("tmalphafold_predictions"):
+
+        provider_method_rows = record.get("normalized_tm_predictions") or []
+        providers_seen = set()
+        methods_seen = set()
+
+        for item in provider_method_rows:
+            provider = str(item.get("provider") or "").strip()
+            method = str(item.get("method") or "").strip()
+            if provider:
+                providers_seen.add(provider.lower())
+            if method:
+                methods_seen.add(method.lower())
+
+        if "tmalphafold" in providers_seen:
             sources.append("tmalphafold")
+        if "metamp" in providers_seen:
+            sources.append("metamp_tm_predictions")
+
         if cls._has_any_value(record, ["Group (Predicted)"]):
             sources.append("metamp_ml_classifier")
         if cls._has_any_value(record, ["Group (Expert)", "TM (Expert)"]):
             sources.append("expert_annotation_dataset")
+
         return sources
 
     @classmethod
@@ -1627,6 +1786,8 @@ class DashboardAnnotationDatasetService:
         annotation_score = cls._safe_float(record.get("annotation_score"))
         tmbed_count = cls._safe_int(record.get("TMbed_tm_count"))
         deeptmhmm_count = cls._safe_int(record.get("DeepTMHMM_tm_count"))
+        tmdet_count = cls._safe_int(record.get("TMDET_tm_count"))
+        tmhmm_count = cls._safe_int(record.get("TMHMM_tm_count"))
         phobius_count = cls._safe_int(record.get("Phobius_tm_count"))
         topcons_count = cls._safe_int(record.get("TOPCONS_tm_count"))
         cctop_count = cls._safe_int(record.get("CCTOP_tm_count"))
@@ -1638,6 +1799,8 @@ class DashboardAnnotationDatasetService:
                 ("opm", "opm_tm_regions"),
                 ("TMbed", "TMbed_tm_regions"),
                 ("DeepTMHMM", "DeepTMHMM_tm_regions"),
+                ("TMDET", "TMDET_tm_regions"),
+                ("TMHMM", "TMHMM_tm_regions"),
                 ("Phobius", "Phobius_tm_regions"),
                 ("TOPCONS", "TOPCONS_tm_regions"),
                 ("CCTOP", "CCTOP_tm_regions"),
@@ -1650,6 +1813,8 @@ class DashboardAnnotationDatasetService:
             for value in [
                 tmbed_count,
                 deeptmhmm_count,
+                tmdet_count,
+                tmhmm_count,
                 phobius_count,
                 topcons_count,
                 cctop_count,
@@ -1673,6 +1838,8 @@ class DashboardAnnotationDatasetService:
             "predictor_counts": {
                 "TMbed_tm_count": tmbed_count,
                 "DeepTMHMM_tm_count": deeptmhmm_count,
+                "TMDET_tm_count": tmdet_count,
+                "TMHMM_tm_count": tmhmm_count,
                 "Phobius_tm_count": phobius_count,
                 "TOPCONS_tm_count": topcons_count,
                 "CCTOP_tm_count": cctop_count,
@@ -1812,11 +1979,13 @@ class DashboardAnnotationDatasetService:
             "expert": cls._safe_int(record.get("TM (Expert)")),
             "TMbed": cls._safe_int(record.get("TMbed_tm_count")),
             "DeepTMHMM": cls._safe_int(record.get("DeepTMHMM_tm_count")),
+            "TMDET": cls._safe_int(record.get("TMDET_tm_count")),
+            "TMHMM": cls._safe_int(record.get("TMHMM_tm_count")),
         }
         selected_tm_count = tm_counts.get("expert")
         selected_tm_source = "expert_annotation_dataset" if selected_tm_count is not None else None
         if selected_tm_count is None:
-            for source_name in ("TMbed", "DeepTMHMM"):
+            for source_name in ("TMbed", "DeepTMHMM", "TMDET", "TMHMM"):
                 if tm_counts.get(source_name) is not None:
                     selected_tm_count = tm_counts[source_name]
                     selected_tm_source = source_name.lower()
@@ -1983,6 +2152,16 @@ class DashboardAnnotationDatasetService:
                 "value": cls._safe_int(record.get("CCTOP_tm_count")),
                 "category": "live_predictor",
             },
+            {
+                "source": "TMDET",
+                "value": cls._safe_int(record.get("TMDET_tm_count")),
+                "category": "live_predictor",
+            },
+            {
+                "source": "TMHMM",
+                "value": cls._safe_int(record.get("TMHMM_tm_count")),
+                "category": "live_predictor",
+            },
         ]
         for summary in record.get("tmalphafold_predictions") or []:
             derived_topology = summary.get("derived_topology") or {}
@@ -2027,6 +2206,8 @@ class DashboardAnnotationDatasetService:
             "metamp_ml_classifier",
             "tmbed",
             "deeptmhmm",
+            "tmdet",
+            "tmhmm",
             "phobius",
             "topcons",
             "cctop",
@@ -2047,7 +2228,7 @@ class DashboardAnnotationDatasetService:
                 card["last_updated"] = dataset_versions.get("annotation_dataset", {}).get("modified_at")
             elif source_key == "metamp_ml_classifier":
                 card["last_updated"] = live_prediction_file.get("modified_at")
-            elif source_key in {"tmbed", "deeptmhmm", "phobius", "topcons", "cctop"}:
+            elif source_key in {"tmbed", "deeptmhmm", "phobius", "topcons", "cctop", "tmdet", "tmhmm"}:
                 card["last_updated"] = dataset_versions.get("tm_prediction_summary", {}).get("modified_at")
             elif source_key == "tmalphafold":
                 card["last_updated"] = None
@@ -2515,7 +2696,15 @@ class DashboardAnnotationDatasetService:
         try:
             loaded = json.loads(normalized)
         except json.JSONDecodeError:
-            return []
+            repaired = (
+                normalized.replace("'\"", '"')
+                .replace("\"'", '"')
+                .replace("''", "'")
+            )
+            try:
+                loaded = json.loads(repaired)
+            except json.JSONDecodeError:
+                return []
         if not isinstance(loaded, list):
             return []
         return cls._normalize_tm_regions(loaded)
@@ -2862,6 +3051,7 @@ class DashboardAnnotationDatasetService:
 
 class DiscrepancyReviewService:
     VALID_STATUSES = {"open", "reviewed", "accepted", "rejected", "uncertain"}
+    TM_BOUNDARY_DISAGREEMENT_TOLERANCE = 5
     _REVIEW_SENTINEL = object()
     DEFAULT_PAGE_SIZE = 25
     MAX_PAGE_SIZE = 200
@@ -2873,6 +3063,56 @@ class DiscrepancyReviewService:
     _summary_cache = {}
     _shared_cache = RedisCache()
     SHARED_CACHE_TTL = timedelta(hours=6)
+
+    @classmethod
+    def _is_sequence_topology_prediction_summary(cls, summary):
+        summary = summary or {}
+        prediction_kind = cls._normalize_text(summary.get("prediction_kind"))
+        if prediction_kind:
+            return str(prediction_kind).strip().lower() == "sequence_topology"
+
+        method = cls._normalize_text(summary.get("method"))
+        normalized_method = str(method or "").strip().lower()
+        return normalized_method not in {"signalp", "tmdet"}
+
+    @classmethod
+    def _build_tm_boundary_signature(cls, regions):
+        signature = []
+        for region in regions or []:
+            start = DashboardAnnotationDatasetService._safe_int((region or {}).get("start"))
+            end = DashboardAnnotationDatasetService._safe_int((region or {}).get("end"))
+            if start is None or end is None:
+                continue
+            if end < start:
+                start, end = end, start
+            signature.append((start, end))
+        signature.sort()
+        return signature
+
+    @classmethod
+    def _has_tm_boundary_disagreement(cls, tm_regions):
+        comparable_signatures = []
+        for regions in (tm_regions or {}).values():
+            signature = cls._build_tm_boundary_signature(regions)
+            if signature:
+                comparable_signatures.append(signature)
+
+        if len(comparable_signatures) < 2:
+            return False
+
+        signature_lengths = {len(signature) for signature in comparable_signatures}
+        if len(signature_lengths) > 1:
+            return False
+
+        reference = comparable_signatures[0]
+        for candidate in comparable_signatures[1:]:
+            for (ref_start, ref_end), (cand_start, cand_end) in zip(reference, candidate):
+                if (
+                    abs(ref_start - cand_start) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
+                    or abs(ref_end - cand_end) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
+                ):
+                    return True
+        return False
 
     @classmethod
     def list_candidates(
@@ -3416,7 +3656,11 @@ class DiscrepancyReviewService:
         normalized_predictions = record.get("normalized_tm_predictions") or []
         for summary in normalized_predictions:
             method = cls._normalize_text(summary.get("method"))
-            if not method or summary.get("ambiguous"):
+            if (
+                not method
+                or summary.get("ambiguous")
+                or not cls._is_sequence_topology_prediction_summary(summary)
+            ):
                 continue
             method_regions = DashboardAnnotationDatasetService._get_tmalphafold_tm_regions(summary)
             tm_regions[method] = method_regions
@@ -3425,7 +3669,7 @@ class DiscrepancyReviewService:
                 method_count = len(method_regions)
             tm_counts[method] = method_count
 
-        for legacy_method in ("TMbed", "DeepTMHMM", "Phobius", "TOPCONS", "CCTOP"):
+        for legacy_method in ("TMbed", "DeepTMHMM", "Phobius", "TOPCONS", "CCTOP", "TMDET"):
             tm_regions.setdefault(
                 legacy_method,
                 DashboardAnnotationDatasetService._deserialize_tm_regions(
@@ -3438,11 +3682,7 @@ class DiscrepancyReviewService:
             )
 
         available_tm_counts = [value for value in tm_counts.values() if value is not None]
-        available_region_counts = {
-            key: len(value)
-            for key, value in tm_regions.items()
-            if value
-        }
+        has_tm_boundary_disagreement = cls._has_tm_boundary_disagreement(tm_regions)
         structure_context = record.get("structure_context") or {}
         scientific_assessment = record.get("scientific_assessment") or build_scientific_assessment(record)
 
@@ -3455,19 +3695,11 @@ class DiscrepancyReviewService:
             "scientific_assessment": scientific_assessment,
             "has_group_disagreement": len(unique_group_labels) > 1,
             "has_tm_disagreement": len(set(available_tm_counts)) > 1 if available_tm_counts else False,
-            "has_tm_boundary_disagreement": (
-                len(set(available_region_counts.values())) > 1
-                if available_region_counts
-                else False
-            ),
+            "has_tm_boundary_disagreement": bool(has_tm_boundary_disagreement),
             "has_multichain_context": bool(structure_context.get("chain_count") and structure_context.get("chain_count") > 1),
             "has_any_disagreement": (len(unique_group_labels) > 1) or (
                 len(set(available_tm_counts)) > 1 if available_tm_counts else False
-            ) or (
-                len(set(available_region_counts.values())) > 1
-                if available_region_counts
-                else False
-            ),
+            ) or bool(has_tm_boundary_disagreement),
             "expert_vs_prediction_agreement": (
                 comparison_group_labels["expert"] == comparison_group_labels["predicted"]
                 if comparison_group_labels["expert"] and comparison_group_labels["predicted"]
@@ -3497,11 +3729,13 @@ class DiscrepancyReviewService:
             exclusion_reasons.append("missing_expert_group")
         if not DashboardAnnotationDatasetService._has_value(record.get("TM (Expert)")):
             exclusion_reasons.append("missing_expert_tm_count")
-        if tm_counts.get("TMbed") is None and tm_counts.get("DeepTMHMM") is None:
+        if tm_counts.get("TMbed") is None and tm_counts.get("DeepTMHMM") is None and tm_counts.get("TMDET") is None:
             exclusion_reasons.append("missing_predictor_tm_counts")
         if review_status == "rejected":
             exclusion_reasons.append("review_rejected")
         exclusion_reasons.extend(scientific_assessment.get("benchmark_exclusion_reasons") or [])
+        if scientific_flags.get("multichain_context"):
+            exclusion_reasons.append("multichain_context")
 
         include_in_benchmark = bool(inclusion_reasons) and not (
             "missing_expert_group" in exclusion_reasons
@@ -3513,6 +3747,7 @@ class DiscrepancyReviewService:
             and not _normalize_replacement_flag(record.get("is_replaced"))
             and not scientific_flags.get("context_dependent_topology")
             and not scientific_flags.get("non_canonical_membrane_case")
+            and not scientific_flags.get("multichain_context")
             and discrepancy.get("has_tm_boundary_disagreement") is not True
             and (
                 discrepancy.get("expert_vs_prediction_agreement") is True
@@ -3530,6 +3765,9 @@ class DiscrepancyReviewService:
                     and (
                         tm_counts.get("DeepTMHMM") is None
                         or tm_counts.get("DeepTMHMM") == tm_counts.get("expert")
+                    ) and (
+                        tm_counts.get("TMDET") is None
+                        or tm_counts.get("TMDET") == tm_counts.get("expert")
                     )
                 )
             )
@@ -3601,6 +3839,7 @@ class DiscrepancyReviewService:
             "review_rejected": "the review marked the record as rejected",
             "context_dependent_topology": "topology interpretation depends on biological state or transition",
             "non_canonical_membrane_case": "the record appears to be a non-canonical membrane case",
+            "multichain_context": "the entry requires chain-level or assembly-level interpretation",
             "replaced_entry": "the entry is obsolete or replaced",
             "sequence_topology_not_recommended": "sequence-only topology comparison is not recommended",
         }
@@ -3740,6 +3979,10 @@ class DiscrepancyReviewService:
             "tmbed_tm_regions": record.get("TMbed_tm_regions"),
             "deeptmhmm_tm_count": record.get("DeepTMHMM_tm_count"),
             "deeptmhmm_tm_regions": record.get("DeepTMHMM_tm_regions"),
+            "tmdet_tm_count": record.get("tmdet_tm_count"),
+            "tmdet_tm_regions": record.get("tmdet_tm_regions"),
+            "tmhmm_tm_count": record.get("tmhmm_tm_count"),
+            "tmhmm_tm_regions": record.get("tmhmm_tm_regions"),
             "structure_context": record.get("structure_context"),
             "scientific_assessment": record.get("scientific_assessment") or build_scientific_assessment(record),
             "canonical_pdb_code": record.get("canonical_pdb_code"),
@@ -4190,9 +4433,13 @@ class DiscrepancyBenchmarkExportService:
             "tm_opm": tm_counts.get("opm"),
             "tm_tmbed": tm_counts.get("TMbed"),
             "tm_deeptmhmm": tm_counts.get("DeepTMHMM"),
+            "tm_tmdet": tm_counts.get("TMDET"),
+            "tm_tmhmm": tm_counts.get("TMHMM"),
             "opm_tm_regions": json.dumps(tm_regions.get("opm") or []),
             "tmbed_tm_regions": json.dumps(tm_regions.get("TMbed") or []),
             "deeptmhmm_tm_regions": json.dumps(tm_regions.get("DeepTMHMM") or []),
+            "tmdet_tm_regions": json.dumps(tm_regions.get("TMDET") or []),
+            "tmhmm_tm_regions": json.dumps(tm_regions.get("TMHMM") or []),
             "has_group_disagreement": bool(discrepancy.get("has_group_disagreement")),
             "has_tm_disagreement": bool(discrepancy.get("has_tm_disagreement")),
             "has_tm_boundary_disagreement": bool(discrepancy.get("has_tm_boundary_disagreement")),
@@ -4286,6 +4533,18 @@ class DashboardFieldMetadataService:
             },
             "deeptmhmm": {
                 "label": "DeepTMHMM",
+                "category": "live_generated",
+                "description": "Sequence-based topology predictor used as an assistive comparison signal.",
+                "is_live_generated": True,
+            },
+            "tmdet": {
+                "label": "TMDET",
+                "category": "live_generated",
+                "description": "Sequence-based topology and structure predictor used as an assistive comparison signal.",
+                "is_live_generated": True,
+            },
+            "tmhmm": {
+                "label": "TMHMM",
                 "category": "live_generated",
                 "description": "Sequence-based topology predictor used as an assistive comparison signal.",
                 "is_live_generated": True,
@@ -4406,6 +4665,16 @@ class DashboardFieldMetadataService:
                 "description": "Live TM-segment count predicted by DeepTMHMM.",
                 "source": "deeptmhmm",
             },
+            "TMDET TM Count": {
+                "label": "TMDET TM Count",
+                "description": "Live TM-segment count predicted by TMDET.",
+                "source": "tmdet",
+            },
+            "TMHMM TM Count": {
+                "label": "TMHMM TM Count",
+                "description": "Live TM-segment count predicted by TMHMM.",
+                "source": "tmhmm",
+            },
             "Phobius TM Count": {
                 "label": "Phobius TM Count",
                 "description": "Imported or computed TM-segment count predicted by Phobius.",
@@ -4473,7 +4742,7 @@ class DashboardFieldMetadataService:
             },
             "TM Boundary Disagreement": {
                 "label": "TM Boundary Disagreement",
-                "description": "Whether available TM-region counts disagree across OPM and predictor sources.",
+                "description": "Whether available TM boundary positions disagree across comparable OPM and sequence-topology predictor sources.",
                 "source": "metamp",
             },
             "structure_context": {

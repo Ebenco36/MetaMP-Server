@@ -29,6 +29,7 @@ services:
     volumes:
       - flask-app-data:/var/app/data
       - ./datasets:/var/app/datasets:ro
+      - ./vendor:/var/app/vendor
     networks:
       - app-networks
 
@@ -56,6 +57,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
+      - ./vendor:/var/app/vendor
     networks:
       - app-networks
 
@@ -83,6 +85,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
+      - ./vendor:/var/app/vendor
     networks:
       - app-networks
 
@@ -110,6 +113,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
+      - ./vendor:/var/app/vendor
     networks:
       - app-networks
 
@@ -137,6 +141,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
+      - ./vendor:/var/app/vendor
     networks:
       - app-networks
 

@@ -1,5 +1,8 @@
 import json
 import os
+import shlex
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -20,13 +23,61 @@ from src.AI_Packages.TMProteinPredictor import (  # noqa: E402
     parse_tm_regions_value,
     serialize_tm_regions,
 )
+from src.AI_Packages.TMAlphaFoldPredictorClient import (  # noqa: E402
+    TMALPHAFOLD_AUX_METHODS,
+    TMALPHAFOLD_SEQUENCE_METHODS,
+    TMAlphaFoldPredictionResult,
+)
 from src.Dashboard.services import get_table_as_dataframe, get_tables_as_dataframe  # noqa: E402
 from src.MP.model_tmalphafold import TMAlphaFoldPrediction  # noqa: E402
+from src.MP.model_uniprot import Uniprot  # noqa: E402
 
 
 DEFAULT_TM_PREDICTION_OUTPUT_CSV = "/var/app/data/tm_predictions/tm_summary.csv"
 DEFAULT_OPTIONAL_TM_PREDICTION_BASE_DIR = "/var/app/data/tm_predictions/external"
-OPTIONAL_TM_PREDICTORS = ("Phobius", "TOPCONS", "CCTOP")
+DEFAULT_OPTIONAL_TM_TOOL_HOME = "/opt/metamp-optional-tools"
+OPTIONAL_TM_PREDICTORS = ("TMbed",) + TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS + ("TMDET", "CCTOP")
+VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS = ("TMbed", "DeepTMHMM", "TMHMM", "TMDET")
+BULK_SAFE_TM_FALLBACK_PREDICTORS = ("DeepTMHMM", "TMHMM", "TMbed")
+VERIFIED_LOCAL_TM_FALLBACK_EXECUTION_ORDER = ("DeepTMHMM", "TMHMM", "TMDET", "TMbed")
+OPTIONAL_TM_PREDICTOR_SPECS = {
+    "TMbed": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
+    "DeepTMHMM": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
+    "Hmmtop": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Memsat": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Octopus": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Philius": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Phobius": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Pro": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Prodiv": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Scampi": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "ScampiMsa": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "TMHMM": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "Topcons2": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+    "SignalP": {"execution_mode": "external_sequence", "prediction_kind": "signal_peptide"},
+    "TMDET": {"execution_mode": "external_structure", "prediction_kind": "structure_membrane_plane"},
+    "CCTOP": {"execution_mode": "external_sequence", "prediction_kind": "sequence_topology"},
+}
+OPTIONAL_TM_PREDICTOR_ALIASES = {
+    "tmbed": "TMbed",
+    "deeptmhmm": "DeepTMHMM",
+    "hmmtop": "Hmmtop",
+    "memsat": "Memsat",
+    "octopus": "Octopus",
+    "philius": "Philius",
+    "phobius": "Phobius",
+    "pro": "Pro",
+    "prodiv": "Prodiv",
+    "scampi": "Scampi",
+    "scampimsa": "ScampiMsa",
+    "scampi-msa": "ScampiMsa",
+    "signalp": "SignalP",
+    "tmdet": "TMDET",
+    "tmhmm": "TMHMM",
+    "topcons2": "Topcons2",
+    "topcons": "Topcons2",
+    "cctop": "CCTOP",
+}
 TM_PREDICTION_RECORD_COLUMNS = [
     "id",
     "sequence",
@@ -41,7 +92,7 @@ TM_PREDICTION_RECORD_COLUMNS = [
     "CCTOP_tm_count",
     "CCTOP_tm_regions",
 ]
-NORMALIZED_STORE_METHODS = ("TMbed", "DeepTMHMM", "Phobius", "TOPCONS", "CCTOP")
+NORMALIZED_STORE_METHODS = tuple(dict.fromkeys(("TMbed", "DeepTMHMM") + OPTIONAL_TM_PREDICTORS))
 
 
 def tm_predictor_column_names(predictor_name):
@@ -68,10 +119,20 @@ def _load_normalized_tm_prediction_frame(
         return pd.DataFrame(columns=["pdb_code"])
 
     query = TMAlphaFoldPrediction.query.filter(
-        TMAlphaFoldPrediction.provider == provider,
         TMAlphaFoldPrediction.status == "success",
         TMAlphaFoldPrediction.method.in_(selected_predictors),
     )
+    if provider is not None:
+        if isinstance(provider, (list, tuple, set)):
+            selected_providers = [
+                str(item or "").strip()
+                for item in provider
+                if str(item or "").strip()
+            ]
+            if selected_providers:
+                query = query.filter(TMAlphaFoldPrediction.provider.in_(selected_providers))
+        else:
+            query = query.filter(TMAlphaFoldPrediction.provider == provider)
     selected_codes = _normalize_pdb_code_selection(pdb_codes)
     if selected_codes:
         query = query.filter(
@@ -88,6 +149,7 @@ def _load_normalized_tm_prediction_frame(
         grouped.setdefault(pdb_code, {}).setdefault(method, []).append(row)
 
     records = []
+    provider_priority = {"MetaMP": 0, "TMAlphaFold": 1}
     for pdb_code, methods in grouped.items():
         item = {"pdb_code": pdb_code}
         for method in selected_predictors:
@@ -97,14 +159,15 @@ def _load_normalized_tm_prediction_frame(
                 item[count_col] = None
                 item[region_col] = ""
                 continue
-            tm_count_values = {row.tm_count for row in method_rows if row.tm_count is not None}
-            tm_region_values = {
-                str(row.tm_regions_json or "[]")
-                for row in method_rows
-                if str(row.tm_regions_json or "").strip()
-            }
-            item[count_col] = next(iter(tm_count_values)) if len(tm_count_values) == 1 else None
-            item[region_col] = next(iter(tm_region_values)) if len(tm_region_values) == 1 else ""
+            preferred_row = sorted(
+                method_rows,
+                key=lambda row: (
+                    provider_priority.get(str(row.provider or "").strip(), 99),
+                    -(int(row.id) if getattr(row, "id", None) is not None else 0),
+                ),
+            )[0]
+            item[count_col] = preferred_row.tm_count
+            item[region_col] = str(preferred_row.tm_regions_json or "")
         records.append(item)
 
     return pd.DataFrame(records)
@@ -112,13 +175,358 @@ def _load_normalized_tm_prediction_frame(
 
 def normalize_optional_tm_predictor_name(predictor_name):
     normalized_name = str(predictor_name or "").strip().lower()
-    for candidate in OPTIONAL_TM_PREDICTORS:
-        if candidate.lower() == normalized_name:
-            return candidate
+    if normalized_name in OPTIONAL_TM_PREDICTOR_ALIASES:
+        return OPTIONAL_TM_PREDICTOR_ALIASES[normalized_name]
     raise ValueError(
         f"Unsupported optional predictor '{predictor_name}'. "
         f"Expected one of: {', '.join(OPTIONAL_TM_PREDICTORS)}."
     )
+
+
+def normalize_optional_tm_predictor_names(predictor_names=None):
+    normalized = []
+    include_all = False
+    for predictor_name in predictor_names or ():
+        text = str(predictor_name or "").strip()
+        if not text:
+            continue
+        if text.lower() in {"all", "*"}:
+            include_all = True
+            continue
+        normalized.append(normalize_optional_tm_predictor_name(text))
+    if include_all or not normalized:
+        normalized = list(OPTIONAL_TM_PREDICTORS)
+    return list(dict.fromkeys(normalized))
+
+
+def normalize_optional_tm_completion_provider(provider_name=None):
+    normalized_name = str(provider_name or "").strip().lower()
+    if normalized_name in {"", "metamp", "local"}:
+        return "MetaMP"
+    if normalized_name in {"any", "either", "all"}:
+        return ("MetaMP", "TMAlphaFold")
+    if normalized_name in {"tmalphafold", "upstream"}:
+        return "TMAlphaFold"
+    raise ValueError(
+        "Unsupported completion provider scope "
+        f"'{provider_name}'. Expected one of: MetaMP, any, TMAlphaFold."
+    )
+
+
+def normalize_verified_tm_fallback_predictor_names(predictor_names=None):
+    normalized = normalize_optional_tm_predictor_names(
+        predictor_names or VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS
+    )
+    unsupported = [
+        predictor_name
+        for predictor_name in normalized
+        if predictor_name not in VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS
+    ]
+    if unsupported:
+        raise ValueError(
+            "Verified local TM fallback predictors are limited to: "
+            + ", ".join(VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS)
+            + ". Unsupported values: "
+            + ", ".join(unsupported)
+            + "."
+        )
+    return normalized
+
+
+def order_verified_tm_fallback_predictor_names(predictor_names=None):
+    normalized = normalize_verified_tm_fallback_predictor_names(predictor_names)
+    return [
+        predictor_name
+        for predictor_name in VERIFIED_LOCAL_TM_FALLBACK_EXECUTION_ORDER
+        if predictor_name in normalized
+    ]
+
+
+def _prediction_kind_for_optional_method(predictor_name):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    spec = OPTIONAL_TM_PREDICTOR_SPECS.get(normalized_name) or {}
+    return str(spec.get("prediction_kind") or "sequence_topology")
+
+
+def get_optional_tm_predictor_spec(predictor_name):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    spec = dict(OPTIONAL_TM_PREDICTOR_SPECS.get(normalized_name) or {})
+    spec["predictor"] = normalized_name
+    return spec
+
+
+def get_optional_tm_local_command_map(app_config=None):
+    config = app_config or (current_app.config if has_app_context() else {})
+    raw_value = (
+        config.get("OPTIONAL_TM_LOCAL_COMMANDS_JSON")
+        or os.getenv("OPTIONAL_TM_LOCAL_COMMANDS_JSON")
+        or ""
+    )
+    if not str(raw_value).strip():
+        return {}
+    try:
+        parsed = json.loads(raw_value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    normalized = {}
+    for predictor_name, command_spec in parsed.items():
+        try:
+            normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+        except ValueError:
+            continue
+        if isinstance(command_spec, str) and command_spec.strip():
+            normalized[normalized_name] = command_spec.strip()
+        elif isinstance(command_spec, list) and command_spec:
+            normalized[normalized_name] = [str(item) for item in command_spec if str(item).strip()]
+    return normalized
+
+
+def get_optional_tm_tool_home(app_config=None):
+    config = app_config or (current_app.config if has_app_context() else {})
+    tool_home = (
+        config.get("OPTIONAL_TM_TOOL_HOME")
+        or os.getenv("OPTIONAL_TM_TOOL_HOME")
+        or DEFAULT_OPTIONAL_TM_TOOL_HOME
+    )
+    return _resolve_runtime_directory_path(tool_home, "vendor/optional_tm_tools")
+
+
+def get_optional_tm_tool_paths(app_config=None):
+    tool_home = get_optional_tm_tool_home(app_config=app_config)
+    bin_dir = tool_home / "bin"
+    wrappers_dir = tool_home / "wrappers"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    wrappers_dir.mkdir(parents=True, exist_ok=True)
+    return {
+        "tool_home": tool_home,
+        "bin_dir": bin_dir,
+        "wrappers_dir": wrappers_dir,
+    }
+
+
+def _optional_tm_predictor_executable_candidates(predictor_name):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    slug = normalized_name.lower()
+    condensed = slug.replace("-", "").replace("_", "")
+    candidates = [
+        f"metamp-run-{slug}",
+        f"metamp-{slug}",
+        slug,
+        condensed,
+    ]
+    if normalized_name == "ScampiMsa":
+        candidates.extend(["scampi_msa", "scampi-msa", "scampimsa"])
+    if normalized_name == "Topcons2":
+        candidates.extend(["topcons", "topcons2"])
+    if normalized_name == "SignalP":
+        candidates.extend(["signalp", "signalp6", "signalp5"])
+    return list(dict.fromkeys(candidates))
+
+
+def discover_optional_tm_local_command(predictor_name, app_config=None):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    tool_paths = get_optional_tm_tool_paths(app_config=app_config)
+    for candidate in _optional_tm_predictor_executable_candidates(normalized_name):
+        vendor_bin = tool_paths["bin_dir"] / candidate
+        if vendor_bin.exists() and os.access(vendor_bin, os.X_OK):
+            command = [
+                str(vendor_bin),
+                "--input",
+                "{input_fasta}",
+                "--output",
+                "{output_csv}",
+                "--reference",
+                "{reference_csv}",
+            ]
+            if normalized_name == "TMDET":
+                command.extend(["--structure-manifest", "{structure_manifest}", "--failures", "{failures_csv}"])
+            return command
+        vendor_wrapper = tool_paths["wrappers_dir"] / candidate
+        if vendor_wrapper.exists() and os.access(vendor_wrapper, os.X_OK):
+            command = [
+                str(vendor_wrapper),
+                "--input",
+                "{input_fasta}",
+                "--output",
+                "{output_csv}",
+                "--reference",
+                "{reference_csv}",
+            ]
+            if normalized_name == "TMDET":
+                command.extend(["--structure-manifest", "{structure_manifest}", "--failures", "{failures_csv}"])
+            return command
+        system_command = shutil.which(candidate)
+        if system_command:
+            command = [
+                str(system_command),
+                "--input",
+                "{input_fasta}",
+                "--output",
+                "{output_csv}",
+                "--reference",
+                "{reference_csv}",
+            ]
+            if normalized_name == "TMDET":
+                command.extend(["--structure-manifest", "{structure_manifest}", "--failures", "{failures_csv}"])
+            return command
+    return None
+
+
+def get_optional_tm_local_command(predictor_name, app_config=None):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    configured = get_optional_tm_local_command_map(app_config=app_config).get(normalized_name)
+    if configured is not None:
+        return configured
+    return discover_optional_tm_local_command(normalized_name, app_config=app_config)
+
+
+def _optional_tm_command_executable(command_spec):
+    if isinstance(command_spec, str):
+        try:
+            tokens = shlex.split(command_spec)
+        except ValueError:
+            return None
+        return tokens[0] if tokens else None
+    if isinstance(command_spec, (list, tuple)) and command_spec:
+        return str(command_spec[0])
+    return None
+
+
+def _verify_optional_tm_local_command(
+    predictor_name,
+    command_spec,
+    *,
+    command_origin="discovered",
+):
+    executable = _optional_tm_command_executable(command_spec)
+    if not executable:
+        return {
+            "verified": False,
+            "reason": "missing_executable",
+            "detail": "No executable could be resolved from the local command specification.",
+        }
+
+    executable_name = Path(executable).name
+    if command_origin == "configured":
+        return {
+            "verified": False,
+            "reason": "configured_command_unverified",
+            "detail": "Configured local commands are treated as user-managed and are not self-tested automatically.",
+            "executable": executable,
+        }
+    if not executable_name.startswith("metamp-run-"):
+        return {
+            "verified": False,
+            "reason": "non_metamp_wrapper_unverified",
+            "detail": "Only MetaMP vendor wrappers are self-tested automatically.",
+            "executable": executable,
+        }
+
+    try:
+        completed = subprocess.run(
+            [executable, "--self-test"],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except FileNotFoundError:
+        return {
+            "verified": False,
+            "reason": "wrapper_not_found",
+            "detail": f"Discovered wrapper for {predictor_name} no longer exists on disk.",
+            "executable": executable,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "verified": False,
+            "reason": "self_test_timeout",
+            "detail": f"Self-test for {predictor_name} timed out after 30 seconds.",
+            "executable": executable,
+        }
+    return {
+        "verified": completed.returncode == 0,
+        "reason": "self_test_passed" if completed.returncode == 0 else "self_test_failed",
+        "detail": str(completed.stdout or completed.stderr or "").strip(),
+        "return_code": int(completed.returncode),
+        "executable": executable,
+    }
+
+
+def _resolve_optional_tm_command_runtime(predictor_name, app_config=None):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    spec = get_optional_tm_predictor_spec(normalized_name)
+    builtin_local = str(spec.get("execution_mode") or "").strip() == "local_sequence"
+    configured_command = get_optional_tm_local_command_map(app_config=app_config).get(normalized_name)
+    discovered_command = None
+    verification = None
+
+    if builtin_local:
+        local_command = None
+        readiness = "builtin_ready"
+        enablement = "Available in the current MetaMP runtime without additional wrappers."
+        locally_runnable = True
+    elif configured_command is not None:
+        local_command = configured_command
+        verification = _verify_optional_tm_local_command(
+            normalized_name,
+            configured_command,
+            command_origin="configured",
+        )
+        readiness = "command_configured_unverified"
+        enablement = (
+            "A configured local command is present. MetaMP will use it, but it is not self-tested automatically."
+        )
+        locally_runnable = True
+    else:
+        discovered_command = discover_optional_tm_local_command(normalized_name, app_config=app_config)
+        local_command = discovered_command
+        if discovered_command is not None:
+            verification = _verify_optional_tm_local_command(
+                normalized_name,
+                discovered_command,
+                command_origin="discovered",
+            )
+            if verification.get("verified"):
+                readiness = "command_verified"
+                enablement = "A discovered MetaMP wrapper passed runtime self-test and is ready for execution."
+                locally_runnable = True
+            else:
+                readiness = "command_discovered_unverified"
+                enablement = (
+                    "A local command was discovered, but MetaMP could not verify it automatically. "
+                    "Inspect runtime_verification for details."
+                )
+                locally_runnable = False
+        else:
+            readiness = "missing_tooling"
+            enablement = (
+                "Install or vendor a wrapper/binary under vendor/optional_tm_tools, "
+                "or set OPTIONAL_TM_LOCAL_COMMANDS_JSON for this predictor."
+            )
+            locally_runnable = False
+
+    return {
+        "predictor": normalized_name,
+        "execution_mode": spec.get("execution_mode"),
+        "prediction_kind": spec.get("prediction_kind"),
+        "builtin_local": bool(builtin_local),
+        "configured_local_command": configured_command,
+        "discovered_local_command": discovered_command,
+        "effective_local_command": local_command,
+        "command_available": bool(local_command is not None),
+        "locally_runnable": bool(locally_runnable),
+        "readiness": readiness,
+        "how_to_enable": enablement,
+        "runtime_verification": verification,
+    }
+
+
+def is_optional_tm_predictor_locally_runnable(predictor_name):
+    runtime = _resolve_optional_tm_command_runtime(predictor_name)
+    return bool(runtime.get("locally_runnable"))
 
 
 def _resolve_runtime_directory_path(configured_path, local_relative_path):
@@ -167,6 +575,9 @@ def get_optional_tm_prediction_paths(predictor_name, app_config=None):
         "fasta_path": predictor_dir / "pending.fasta",
         "csv_template_path": predictor_dir / "template.csv",
         "results_path": predictor_dir / "results.csv",
+        "failures_path": predictor_dir / "failures.csv",
+        "reference_path": predictor_dir / "reference_from_tmalphafold.csv",
+        "structure_manifest_path": predictor_dir / "structure_manifest.csv",
         "export_manifest_path": predictor_dir / "export_manifest.json",
         "import_manifest_path": predictor_dir / "import_manifest.json",
     }
@@ -182,6 +593,97 @@ def write_optional_tm_prediction_manifest(manifest_path, payload):
 def _emit_progress(progress_callback, message):
     if progress_callback is not None:
         progress_callback(message)
+
+
+def _preview_tm_regions_value(value, limit=120):
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _build_optional_tm_export_debug_payload(reference_frame, results_frame, predictor_name):
+    if results_frame is None or results_frame.empty:
+        return {
+            "predictor": predictor_name,
+            "upstream_reference_rows": 0,
+            "reference_rows_with_tm_count": 0,
+            "reference_rows_with_tm_regions": 0,
+            "blank_result_rows_requiring_completion": 0,
+            "preview_rows": [],
+        }
+
+    preview_rows = []
+    preview_source = reference_frame if reference_frame is not None and not reference_frame.empty else results_frame
+    preview_frame = preview_source.head(3)
+    for _, row in preview_frame.iterrows():
+        preview_rows.append(
+            {
+                "pdb_code": str(row.get("pdb_code") or "").strip().upper(),
+                "tm_count": None if pd.isna(row.get("tm_count")) else row.get("tm_count"),
+                "tm_regions": _preview_tm_regions_value(row.get("tm_regions")),
+            }
+        )
+
+    reference_tm_count_series = (
+        reference_frame["tm_count"]
+        if reference_frame is not None and "tm_count" in reference_frame.columns
+        else pd.Series(dtype=object)
+    )
+    reference_tm_regions_series = (
+        reference_frame["tm_regions"].fillna("").astype(str).str.strip()
+        if reference_frame is not None and "tm_regions" in reference_frame.columns
+        else pd.Series(dtype=str)
+    )
+    result_tm_count_series = results_frame["tm_count"] if "tm_count" in results_frame.columns else pd.Series(dtype=object)
+    tm_regions_series = (
+        results_frame["tm_regions"].fillna("").astype(str).str.strip()
+        if "tm_regions" in results_frame.columns
+        else pd.Series(dtype=str)
+    )
+    blank_mask = result_tm_count_series.isna() & tm_regions_series.eq("")
+    return {
+        "predictor": predictor_name,
+        "upstream_reference_rows": int(len(reference_frame)) if reference_frame is not None else 0,
+        "reference_rows_with_tm_count": int(reference_tm_count_series.notna().sum()),
+        "reference_rows_with_tm_regions": int(reference_tm_regions_series.ne("").sum()),
+        "blank_result_rows_requiring_completion": int(blank_mask.sum()),
+        "preview_rows": preview_rows,
+    }
+
+
+def _emit_optional_tm_export_debug(progress_callback, predictor_name, debug_payload, results_path, reference_path):
+    _emit_progress(
+        progress_callback,
+        f"{predictor_name}: wrote blank results target to {results_path} and TMAlphaFold reference to {reference_path}. "
+        f"TMAlphaFold references={debug_payload['upstream_reference_rows']}, "
+        f"reference_rows_with_tm_count={debug_payload['reference_rows_with_tm_count']}, "
+        f"reference_rows_with_tm_regions={debug_payload['reference_rows_with_tm_regions']}, "
+        f"blank_result_rows_requiring_completion={debug_payload['blank_result_rows_requiring_completion']}.",
+    )
+    preview_rows = debug_payload.get("preview_rows") or []
+    if preview_rows:
+        for row in preview_rows:
+            _emit_progress(
+                progress_callback,
+                f"{predictor_name} preview: pdb_code={row['pdb_code']} tm_count={row['tm_count']} tm_regions={row['tm_regions']}",
+            )
+
+
+def _build_optional_tm_structure_manifest(frame):
+    if frame is None or frame.empty:
+        return pd.DataFrame(
+            columns=["pdb_code", "structure_url", "structure_format", "structure_source"]
+        )
+    manifest = pd.DataFrame()
+    manifest["pdb_code"] = frame["pdb_code"].astype(str).str.strip().str.upper()
+    manifest = manifest[manifest["pdb_code"] != ""].copy()
+    manifest["structure_url"] = manifest["pdb_code"].apply(
+        lambda pdb_code: f"https://files.rcsb.org/download/{pdb_code}.cif.gz"
+    )
+    manifest["structure_format"] = "mmcif_gz"
+    manifest["structure_source"] = "RCSB"
+    return manifest.reset_index(drop=True)
 
 
 def _selected_tm_predictor_columns(include_tmbed=True, include_deeptmhmm=True):
@@ -302,7 +804,7 @@ def update_tm_prediction_records(
         method=normalized_name,
         records=mirror_rows,
         provider="MetaMP",
-        prediction_kind="sequence_topology",
+        prediction_kind=_prediction_kind_for_optional_method(normalized_name),
         progress_callback=progress_callback,
     )
     _emit_progress(
@@ -359,6 +861,13 @@ def normalize_external_tm_prediction_dataframe(dataframe, predictor_name):
         else (len(row["tm_regions"]) if row["tm_regions"] else None),
         axis=1,
     )
+    normalized = normalized.loc[
+        normalized.apply(
+            lambda row: (row["tm_count"] is not None and not pd.isna(row["tm_count"]))
+            or bool(row["tm_regions"]),
+            axis=1,
+        )
+    ].copy()
     normalized = normalized.drop_duplicates(subset="pdb_code", keep="last")
     return normalized.reset_index(drop=True)
 
@@ -401,14 +910,977 @@ def import_optional_tm_prediction_results(
     return summary
 
 
+def import_optional_tm_prediction_results_bulk(
+    predictor_names=None,
+    table_name="membrane_proteins",
+    skip_missing_inputs=True,
+    progress_callback=None,
+):
+    normalized_names = normalize_optional_tm_predictor_names(predictor_names)
+    imported_predictors = 0
+    total_processed_records = 0
+    per_predictor = {}
+
+    for normalized_name in normalized_names:
+        path_config = get_optional_tm_prediction_paths(normalized_name)
+        input_file = path_config["results_path"]
+        if not Path(input_file).exists():
+            summary = {
+                "predictor": normalized_name,
+                "input_path": str(input_file),
+                "processed_records": 0,
+                "skipped": True,
+                "skip_reason": "missing_input_file",
+                "import_manifest_path": str(path_config["import_manifest_path"]),
+            }
+            if skip_missing_inputs:
+                _emit_progress(
+                    progress_callback,
+                    f"Skipping {normalized_name} import because no results file exists at {input_file}.",
+                )
+                per_predictor[normalized_name] = summary
+                continue
+            raise FileNotFoundError(f"Prediction input file not found: {input_file}")
+
+        summary = import_optional_tm_prediction_results(
+            predictor_name=normalized_name,
+            input_path=str(input_file),
+            table_name=table_name,
+            progress_callback=progress_callback,
+        )
+        per_predictor[normalized_name] = summary
+        imported_predictors += 1
+        total_processed_records += int(summary.get("processed_records") or 0)
+
+    aggregate_summary = {
+        "predictors": normalized_names,
+        "imported_predictor_count": int(imported_predictors),
+        "total_processed_records": int(total_processed_records),
+        "skip_missing_inputs": bool(skip_missing_inputs),
+        "per_predictor": per_predictor,
+    }
+    _emit_progress(
+        progress_callback,
+        "Completed optional TM import across "
+        + str(len(normalized_names))
+        + " predictor(s); "
+        + str(total_processed_records)
+        + " total record(s) processed.",
+    )
+    return aggregate_summary
+
+
+def _format_optional_tm_local_command(command_spec, *, predictor_name, fasta_path, results_path, reference_path, work_dir):
+    substitutions = {
+        "predictor": predictor_name,
+        "input_fasta": str(fasta_path),
+        "output_csv": str(results_path),
+        "results_csv": str(results_path),
+        "failures_csv": str(get_optional_tm_prediction_paths(predictor_name)["failures_path"]),
+        "reference_csv": str(reference_path),
+        "work_dir": str(work_dir),
+        "structure_manifest": str(get_optional_tm_prediction_paths(predictor_name)["structure_manifest_path"]),
+    }
+    if isinstance(command_spec, str):
+        return command_spec.format(**substitutions)
+    return [str(item).format(**substitutions) for item in command_spec]
+
+
+def _run_optional_tm_command_with_live_output(
+    *,
+    formatted_command,
+    cwd,
+    predictor_name,
+    progress_callback=None,
+):
+    if isinstance(formatted_command, str):
+        process = subprocess.Popen(
+            formatted_command,
+            shell=True,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        executed_command = formatted_command
+    else:
+        process = subprocess.Popen(
+            formatted_command,
+            shell=False,
+            cwd=str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        executed_command = " ".join(shlex.quote(str(item)) for item in formatted_command)
+
+    output_lines = []
+    try:
+        if process.stdout is not None:
+            for raw_line in process.stdout:
+                line = str(raw_line or "").rstrip()
+                if not line:
+                    continue
+                output_lines.append(line)
+                _emit_progress(progress_callback, f"[{predictor_name}] {line}")
+        return_code = int(process.wait())
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
+
+    combined_output = "\n".join(output_lines).strip()
+    return {
+        "executed_command": executed_command,
+        "return_code": return_code,
+        "combined_output": combined_output,
+    }
+
+
+def _load_optional_tm_completion_codes(
+    predictor_name,
+    provider="MetaMP",
+    pdb_codes=None,
+    statuses=("success", "error"),
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    normalized_provider = normalize_optional_tm_completion_provider(provider)
+    normalized_statuses = [
+        str(status or "").strip().lower()
+        for status in (statuses or ())
+        if str(status or "").strip()
+    ]
+    if not normalized_statuses:
+        return set()
+
+    query = TMAlphaFoldPrediction.query.with_entities(
+        TMAlphaFoldPrediction.pdb_code,
+    ).filter(
+        TMAlphaFoldPrediction.provider == normalized_provider,
+        TMAlphaFoldPrediction.method == normalized_name,
+        db.func.lower(db.func.trim(TMAlphaFoldPrediction.status)).in_(normalized_statuses),
+    )
+    selected_codes = _normalize_pdb_code_selection(pdb_codes)
+    if selected_codes:
+        query = query.filter(
+            db.func.upper(db.func.trim(TMAlphaFoldPrediction.pdb_code)).in_(selected_codes)
+        )
+
+    return {
+        str(row.pdb_code or "").strip().upper()
+        for row in query.all()
+        if str(row.pdb_code or "").strip()
+    }
+
+
+def _persist_optional_tm_error_rows(
+    predictor_name,
+    error_rows,
+    provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    cleaned_rows = []
+    for row in error_rows or ():
+        pdb_code = str((row or {}).get("pdb_code") or "").strip().upper()
+        error_message = str((row or {}).get("error_message") or "").strip()
+        if not pdb_code or not error_message:
+            continue
+        cleaned_rows.append({"pdb_code": pdb_code, "error_message": error_message})
+    if not cleaned_rows:
+        return {
+            "predictor": normalized_name,
+            "processed_records": 0,
+            "stored_rows": 0,
+            "inserted_rows": 0,
+            "updated_rows": 0,
+        }
+
+    deduped_rows = {
+        row["pdb_code"]: row
+        for row in cleaned_rows
+    }
+    cleaned_rows = list(deduped_rows.values())
+    pdb_codes = [row["pdb_code"] for row in cleaned_rows]
+    uniprot_rows = (
+        db.session.query(Uniprot.pdb_code, Uniprot.uniprot_id)
+        .filter(
+            Uniprot.pdb_code.isnot(None),
+            Uniprot.uniprot_id.isnot(None),
+            db.func.upper(db.func.trim(Uniprot.pdb_code)).in_(pdb_codes),
+        )
+        .all()
+    )
+    uniprot_mapping = {}
+    for row in uniprot_rows:
+        pdb_code = str(row.pdb_code or "").strip().upper()
+        uniprot_id = str(row.uniprot_id or "").strip().upper()
+        if not pdb_code or not uniprot_id:
+            continue
+        uniprot_mapping.setdefault(pdb_code, []).append(uniprot_id)
+
+    prediction_kind = _prediction_kind_for_optional_method(normalized_name)
+    payloads = []
+    for row in cleaned_rows:
+        pdb_code = row["pdb_code"]
+        error_message = row["error_message"]
+        uniprot_ids = list(dict.fromkeys(uniprot_mapping.get(pdb_code) or [f"PDB:{pdb_code}"]))
+        raw_payload = json.dumps(
+            {
+                "provider": provider,
+                "method": normalized_name,
+                "pdb_code": pdb_code,
+                "status": "error",
+                "error_message": error_message,
+                "uniprot_ids": uniprot_ids,
+            }
+        )
+        for uniprot_id in uniprot_ids:
+            payloads.append(
+                TMAlphaFoldPredictionResult(
+                    pdb_code=pdb_code,
+                    uniprot_id=uniprot_id,
+                    provider=provider,
+                    method=normalized_name,
+                    prediction_kind=prediction_kind,
+                    tm_count=None,
+                    tm_regions_json="[]",
+                    raw_payload_json=raw_payload,
+                    source_url="",
+                    status="error",
+                    sequence_sequence=None,
+                    error_message=error_message,
+                )
+            )
+
+    from src.Jobs.TMAlphaFoldSync import _ensure_tmalphafold_storage, _upsert_predictions
+
+    _ensure_tmalphafold_storage(progress_callback=progress_callback)
+    stored = _upsert_predictions(payloads)
+    summary = {
+        "predictor": normalized_name,
+        "processed_records": int(len(cleaned_rows)),
+        "stored_rows": int(stored.get("stored_rows") or 0),
+        "inserted_rows": int(stored.get("inserted_rows") or 0),
+        "updated_rows": int(stored.get("updated_rows") or 0),
+    }
+    _emit_progress(
+        progress_callback,
+        f"Recorded {summary['processed_records']} {normalized_name} error record(s) in normalized storage.",
+    )
+    return summary
+
+
+def import_optional_tm_prediction_failures(
+    predictor_name,
+    failures_path=None,
+    provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    input_file = Path(failures_path) if failures_path else get_optional_tm_prediction_paths(normalized_name)["failures_path"]
+    if not input_file.exists():
+        return {
+            "predictor": normalized_name,
+            "input_path": str(input_file),
+            "processed_records": 0,
+            "stored_rows": 0,
+            "inserted_rows": 0,
+            "updated_rows": 0,
+            "skipped": True,
+            "skip_reason": "missing_input_file",
+        }
+
+    dataframe = pd.read_csv(input_file)
+    if dataframe.empty:
+        return {
+            "predictor": normalized_name,
+            "input_path": str(input_file),
+            "processed_records": 0,
+            "stored_rows": 0,
+            "inserted_rows": 0,
+            "updated_rows": 0,
+        }
+
+    lowercase_map = {str(column).strip().lower(): column for column in dataframe.columns}
+    pdb_column = lowercase_map.get("pdb_code") or lowercase_map.get("pdb")
+    error_column = lowercase_map.get("error_message") or lowercase_map.get("error") or lowercase_map.get("message")
+    if pdb_column is None or error_column is None:
+        raise ValueError("Failure input must include 'pdb_code' and 'error_message' columns.")
+
+    failure_df = pd.DataFrame()
+    failure_df["pdb_code"] = dataframe[pdb_column].astype(str).str.strip().str.upper()
+    failure_df["error_message"] = dataframe[error_column].fillna("").astype(str).str.strip()
+    failure_df = failure_df.loc[
+        failure_df["pdb_code"].ne("") & failure_df["error_message"].ne("")
+    ].drop_duplicates(subset="pdb_code", keep="last")
+    if failure_df.empty:
+        return {
+            "predictor": normalized_name,
+            "input_path": str(input_file),
+            "processed_records": 0,
+            "stored_rows": 0,
+            "inserted_rows": 0,
+            "updated_rows": 0,
+        }
+
+    summary = _persist_optional_tm_error_rows(
+        predictor_name=normalized_name,
+        error_rows=failure_df.to_dict(orient="records"),
+        provider=provider,
+        progress_callback=progress_callback,
+    )
+    summary["input_path"] = str(input_file)
+    return summary
+
+
+def run_optional_tm_local_command(
+    predictor_name,
+    include_completed=False,
+    pdb_codes=None,
+    limit=None,
+    completion_provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    runtime = _resolve_optional_tm_command_runtime(normalized_name)
+    command_spec = runtime.get("effective_local_command")
+    if not command_spec:
+        raise RuntimeError(
+            f"No local command is configured for optional predictor '{normalized_name}'. "
+            "Set OPTIONAL_TM_LOCAL_COMMANDS_JSON to enable local execution."
+        )
+    if not runtime.get("locally_runnable"):
+        verification = runtime.get("runtime_verification") or {}
+        detail = str(verification.get("detail") or "").strip()
+        if not detail:
+            detail = (
+                f"MetaMP discovered a command for {normalized_name}, but it did not pass runtime validation."
+            )
+        raise RuntimeError(detail)
+
+    export_summary = export_optional_tm_prediction_inputs(
+        predictor_name=normalized_name,
+        include_completed=include_completed,
+        pdb_codes=pdb_codes,
+        limit=limit,
+        completion_provider=completion_provider,
+        progress_callback=progress_callback,
+    )
+    missing_sequence_summary = None
+    unrunnable_codes = list(
+        dict.fromkeys(export_summary.get("unrunnable_missing_sequence_codes") or [])
+    )
+    execution_mode = get_optional_tm_predictor_spec(normalized_name).get("execution_mode")
+    if unrunnable_codes and execution_mode != "external_structure" and not include_completed:
+        missing_sequence_summary = _persist_optional_tm_error_rows(
+            predictor_name=normalized_name,
+            error_rows=[
+                {
+                    "pdb_code": pdb_code,
+                    "error_message": "No usable sequence could be fetched from RCSB for local MetaMP fallback.",
+                }
+                for pdb_code in unrunnable_codes
+            ],
+            provider="MetaMP",
+            progress_callback=progress_callback,
+        )
+    if int(export_summary.get("record_count") or 0) == 0:
+        export_summary["command_skipped"] = True
+        export_summary["skip_reason"] = "no_pending_records"
+        return {
+            "predictor": normalized_name,
+            "command_configured": True,
+            "export": export_summary,
+            "missing_sequence_errors": missing_sequence_summary,
+            "processed_records": int(missing_sequence_summary.get("processed_records") or 0)
+            if missing_sequence_summary
+            else 0,
+            "message": "No pending records required local command execution.",
+        }
+
+    path_config = get_optional_tm_prediction_paths(normalized_name)
+    formatted_command = _format_optional_tm_local_command(
+        command_spec,
+        predictor_name=normalized_name,
+        fasta_path=path_config["fasta_path"],
+        results_path=path_config["results_path"],
+        reference_path=path_config["reference_path"],
+        work_dir=path_config["predictor_dir"],
+    )
+    _emit_progress(
+        progress_callback,
+        f"Running configured local command for {normalized_name} using {path_config['fasta_path']}.",
+    )
+    completed = _run_optional_tm_command_with_live_output(
+        formatted_command=formatted_command,
+        cwd=path_config["predictor_dir"],
+        predictor_name=normalized_name,
+        progress_callback=progress_callback,
+    )
+    executed_command = completed["executed_command"]
+
+    command_summary = {
+        "predictor": normalized_name,
+        "command": executed_command,
+        "return_code": int(completed["return_code"]),
+        "stdout": str(completed["combined_output"] or "").strip(),
+        "stderr": str(completed["combined_output"] or "").strip(),
+        "failures_path": str(path_config["failures_path"]),
+    }
+    if completed["return_code"] != 0:
+        raise RuntimeError(
+            f"Local command execution failed for {normalized_name} with exit code {completed['return_code']}.\n"
+            f"Command: {executed_command}\n"
+            f"STDERR: {command_summary['stderr']}"
+        )
+
+    failure_summary = import_optional_tm_prediction_failures(
+        predictor_name=normalized_name,
+        failures_path=str(path_config["failures_path"]),
+        provider="MetaMP",
+        progress_callback=progress_callback,
+    )
+    import_summary = import_optional_tm_prediction_results(
+        predictor_name=normalized_name,
+        input_path=str(path_config["results_path"]),
+        progress_callback=progress_callback,
+    )
+    return {
+        "predictor": normalized_name,
+        "command_configured": True,
+        "export": export_summary,
+        "missing_sequence_errors": missing_sequence_summary,
+        "command": command_summary,
+        "failures": failure_summary,
+        "import": import_summary,
+        "processed_records": (
+            int(import_summary.get("processed_records") or 0)
+            + int(failure_summary.get("processed_records") or 0)
+            + (
+                int(missing_sequence_summary.get("processed_records") or 0)
+                if missing_sequence_summary
+                else 0
+            )
+        ),
+    }
+
+
+def run_optional_tm_prediction_backfill(
+    predictor_names=None,
+    include_completed=False,
+    pdb_codes=None,
+    limit=None,
+    use_gpu=None,
+    batch_size=None,
+    max_workers=None,
+    progress_callback=None,
+):
+    normalized_names = normalize_optional_tm_predictor_names(predictor_names)
+    runtime_map = {
+        predictor_name: _resolve_optional_tm_command_runtime(predictor_name)
+        for predictor_name in normalized_names
+    }
+    builtin_local_predictors = [
+        predictor_name
+        for predictor_name in normalized_names
+        if bool(runtime_map[predictor_name].get("builtin_local"))
+    ]
+    command_local_predictors = [
+        predictor_name
+        for predictor_name in normalized_names
+        if predictor_name not in builtin_local_predictors and bool(runtime_map[predictor_name].get("locally_runnable"))
+    ]
+    unsupported_predictors = [
+        predictor_name
+        for predictor_name in normalized_names
+        if predictor_name not in builtin_local_predictors and predictor_name not in command_local_predictors
+    ]
+
+    if unsupported_predictors:
+        for predictor_name in unsupported_predictors:
+            spec = get_optional_tm_predictor_spec(predictor_name)
+            _emit_progress(
+                progress_callback,
+                f"{predictor_name} is not locally runnable in this MetaMP runtime "
+                f"(execution_mode={spec.get('execution_mode')}). Use its export/import workflow or upstream sync path.",
+            )
+
+    aggregate = {
+        "predictors": normalized_names,
+        "builtin_local_predictors": builtin_local_predictors,
+        "command_local_predictors": command_local_predictors,
+        "unsupported_predictors": unsupported_predictors,
+        "processed_records": 0,
+        "per_predictor": {},
+    }
+
+    if builtin_local_predictors:
+        builtin_summary = run_tm_prediction_backfill(
+            include_tmbed="TMbed" in builtin_local_predictors,
+            include_deeptmhmm="DeepTMHMM" in builtin_local_predictors,
+            use_gpu=use_gpu,
+            batch_size=batch_size,
+            max_workers=max_workers,
+            include_completed=include_completed,
+            pdb_codes=pdb_codes,
+            limit=limit,
+            progress_callback=progress_callback,
+        )
+        aggregate["builtin_summary"] = builtin_summary
+        aggregate["processed_records"] += int(builtin_summary.get("processed_records") or 0)
+        for predictor_name in builtin_summary.get("predictors") or []:
+            aggregate["per_predictor"][predictor_name] = {
+                "mode": "builtin_local",
+                "summary": builtin_summary,
+            }
+
+    for predictor_name in command_local_predictors:
+        command_summary = run_optional_tm_local_command(
+            predictor_name=predictor_name,
+            include_completed=include_completed,
+            pdb_codes=pdb_codes,
+            limit=limit,
+            completion_provider="MetaMP",
+            progress_callback=progress_callback,
+        )
+        aggregate["per_predictor"][predictor_name] = {
+            "mode": "configured_local_command",
+            "summary": command_summary,
+        }
+        aggregate["processed_records"] += int(command_summary.get("processed_records") or 0)
+
+    if not builtin_local_predictors and not command_local_predictors:
+        aggregate["message"] = "No selected optional predictors are locally runnable in this MetaMP runtime."
+
+    return aggregate
+
+
+def determine_tmalphafold_fallback_targets(
+    methods=None,
+    with_tmdet=True,
+    pdb_codes=None,
+    limit=None,
+    progress_callback=None,
+):
+    from src.Jobs.TMAlphaFoldSync import load_tmalphafold_targets
+
+    selected_methods = [
+        str(method or "").strip()
+        for method in (methods or TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS)
+        if str(method or "").strip()
+    ]
+    expected_methods = list(
+        dict.fromkeys(selected_methods + (["TMDET"] if with_tmdet else []))
+    )
+    targets = load_tmalphafold_targets(pdb_codes=pdb_codes, limit=limit)
+    if not targets:
+        summary = {
+            "target_count": 0,
+            "fallback_target_count": 0,
+            "expected_methods": expected_methods,
+            "pdb_codes": [],
+            "missing_by_pdb": {},
+        }
+        _emit_progress(
+            progress_callback,
+            "No UniProt-backed targets were eligible for TMAlphaFold fallback evaluation.",
+        )
+        return summary
+
+    normalized_codes = list(
+        dict.fromkeys(str(item["pdb_code"]).strip().upper() for item in targets if str(item.get("pdb_code") or "").strip())
+    )
+    rows = (
+        TMAlphaFoldPrediction.query.with_entities(
+            TMAlphaFoldPrediction.pdb_code,
+            TMAlphaFoldPrediction.method,
+            TMAlphaFoldPrediction.status,
+        )
+        .filter(
+            TMAlphaFoldPrediction.provider == "TMAlphaFold",
+            TMAlphaFoldPrediction.method.in_(expected_methods),
+            db.func.upper(db.func.trim(TMAlphaFoldPrediction.pdb_code)).in_(normalized_codes),
+        )
+        .all()
+    )
+    successful_pairs = {
+        (
+            str(row.pdb_code or "").strip().upper(),
+            str(row.method or "").strip(),
+        )
+        for row in rows
+        if str(row.status or "").strip().lower() == "success"
+    }
+
+    fallback_codes = []
+    missing_by_pdb = {}
+    for pdb_code in normalized_codes:
+        missing_methods = [
+            method
+            for method in expected_methods
+            if (pdb_code, method) not in successful_pairs
+        ]
+        if missing_methods:
+            fallback_codes.append(pdb_code)
+            missing_by_pdb[pdb_code] = missing_methods
+
+    summary = {
+        "target_count": int(len(normalized_codes)),
+        "fallback_target_count": int(len(fallback_codes)),
+        "expected_methods": expected_methods,
+        "pdb_codes": fallback_codes,
+        "missing_by_pdb": missing_by_pdb,
+    }
+    _emit_progress(
+        progress_callback,
+        f"TMAlphaFold fallback evaluation identified {len(fallback_codes)} target(s) still missing at least one upstream method.",
+    )
+    return summary
+
+
+def determine_verified_tm_fallback_targets(
+    predictor_names=None,
+    pdb_codes=None,
+    limit=None,
+    completion_provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_predictors = normalize_verified_tm_fallback_predictor_names(predictor_names)
+    target_codes = load_verified_tm_fallback_target_codes(
+        pdb_codes=pdb_codes,
+        limit=limit,
+    )
+    if not target_codes:
+        return {
+            "target_count": 0,
+            "fallback_target_count": 0,
+            "expected_methods": normalized_predictors,
+            "pdb_codes": [],
+            "missing_by_pdb": {},
+            "missing_counts_by_method": {predictor: 0 for predictor in normalized_predictors},
+            "completed_counts_by_method": {predictor: 0 for predictor in normalized_predictors},
+        }
+
+    completed_by_method = {}
+    for predictor_name in normalized_predictors:
+        completed_by_method[predictor_name] = _load_optional_tm_completion_codes(
+            predictor_name,
+            provider=completion_provider,
+            pdb_codes=target_codes,
+            statuses=("success", "error"),
+        )
+
+    missing_by_pdb = {}
+    missing_counts_by_method = {predictor: 0 for predictor in normalized_predictors}
+    completed_counts_by_method = {
+        predictor: int(len(completed_by_method.get(predictor) or set()))
+        for predictor in normalized_predictors
+    }
+
+    fallback_codes = []
+    for pdb_code in target_codes:
+        missing_methods = [
+            predictor_name
+            for predictor_name in normalized_predictors
+            if pdb_code not in (completed_by_method.get(predictor_name) or set())
+        ]
+        if missing_methods:
+            fallback_codes.append(pdb_code)
+            missing_by_pdb[pdb_code] = missing_methods
+            for predictor_name in missing_methods:
+                missing_counts_by_method[predictor_name] += 1
+
+    summary = {
+        "target_count": int(len(target_codes)),
+        "fallback_target_count": int(len(fallback_codes)),
+        "expected_methods": normalized_predictors,
+        "pdb_codes": fallback_codes,
+        "missing_by_pdb": missing_by_pdb,
+        "missing_counts_by_method": missing_counts_by_method,
+        "completed_counts_by_method": completed_counts_by_method,
+    }
+    _emit_progress(
+        progress_callback,
+        "Verified MetaMP fallback comparison found "
+        + str(len(fallback_codes))
+        + " target(s) still missing at least one selected fallback method.",
+    )
+    return summary
+
+
+def load_verified_tm_fallback_target_codes(
+    pdb_codes=None,
+    limit=None,
+):
+    table_names = ["membrane_proteins", "membrane_protein_opm"]
+    result_df = get_tables_as_dataframe(table_names, "pdb_code")
+    result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
+
+    common = (set(result_df.columns) - {"pdb_code"}) & set(result_df_uniprot.columns)
+    right_pruned = result_df_uniprot.drop(columns=list(common))
+    all_data = pd.merge(
+        right=result_df,
+        left=right_pruned,
+        on="pdb_code",
+        how="outer",
+    )
+    if "pdb_code" in all_data.columns:
+        all_data = all_data.drop_duplicates(subset="pdb_code", keep="first").copy()
+
+    selected_codes = _normalize_pdb_code_selection(pdb_codes)
+    if selected_codes:
+        all_data = all_data.loc[
+            all_data["pdb_code"].astype(str).str.strip().str.upper().isin(selected_codes)
+        ].copy()
+    if limit is not None:
+        all_data = all_data.head(int(limit)).copy()
+
+    target_codes = [
+        str(value).strip().upper()
+        for value in all_data.get("pdb_code", pd.Series(dtype=str)).dropna().tolist()
+        if str(value).strip()
+    ]
+    return list(dict.fromkeys(target_codes))
+
+
+def run_verified_tm_fallback_pipeline(
+    fallback_mode="tmalphafold_first",
+    fallback_predictor_names=None,
+    bulk_safe_only=False,
+    pdb_codes=None,
+    limit=None,
+    include_completed=False,
+    use_gpu=None,
+    batch_size=None,
+    max_workers=None,
+    tmalphafold_methods=None,
+    with_tmdet=True,
+    tmalphafold_max_workers=8,
+    tmalphafold_timeout=30,
+    tmalphafold_refresh=False,
+    tmalphafold_retry_errors=False,
+    tmalphafold_backfill_sequences=True,
+    progress_callback=None,
+):
+    selected_codes = _normalize_pdb_code_selection(pdb_codes)
+    bulk_scope = not selected_codes and limit is None
+    if fallback_predictor_names is None:
+        requested_fallback_predictors = (
+            BULK_SAFE_TM_FALLBACK_PREDICTORS
+            if bulk_scope and bulk_safe_only
+            else VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS
+        )
+    else:
+        requested_fallback_predictors = fallback_predictor_names
+    normalized_fallback_predictors = normalize_verified_tm_fallback_predictor_names(
+        requested_fallback_predictors
+    )
+    execution_predictors = order_verified_tm_fallback_predictor_names(
+        normalized_fallback_predictors
+    )
+    method_list = [
+        str(method or "").strip()
+        for method in (
+            tmalphafold_methods or (TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS)
+        )
+        if str(method or "").strip()
+    ]
+
+    summary = {
+        "mode": str(fallback_mode or "").strip(),
+        "fallback_predictors": normalized_fallback_predictors,
+        "execution_predictors": execution_predictors,
+        "bulk_safe_defaults_applied": bool(
+            fallback_predictor_names is None and bulk_scope and bulk_safe_only
+        ),
+        "all_verified_methods_applied": bool(
+            fallback_predictor_names is None and (not bulk_scope or not bulk_safe_only)
+        ),
+        "omitted_verified_predictors": [
+            predictor_name
+            for predictor_name in VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS
+            if predictor_name not in normalized_fallback_predictors
+        ],
+        "selected_pdb_codes": selected_codes,
+        "limit": limit,
+        "tmalphafold": None,
+        "fallback_scope": None,
+        "omitted_fallback_scope": None,
+        "fallback": None,
+    }
+
+    if summary["bulk_safe_defaults_applied"]:
+        _emit_progress(
+            progress_callback,
+            "Bulk fallback scope detected; using bulk-safe default predictors: "
+            + ", ".join(normalized_fallback_predictors)
+            + ". Use --fallback-method to include TMbed or TMDET explicitly for targeted reruns or smaller limited batches.",
+        )
+    elif fallback_predictor_names is None and bulk_scope:
+        _emit_progress(
+            progress_callback,
+            "Bulk fallback scope detected; running the full verified local fallback set in staged order: "
+            + ", ".join(execution_predictors)
+            + ". Use --bulk-safe-only to restrict bulk runs to "
+            + ", ".join(BULK_SAFE_TM_FALLBACK_PREDICTORS)
+            + ".",
+        )
+
+    if fallback_mode == "tmalphafold_first":
+        from src.Jobs.TMAlphaFoldSync import sync_tmalphafold_predictions
+
+        summary["tmalphafold"] = sync_tmalphafold_predictions(
+            methods=method_list,
+            with_tmdet=with_tmdet,
+            pdb_codes=selected_codes,
+            limit=limit,
+            refresh=tmalphafold_refresh,
+            retry_errors=tmalphafold_retry_errors,
+            max_workers=tmalphafold_max_workers,
+            timeout=tmalphafold_timeout,
+            backfill_sequences=tmalphafold_backfill_sequences,
+            progress_callback=progress_callback,
+        )
+        summary["fallback_scope"] = determine_tmalphafold_fallback_targets(
+            methods=method_list,
+            with_tmdet=with_tmdet,
+            pdb_codes=selected_codes,
+            limit=limit,
+            progress_callback=progress_callback,
+        )
+        fallback_codes = summary["fallback_scope"]["pdb_codes"]
+        if not fallback_codes:
+            summary["fallback"] = {
+                "predictors": normalized_fallback_predictors,
+                "processed_records": 0,
+                "message": "TMAlphaFold already has successful upstream coverage for the selected scope. No local fallback run was needed.",
+            }
+            return summary
+        fallback_limit = None
+    elif fallback_mode == "fallback_only":
+        selected_target_codes = load_verified_tm_fallback_target_codes(
+            pdb_codes=selected_codes,
+            limit=limit,
+        )
+        summary["fallback_scope"] = determine_verified_tm_fallback_targets(
+            predictor_names=normalized_fallback_predictors,
+            pdb_codes=selected_codes,
+            limit=limit,
+            completion_provider="MetaMP",
+            progress_callback=progress_callback,
+        )
+        if summary["omitted_verified_predictors"]:
+            summary["omitted_fallback_scope"] = determine_verified_tm_fallback_targets(
+                predictor_names=summary["omitted_verified_predictors"],
+                pdb_codes=selected_codes,
+                limit=limit,
+                completion_provider="MetaMP",
+                progress_callback=progress_callback,
+            )
+        fallback_codes = selected_target_codes if include_completed else summary["fallback_scope"]["pdb_codes"]
+        fallback_limit = None
+        if not fallback_codes:
+            summary["fallback"] = {
+                "predictors": normalized_fallback_predictors,
+                "processed_records": 0,
+                "message": "Selected verified fallback methods already have MetaMP coverage for the selected scope. No local fallback run was needed.",
+            }
+            return summary
+    else:
+        raise ValueError(
+            "Unsupported fallback mode '"
+            + str(fallback_mode)
+            + "'. Expected one of: tmalphafold_first, fallback_only."
+        )
+
+    aggregate_fallback_summary = {
+        "predictors": normalized_fallback_predictors,
+        "execution_predictors": execution_predictors,
+        "processed_records": 0,
+        "per_predictor": {},
+    }
+    target_selection_codes = fallback_codes or selected_codes
+    for predictor_name in execution_predictors:
+        predictor_scope = determine_verified_tm_fallback_targets(
+            predictor_names=[predictor_name],
+            pdb_codes=target_selection_codes,
+            limit=fallback_limit,
+            completion_provider="MetaMP",
+            progress_callback=progress_callback,
+        )
+        predictor_codes = target_selection_codes if include_completed else predictor_scope["pdb_codes"]
+        aggregate_fallback_summary["per_predictor"][predictor_name] = {
+            "scope": predictor_scope,
+        }
+        if not predictor_codes:
+            aggregate_fallback_summary["per_predictor"][predictor_name]["summary"] = {
+                "predictor": predictor_name,
+                "processed_records": 0,
+                "message": (
+                    f"{predictor_name} already has MetaMP coverage for the selected scope. "
+                    "No local fallback run was needed."
+                ),
+            }
+            continue
+        _emit_progress(
+            progress_callback,
+            f"Starting verified local fallback predictor {predictor_name} for {len(predictor_codes)} protein(s).",
+        )
+        predictor_summary = run_optional_tm_prediction_backfill(
+            predictor_names=[predictor_name],
+            include_completed=include_completed,
+            pdb_codes=predictor_codes,
+            limit=None,
+            use_gpu=use_gpu,
+            batch_size=batch_size,
+            max_workers=max_workers,
+            progress_callback=progress_callback,
+        )
+        aggregate_fallback_summary["per_predictor"][predictor_name]["summary"] = predictor_summary
+        aggregate_fallback_summary["processed_records"] += int(
+            predictor_summary.get("processed_records") or 0
+        )
+
+    if aggregate_fallback_summary["processed_records"] == 0:
+        aggregate_fallback_summary["message"] = (
+            "Selected verified fallback methods already have MetaMP coverage for the selected scope. "
+            "No local fallback run was needed."
+        )
+    summary["fallback"] = aggregate_fallback_summary
+    return summary
+
+
+def get_optional_tm_runtime_status(predictor_names=None, app_config=None):
+    normalized_names = normalize_optional_tm_predictor_names(predictor_names)
+    tool_paths = get_optional_tm_tool_paths(app_config=app_config)
+    per_predictor = {}
+    for predictor_name in normalized_names:
+        per_predictor[predictor_name] = _resolve_optional_tm_command_runtime(
+            predictor_name,
+            app_config=app_config,
+        )
+    return {
+        "tool_home": str(tool_paths["tool_home"]),
+        "bin_dir": str(tool_paths["bin_dir"]),
+        "wrappers_dir": str(tool_paths["wrappers_dir"]),
+        "predictors": normalized_names,
+        "per_predictor": per_predictor,
+    }
+
+
 def load_optional_tm_prediction_frame(
     predictor_name,
     include_completed=False,
     pdb_codes=None,
     limit=None,
+    completion_provider="MetaMP",
     progress_callback=None,
 ):
     normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    execution_mode = get_optional_tm_predictor_spec(normalized_name).get("execution_mode")
+    structure_only = execution_mode == "external_structure"
 
     count_col, region_col = tm_predictor_column_names(normalized_name)
     table_names = ["membrane_proteins", "membrane_protein_opm"]
@@ -425,7 +1897,7 @@ def load_optional_tm_prediction_frame(
     )
     normalized_prediction_df = _load_normalized_tm_prediction_frame(
         predictor_names=[normalized_name],
-        provider="MetaMP",
+        provider=normalize_optional_tm_completion_provider(completion_provider),
         pdb_codes=pdb_codes,
     )
     if not normalized_prediction_df.empty:
@@ -462,44 +1934,72 @@ def load_optional_tm_prediction_frame(
     )
 
     if not include_completed:
+        completed_codes = _load_optional_tm_completion_codes(
+            normalized_name,
+            provider=completion_provider,
+            pdb_codes=all_data["pdb_code"].tolist(),
+            statuses=("success", "error"),
+        )
         pending_mask = all_data[[count_col, region_col]].fillna("").astype(str).apply(
             lambda column: column.str.strip().eq("")
         ).all(axis=1)
+        if completed_codes:
+            pending_mask &= ~all_data["pdb_code"].astype(str).str.strip().str.upper().isin(completed_codes)
         all_data = all_data.loc[pending_mask].copy()
         _emit_progress(
             progress_callback,
-            f"Found {len(all_data)} protein record(s) still missing {normalized_name} results.",
+            f"Found {len(all_data)} protein record(s) still missing {normalized_name} results "
+            f"for completion provider scope {completion_provider}.",
         )
 
-    sequence_missing_before = (
-        all_data["sequence_sequence"].isna()
-        | all_data["sequence_sequence"].astype(str).str.strip().eq("")
-    )
+    unrunnable_codes = []
+    if not structure_only:
+        sequence_missing_before = (
+            all_data["sequence_sequence"].isna()
+            | all_data["sequence_sequence"].astype(str).str.strip().eq("")
+        )
+        pending_before_sequence = int(len(all_data))
 
-    all_data = fill_missing_sequences(
-        all_data,
-        pdb_col="pdb_code",
-        seq_col="sequence_sequence",
-        progress_callback=progress_callback,
-    )
-
-    if not all_data.empty:
-        fetched_sequences = all_data.loc[
-            sequence_missing_before
-            & all_data["sequence_sequence"].notna()
-            & ~all_data["sequence_sequence"].astype(str).str.strip().eq("")
-        ][["pdb_code", "sequence_sequence"]].drop_duplicates(subset="pdb_code")
-        persist_sequences_to_db(
-            fetched_sequences,
+        all_data = fill_missing_sequences(
+            all_data,
             pdb_col="pdb_code",
             seq_col="sequence_sequence",
             progress_callback=progress_callback,
         )
 
-    all_data = all_data.loc[
-        all_data["sequence_sequence"].notna()
-        & ~all_data["sequence_sequence"].astype(str).str.strip().eq("")
-    ].copy()
+        if not all_data.empty:
+            fetched_sequences = all_data.loc[
+                sequence_missing_before
+                & all_data["sequence_sequence"].notna()
+                & ~all_data["sequence_sequence"].astype(str).str.strip().eq("")
+            ][["pdb_code", "sequence_sequence"]].drop_duplicates(subset="pdb_code")
+            persist_sequences_to_db(
+                fetched_sequences,
+                pdb_col="pdb_code",
+                seq_col="sequence_sequence",
+                progress_callback=progress_callback,
+            )
+
+        unresolved_mask = (
+            all_data["sequence_sequence"].isna()
+            | all_data["sequence_sequence"].astype(str).str.strip().eq("")
+        )
+        unrunnable_codes = (
+            all_data.loc[unresolved_mask, "pdb_code"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .tolist()
+        )
+        all_data = all_data.loc[~unresolved_mask].copy()
+        unrunnable_due_to_missing_sequence = max(0, pending_before_sequence - int(len(all_data)))
+        if unrunnable_due_to_missing_sequence:
+            _emit_progress(
+                progress_callback,
+                f"Skipped {unrunnable_due_to_missing_sequence} {normalized_name} candidate record(s) because no usable sequence could be fetched from RCSB.",
+            )
+    else:
+        all_data["sequence_sequence"] = all_data["sequence_sequence"].fillna("").astype(str)
     if limit is not None:
         all_data = all_data.head(int(limit)).copy()
         _emit_progress(
@@ -510,7 +2010,147 @@ def load_optional_tm_prediction_frame(
         progress_callback,
         f"Prepared {len(all_data)} protein sequence(s) for {normalized_name} export.",
     )
-    return all_data.reset_index(drop=True)
+    result = all_data.reset_index(drop=True)
+    result.attrs["unrunnable_missing_sequence_codes"] = list(dict.fromkeys(unrunnable_codes))
+    return result
+
+
+def load_optional_tm_prediction_export_frame(
+    predictor_names=None,
+    pdb_codes=None,
+    limit=None,
+    completion_provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_names = normalize_optional_tm_predictor_names(predictor_names)
+    execution_modes = {
+        predictor_name: get_optional_tm_predictor_spec(predictor_name).get("execution_mode")
+        for predictor_name in normalized_names
+    }
+    structure_only = bool(normalized_names) and all(
+        execution_modes.get(predictor_name) == "external_structure"
+        for predictor_name in normalized_names
+    )
+    table_names = ["membrane_proteins", "membrane_protein_opm"]
+    result_df = get_tables_as_dataframe(table_names, "pdb_code")
+    result_df_uniprot = get_table_as_dataframe("membrane_protein_uniprot")
+
+    common = (set(result_df.columns) - {"pdb_code"}) & set(result_df_uniprot.columns)
+    right_pruned = result_df_uniprot.drop(columns=list(common))
+    all_data = pd.merge(
+        right=result_df,
+        left=right_pruned,
+        on="pdb_code",
+        how="outer",
+    )
+    normalized_prediction_df = _load_normalized_tm_prediction_frame(
+        predictor_names=normalized_names,
+        provider=normalize_optional_tm_completion_provider(completion_provider),
+        pdb_codes=pdb_codes,
+    )
+    if not normalized_prediction_df.empty:
+        all_data = all_data.merge(
+            normalized_prediction_df,
+            on="pdb_code",
+            how="left",
+            suffixes=("", "_normalized"),
+        )
+
+    required_cols = ["pdb_code", "sequence_sequence"]
+    for normalized_name in normalized_names:
+        count_col, region_col = tm_predictor_column_names(normalized_name)
+        if count_col not in all_data.columns:
+            all_data[count_col] = pd.NA
+        if region_col not in all_data.columns:
+            all_data[region_col] = ""
+        required_cols.extend([count_col, region_col])
+
+    if "sequence_sequence" not in all_data.columns:
+        all_data["sequence_sequence"] = pd.NA
+
+    all_data = all_data[required_cols].copy()
+    selected_codes = _normalize_pdb_code_selection(pdb_codes)
+    if selected_codes:
+        all_data = all_data.loc[
+            all_data["pdb_code"].astype(str).str.strip().str.upper().isin(selected_codes)
+        ].copy()
+        _emit_progress(
+            progress_callback,
+            f"Restricted optional TM export to {len(all_data)} explicitly selected protein record(s).",
+        )
+
+    _emit_progress(
+        progress_callback,
+        "Loaded "
+        + str(len(all_data))
+        + " merged protein record(s) for optional TM export across predictors: "
+        + ", ".join(normalized_names)
+        + f". Completion provider scope: {completion_provider}.",
+    )
+
+    unrunnable_codes = []
+    if not structure_only:
+        sequence_missing_before = (
+            all_data["sequence_sequence"].isna()
+            | all_data["sequence_sequence"].astype(str).str.strip().eq("")
+        )
+        pending_before_sequence = int(len(all_data))
+
+        all_data = fill_missing_sequences(
+            all_data,
+            pdb_col="pdb_code",
+            seq_col="sequence_sequence",
+            progress_callback=progress_callback,
+        )
+
+        if not all_data.empty:
+            fetched_sequences = all_data.loc[
+                sequence_missing_before
+                & all_data["sequence_sequence"].notna()
+                & ~all_data["sequence_sequence"].astype(str).str.strip().eq("")
+            ][["pdb_code", "sequence_sequence"]].drop_duplicates(subset="pdb_code")
+            persist_sequences_to_db(
+                fetched_sequences,
+                pdb_col="pdb_code",
+                seq_col="sequence_sequence",
+                progress_callback=progress_callback,
+            )
+
+        unresolved_mask = (
+            all_data["sequence_sequence"].isna()
+            | all_data["sequence_sequence"].astype(str).str.strip().eq("")
+        )
+        unrunnable_codes = (
+            all_data.loc[unresolved_mask, "pdb_code"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .tolist()
+        )
+        all_data = all_data.loc[~unresolved_mask].copy()
+        unrunnable_due_to_missing_sequence = max(0, pending_before_sequence - int(len(all_data)))
+        if unrunnable_due_to_missing_sequence:
+            _emit_progress(
+                progress_callback,
+                f"Skipped {unrunnable_due_to_missing_sequence} optional TM export candidate record(s) because no usable sequence could be fetched from RCSB.",
+            )
+    else:
+        all_data["sequence_sequence"] = all_data["sequence_sequence"].fillna("").astype(str)
+
+    if limit is not None:
+        all_data = all_data.head(int(limit)).copy()
+        _emit_progress(
+            progress_callback,
+            f"Restricted optional TM export to the first {len(all_data)} protein record(s).",
+        )
+
+    _emit_progress(
+        progress_callback,
+        f"Prepared {len(all_data)} protein sequence(s) for multi-predictor optional TM export.",
+    )
+    result = all_data.reset_index(drop=True)
+    result.attrs["unrunnable_missing_sequence_codes"] = list(dict.fromkeys(unrunnable_codes))
+    return result
 
 
 def export_optional_tm_prediction_inputs(
@@ -520,6 +2160,7 @@ def export_optional_tm_prediction_inputs(
     include_completed=False,
     pdb_codes=None,
     limit=None,
+    completion_provider="MetaMP",
     progress_callback=None,
 ):
     normalized_name = normalize_optional_tm_predictor_name(predictor_name)
@@ -529,13 +2170,23 @@ def export_optional_tm_prediction_inputs(
         include_completed=include_completed,
         pdb_codes=pdb_codes,
         limit=limit,
+        completion_provider=completion_provider,
         progress_callback=progress_callback,
     )
+    unrunnable_codes = list(dict.fromkeys(frame.attrs.get("unrunnable_missing_sequence_codes") or []))
 
     fasta_path = Path(fasta_out) if fasta_out else path_config["fasta_path"]
     csv_path = Path(csv_out) if csv_out else path_config["csv_template_path"]
+    results_path = path_config["results_path"]
+    failures_path = path_config["failures_path"]
+    reference_path = path_config["reference_path"]
+    structure_manifest_path = path_config["structure_manifest_path"]
     fasta_path.parent.mkdir(parents=True, exist_ok=True)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    failures_path.parent.mkdir(parents=True, exist_ok=True)
+    reference_path.parent.mkdir(parents=True, exist_ok=True)
+    structure_manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
     with fasta_path.open("w") as fh:
         for _, row in frame.iterrows():
@@ -549,14 +2200,54 @@ def export_optional_tm_prediction_inputs(
         }
     )
     template.to_csv(csv_path, index=False)
+    template.to_csv(results_path, index=False)
+    pd.DataFrame(columns=["pdb_code", "error_message"]).to_csv(failures_path, index=False)
+
+    count_col, region_col = tm_predictor_column_names(normalized_name)
+    if frame.empty:
+        reference_frame = pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+    else:
+        upstream_seed_df = _load_normalized_tm_prediction_frame(
+            predictor_names=[normalized_name],
+            provider="TMAlphaFold",
+            pdb_codes=frame["pdb_code"].tolist(),
+        )
+        if not upstream_seed_df.empty:
+            reference_frame = upstream_seed_df.rename(
+                columns={
+                    count_col: "tm_count",
+                    region_col: "tm_regions",
+                }
+            )[["pdb_code", "tm_count", "tm_regions"]]
+        else:
+            reference_frame = pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+    reference_frame.to_csv(reference_path, index=False)
+    structure_manifest = _build_optional_tm_structure_manifest(frame)
+    structure_manifest.to_csv(structure_manifest_path, index=False)
+    reference_row_count = int(len(reference_frame))
+    debug_payload = _build_optional_tm_export_debug_payload(
+        reference_frame=reference_frame,
+        results_frame=template,
+        predictor_name=normalized_name,
+    )
 
     summary = {
         "predictor": normalized_name,
         "record_count": int(len(frame)),
+        "unrunnable_missing_sequence_count": int(len(unrunnable_codes)),
+        "unrunnable_missing_sequence_codes": unrunnable_codes,
         "fasta_path": str(fasta_path),
         "csv_template_path": str(csv_path),
-        "results_input_path": str(path_config["results_path"]),
+        "results_input_path": str(results_path),
+        "failures_input_path": str(failures_path),
+        "reference_input_path": str(reference_path),
+        "structure_manifest_path": str(structure_manifest_path),
+        "seeded_from_upstream_count": reference_row_count,
+        "reference_row_count": reference_row_count,
+        "execution_mode": get_optional_tm_predictor_spec(normalized_name).get("execution_mode"),
         "include_completed": bool(include_completed),
+        "completion_provider": completion_provider,
+        "debug": debug_payload,
         "export_manifest_path": str(path_config["export_manifest_path"]),
     }
     write_optional_tm_prediction_manifest(path_config["export_manifest_path"], summary)
@@ -564,7 +2255,177 @@ def export_optional_tm_prediction_inputs(
         progress_callback,
         f"Exported {summary['record_count']} {normalized_name} input sequence(s) and CSV template.",
     )
+    _emit_optional_tm_export_debug(
+        progress_callback=progress_callback,
+        predictor_name=normalized_name,
+        debug_payload=debug_payload,
+        results_path=results_path,
+        reference_path=reference_path,
+    )
     return summary
+
+
+def export_optional_tm_prediction_inputs_bulk(
+    predictor_names=None,
+    include_completed=False,
+    pdb_codes=None,
+    limit=None,
+    completion_provider="MetaMP",
+    progress_callback=None,
+):
+    normalized_names = normalize_optional_tm_predictor_names(predictor_names)
+    frame = load_optional_tm_prediction_export_frame(
+        predictor_names=normalized_names,
+        pdb_codes=pdb_codes,
+        limit=limit,
+        completion_provider=completion_provider,
+        progress_callback=progress_callback,
+    )
+    shared_unrunnable_codes = list(
+        dict.fromkeys(frame.attrs.get("unrunnable_missing_sequence_codes") or [])
+    )
+
+    per_predictor = {}
+    total_export_records = 0
+    predictors_with_pending = 0
+
+    for normalized_name in normalized_names:
+        count_col, region_col = tm_predictor_column_names(normalized_name)
+        predictor_frame = frame.copy()
+        if not include_completed:
+            completed_codes = _load_optional_tm_completion_codes(
+                normalized_name,
+                provider=completion_provider,
+                pdb_codes=predictor_frame["pdb_code"].tolist(),
+                statuses=("success", "error"),
+            )
+            pending_mask = predictor_frame[[count_col, region_col]].fillna("").astype(str).apply(
+                lambda column: column.str.strip().eq("")
+            ).all(axis=1)
+            if completed_codes:
+                pending_mask &= ~predictor_frame["pdb_code"].astype(str).str.strip().str.upper().isin(completed_codes)
+            predictor_frame = predictor_frame.loc[pending_mask].copy()
+            _emit_progress(
+                progress_callback,
+                f"Found {len(predictor_frame)} protein record(s) still missing {normalized_name} results "
+                f"for completion provider scope {completion_provider}.",
+            )
+        else:
+            _emit_progress(
+                progress_callback,
+                f"Including completed records for {normalized_name}; exporting {len(predictor_frame)} record(s).",
+            )
+
+        path_config = get_optional_tm_prediction_paths(normalized_name)
+        fasta_path = path_config["fasta_path"]
+        csv_path = path_config["csv_template_path"]
+        results_path = path_config["results_path"]
+        failures_path = path_config["failures_path"]
+        reference_path = path_config["reference_path"]
+        structure_manifest_path = path_config["structure_manifest_path"]
+        fasta_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        results_path.parent.mkdir(parents=True, exist_ok=True)
+        failures_path.parent.mkdir(parents=True, exist_ok=True)
+        reference_path.parent.mkdir(parents=True, exist_ok=True)
+        structure_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with fasta_path.open("w") as fh:
+            for _, row in predictor_frame.iterrows():
+                fh.write(f">{row['pdb_code']}\n{row['sequence_sequence']}\n")
+
+        template = pd.DataFrame(
+            {
+                "pdb_code": predictor_frame["pdb_code"].astype(str),
+                "tm_count": [None] * len(predictor_frame),
+                "tm_regions": [""] * len(predictor_frame),
+            }
+        )
+        template.to_csv(csv_path, index=False)
+        template.to_csv(results_path, index=False)
+        pd.DataFrame(columns=["pdb_code", "error_message"]).to_csv(failures_path, index=False)
+
+        if predictor_frame.empty:
+            reference_frame = pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+        else:
+            upstream_seed_df = _load_normalized_tm_prediction_frame(
+                predictor_names=[normalized_name],
+                provider="TMAlphaFold",
+                pdb_codes=predictor_frame["pdb_code"].tolist(),
+            )
+            if not upstream_seed_df.empty:
+                reference_frame = upstream_seed_df.rename(
+                    columns={
+                        count_col: "tm_count",
+                        region_col: "tm_regions",
+                    }
+                )[["pdb_code", "tm_count", "tm_regions"]]
+            else:
+                reference_frame = pd.DataFrame(columns=["pdb_code", "tm_count", "tm_regions"])
+        reference_frame.to_csv(reference_path, index=False)
+        structure_manifest = _build_optional_tm_structure_manifest(predictor_frame)
+        structure_manifest.to_csv(structure_manifest_path, index=False)
+        reference_row_count = int(len(reference_frame))
+        debug_payload = _build_optional_tm_export_debug_payload(
+            reference_frame=reference_frame,
+            results_frame=template,
+            predictor_name=normalized_name,
+        )
+
+        summary = {
+            "predictor": normalized_name,
+            "record_count": int(len(predictor_frame)),
+            "unrunnable_missing_sequence_count": int(len(shared_unrunnable_codes)),
+            "unrunnable_missing_sequence_codes": shared_unrunnable_codes,
+            "fasta_path": str(fasta_path),
+            "csv_template_path": str(csv_path),
+            "results_input_path": str(results_path),
+            "failures_input_path": str(failures_path),
+            "reference_input_path": str(reference_path),
+            "structure_manifest_path": str(structure_manifest_path),
+            "seeded_from_upstream_count": reference_row_count,
+            "reference_row_count": reference_row_count,
+            "execution_mode": get_optional_tm_predictor_spec(normalized_name).get("execution_mode"),
+            "include_completed": bool(include_completed),
+            "completion_provider": completion_provider,
+            "debug": debug_payload,
+            "export_manifest_path": str(path_config["export_manifest_path"]),
+        }
+        write_optional_tm_prediction_manifest(path_config["export_manifest_path"], summary)
+        _emit_progress(
+            progress_callback,
+            f"Exported {summary['record_count']} {normalized_name} input sequence(s) and CSV template.",
+        )
+        _emit_optional_tm_export_debug(
+            progress_callback=progress_callback,
+            predictor_name=normalized_name,
+            debug_payload=debug_payload,
+            results_path=results_path,
+            reference_path=reference_path,
+        )
+        per_predictor[normalized_name] = summary
+        total_export_records += int(len(predictor_frame))
+        if len(predictor_frame) > 0:
+            predictors_with_pending += 1
+
+    aggregate_summary = {
+        "predictors": normalized_names,
+        "selected_record_count": int(len(frame)),
+        "predictors_with_pending_records": int(predictors_with_pending),
+        "total_export_records": int(total_export_records),
+        "include_completed": bool(include_completed),
+        "completion_provider": completion_provider,
+        "per_predictor": per_predictor,
+    }
+    _emit_progress(
+        progress_callback,
+        "Completed optional TM export across "
+        + str(len(normalized_names))
+        + " predictor(s); "
+        + str(total_export_records)
+        + " total record export(s) written.",
+    )
+    return aggregate_summary
 
 
 def fetch_pdb_entry_sequence(pdb_id: str, timeout: int = 30) -> str:
@@ -728,23 +2589,66 @@ def persist_sequences_to_db(
     conn = psycopg2.connect(**build_db_params())
     try:
         cur = conn.cursor()
-        query = sql.SQL(
-            "UPDATE {tbl} SET {seq_col} = %s WHERE {id_col} = %s"
-        ).format(
-            tbl=sql.Identifier("membrane_proteins"),
-            seq_col=sql.Identifier(seq_col),
-            id_col=sql.Identifier(pdb_col),
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND column_name = %s
+              AND table_name IN ('membrane_proteins', 'membrane_protein_uniprot')
+            """,
+            (seq_col,),
         )
-        cur.executemany(query.as_string(conn), updates)
+        available_tables = {row[0] for row in cur.fetchall()}
+
+        updated_counts = {}
+        if "membrane_proteins" in available_tables:
+            protein_query = sql.SQL(
+                """
+                UPDATE {tbl}
+                SET {seq_col} = %s
+                WHERE {id_col} = %s
+                  AND ({seq_col} IS NULL OR BTRIM({seq_col}) = '')
+                """
+            ).format(
+                tbl=sql.Identifier("membrane_proteins"),
+                seq_col=sql.Identifier(seq_col),
+                id_col=sql.Identifier(pdb_col),
+            )
+            cur.executemany(protein_query.as_string(conn), updates)
+            updated_counts["membrane_proteins"] = max(0, int(cur.rowcount or 0))
+
+        if "membrane_protein_uniprot" in available_tables:
+            uniprot_query = sql.SQL(
+                """
+                UPDATE {tbl}
+                SET {seq_col} = %s
+                WHERE {id_col} = %s
+                  AND ({seq_col} IS NULL OR BTRIM({seq_col}) = '')
+                """
+            ).format(
+                tbl=sql.Identifier("membrane_protein_uniprot"),
+                seq_col=sql.Identifier(seq_col),
+                id_col=sql.Identifier(pdb_col),
+            )
+            cur.executemany(uniprot_query.as_string(conn), updates)
+            updated_counts["membrane_protein_uniprot"] = max(0, int(cur.rowcount or 0))
+
         conn.commit()
     finally:
         conn.close()
 
     _emit_progress(
         progress_callback,
-        f"Persisted {len(updates)} fetched protein sequence(s) into the database.",
+        "Persisted fetched protein sequences into "
+        + ", ".join(
+            f"{table_name}={count}"
+            for table_name, count in sorted(updated_counts.items())
+        )
+        if updated_counts
+        else "Skipped sequence persistence because no target table exposes the requested sequence column.",
     )
-    return len(updates)
+    return int(sum(updated_counts.values()))
 
 
 def load_pending_tm_prediction_frame(
@@ -821,11 +2725,41 @@ def load_pending_tm_prediction_frame(
     )
     pending_columns = [column for column in pending_columns if column in all_data.columns]
     if pending_columns and not include_completed:
-        all_data = all_data.loc[
-            all_data[pending_columns].fillna("").astype(str).apply(
+        predictor_pending_masks = []
+        selected_predictors = (
+            (["TMbed"] if include_tmbed else [])
+            + (["DeepTMHMM"] if include_deeptmhmm else [])
+        )
+        normalized_pdb_codes = (
+            all_data["pdb_code"].astype(str).str.strip().str.upper()
+            if "pdb_code" in all_data.columns
+            else pd.Series(dtype=str)
+        )
+        for predictor_name in selected_predictors:
+            count_col, region_col = tm_predictor_column_names(predictor_name)
+            available_predictor_columns = [
+                column for column in [count_col, region_col] if column in all_data.columns
+            ]
+            if not available_predictor_columns:
+                continue
+            predictor_missing_mask = all_data[available_predictor_columns].fillna("").astype(str).apply(
                 lambda column: column.str.strip().eq("")
-            ).any(axis=1)
-        ]
+            ).all(axis=1)
+            completed_codes = _load_optional_tm_completion_codes(
+                predictor_name,
+                provider="MetaMP",
+                pdb_codes=all_data["pdb_code"].tolist(),
+                statuses=("success", "error"),
+            )
+            if completed_codes:
+                predictor_missing_mask &= ~normalized_pdb_codes.isin(completed_codes)
+            predictor_pending_masks.append(predictor_missing_mask)
+
+        if predictor_pending_masks:
+            pending_mask = predictor_pending_masks[0].copy()
+            for predictor_mask in predictor_pending_masks[1:]:
+                pending_mask |= predictor_mask
+            all_data = all_data.loc[pending_mask]
     _emit_progress(
         progress_callback,
         (
@@ -856,6 +2790,7 @@ def load_pending_tm_prediction_frame(
         all_data["sequence_sequence"].isna()
         | all_data["sequence_sequence"].astype(str).str.strip().eq("")
     ) if "sequence_sequence" in all_data.columns else pd.Series(False, index=all_data.index)
+    pending_before_sequence = int(len(all_data))
 
     all_data = fill_missing_sequences(
         all_data,
@@ -877,8 +2812,31 @@ def load_pending_tm_prediction_frame(
             progress_callback=progress_callback,
         )
 
+    unrunnable_codes = []
+    if not all_data.empty and "sequence_sequence" in all_data.columns:
+        unresolved_mask = sequence_missing_before.reindex(all_data.index, fill_value=False) & (
+            all_data["sequence_sequence"].isna()
+            | all_data["sequence_sequence"].astype(str).str.strip().eq("")
+        )
+        if unresolved_mask.any():
+            unrunnable_codes = list(
+                dict.fromkeys(
+                    all_data.loc[unresolved_mask, "pdb_code"]
+                    .astype(str)
+                    .str.strip()
+                    .str.upper()
+                    .tolist()
+                )
+            )
+
     all_data = all_data[all_data["sequence_sequence"].notna()]
     all_data = all_data[all_data["sequence_sequence"] != ""]
+    unrunnable_due_to_missing_sequence = max(0, pending_before_sequence - int(len(all_data)))
+    if unrunnable_due_to_missing_sequence:
+        _emit_progress(
+            progress_callback,
+            f"Skipped {unrunnable_due_to_missing_sequence} TM prediction candidate record(s) because no usable sequence could be fetched from RCSB.",
+        )
     if limit is not None:
         all_data = all_data.head(int(limit)).copy()
         _emit_progress(
@@ -889,6 +2847,7 @@ def load_pending_tm_prediction_frame(
         progress_callback,
         f"Prepared {len(all_data)} protein sequence(s) for TM prediction.",
     )
+    all_data.attrs["unrunnable_missing_sequence_codes"] = unrunnable_codes
     return all_data
 
 
@@ -923,8 +2882,11 @@ def run_tm_prediction_for_sequences(
         use_db=False,
         write_csv=False,
     )
+    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu}
+    if len(dataframe) <= 1:
+        tmbed_kwargs.update({"batch_size": 1, "threads": 1})
     if include_tmbed:
-        analyzer.register(TMbedPredictor(format_code=0, use_gpu=use_gpu))
+        analyzer.register(TMbedPredictor(**tmbed_kwargs))
     if include_deeptmhmm:
         analyzer.register(DeepTMHMMPredictor())
 
@@ -995,16 +2957,50 @@ def run_tm_prediction_backfill(
         limit=limit,
         progress_callback=progress_callback,
     )
+    unrunnable_codes = list(
+        dict.fromkeys(all_data.attrs.get("unrunnable_missing_sequence_codes") or [])
+    )
+    missing_sequence_error_summaries = {}
+    if unrunnable_codes and not include_completed:
+        builtin_predictors = (
+            (["TMbed"] if include_tmbed else [])
+            + (["DeepTMHMM"] if include_deeptmhmm else [])
+        )
+        for predictor_name in builtin_predictors:
+            missing_sequence_error_summaries[predictor_name] = _persist_optional_tm_error_rows(
+                predictor_name=predictor_name,
+                error_rows=[
+                    {
+                        "pdb_code": pdb_code,
+                        "error_message": "No usable sequence could be fetched from RCSB for local MetaMP fallback.",
+                    }
+                    for pdb_code in unrunnable_codes
+                ],
+                provider="MetaMP",
+                progress_callback=progress_callback,
+            )
+        _emit_progress(
+            progress_callback,
+            "Recorded sequence-unavailable MetaMP fallback error rows for built-in predictors: "
+            + ", ".join(builtin_predictors)
+            + ".",
+        )
     if all_data.empty:
+        no_pending_message = "No pending protein records require TM prediction backfill."
+        if missing_sequence_error_summaries:
+            no_pending_message = (
+                "No runnable protein records require TM prediction backfill after sequence resolution."
+            )
         summary = {
             "queued_records": 0,
-            "processed_records": 0,
+            "processed_records": int(len(unrunnable_codes)) if missing_sequence_error_summaries else 0,
             "predictors": (
                 (["TMbed"] if include_tmbed else [])
                 + (["DeepTMHMM"] if include_deeptmhmm else [])
             ),
-            "message": "No pending protein records require TM prediction backfill.",
+            "message": no_pending_message,
             "include_completed": bool(include_completed),
+            "missing_sequence_errors": missing_sequence_error_summaries,
         }
         if csv_out_path is not None:
             summary["csv_path"] = str(csv_out_path)
@@ -1026,8 +3022,22 @@ def run_tm_prediction_backfill(
             else None
         ),
     )
+    if include_completed:
+        forced_predictor_names = [
+            predictor_name
+            for predictor_name in (["TMbed"] if include_tmbed else []) + (["DeepTMHMM"] if include_deeptmhmm else [])
+        ]
+        for predictor_name in forced_predictor_names:
+            count_col, region_col = tm_predictor_column_names(predictor_name)
+            if count_col in all_data.columns:
+                all_data[count_col] = pd.NA
+            if region_col in all_data.columns:
+                all_data[region_col] = pd.NA
+    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu}
+    if len(all_data) <= 1:
+        tmbed_kwargs.update({"batch_size": 1, "threads": 1})
     if include_tmbed:
-        analyzer.register(TMbedPredictor(format_code=4, use_gpu=use_gpu))
+        analyzer.register(TMbedPredictor(**tmbed_kwargs))
     if include_deeptmhmm:
         analyzer.register(DeepTMHMMPredictor())
 
@@ -1101,13 +3111,16 @@ def run_tm_prediction_backfill(
 
     summary = {
         "queued_records": int(len(all_data)),
-        "processed_records": int(processed_this_run),
+        "processed_records": int(processed_this_run) + (
+            int(len(unrunnable_codes)) if missing_sequence_error_summaries else 0
+        ),
         "predictors": predictor_names,
         "record_columns": [
             column for column in TM_PREDICTION_RECORD_COLUMNS if column in result_df.columns
         ],
         "include_completed": bool(include_completed),
         "normalized_store": normalized_store,
+        "missing_sequence_errors": missing_sequence_error_summaries,
     }
     if not current_run_records.empty:
         summary["records"] = current_run_records.to_dict(orient="records")

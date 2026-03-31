@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import shutil
 import xml.etree.ElementTree as element_tree
 from pathlib import Path
@@ -22,6 +24,12 @@ class MPStrucDatasetSource(DatasetSource):
     def run(self, context: IngestionContext):
         context.layout.ensure_directories()
         xml_path = context.layout.mpstruc_xml(context.run_date)
+
+        if os.getenv("MPSTRUC_REPARSE_CURRENT_XML", "false").lower() == "true":
+            reparsed = self._reparse_current_xml_snapshot(context, xml_path)
+            if reparsed is not None:
+                return reparsed
+
         existing_dataset = self._reuse_recent_artifacts_if_available(context, xml_path)
         if existing_dataset is not None:
             return existing_dataset
@@ -55,6 +63,40 @@ class MPStrucDatasetSource(DatasetSource):
         ids.to_csv(context.layout.mpstruc_ids_current, index=False)
         context.report(
             f"[mpstruc] Wrote {len(dataset)} row(s) and {len(ids)} identifier(s)"
+        )
+        return dataset
+
+    def _reparse_current_xml_snapshot(self, context: IngestionContext, xml_path):
+        current_xml_path = context.layout.mpstruc_xml_current
+        latest_xml_snapshot = current_xml_path if current_xml_path.exists() else self._find_latest_local_xml_snapshot(context.layout)
+        if latest_xml_snapshot is None:
+            context.report("[mpstruc] MPSTRUC_REPARSE_CURRENT_XML requested, but no local XML snapshot is available")
+            return None
+
+        context.report(
+            f"[mpstruc] Reparsing local XML snapshot {latest_xml_snapshot.name} without downloading from source"
+        )
+        if latest_xml_snapshot != xml_path:
+            self._try_write_bytes(
+                xml_path,
+                latest_xml_snapshot.read_bytes(),
+                context,
+                "[mpstruc] Unable to materialize dated XML snapshot from local XML seed",
+            )
+        if latest_xml_snapshot != current_xml_path:
+            self._try_write_bytes(
+                current_xml_path,
+                latest_xml_snapshot.read_bytes(),
+                context,
+                "[mpstruc] Unable to refresh current XML snapshot from local XML seed",
+            )
+
+        dataset, ids = self._parse_xml(latest_xml_snapshot)
+        dataset.to_csv(context.layout.mpstruc_dataset(context.run_date), index=False)
+        dataset.to_csv(context.layout.mpstruc_dataset_current, index=False)
+        ids.to_csv(context.layout.mpstruc_ids_current, index=False)
+        context.report(
+            f"[mpstruc] Rebuilt {len(dataset)} row(s) and {len(ids)} identifier(s) from local XML snapshot"
         )
         return dataset
 
@@ -253,30 +295,29 @@ class MPStrucDatasetSource(DatasetSource):
         return dataset, ids
 
     def _extract_protein_entries(self, protein, group_name, subgroup_name):
-        pdb_code = protein[0].text
+        pdb_code = self._find_text(protein, "pdbCode")
         member_proteins = []
         member_entries = []
 
-        for memberprotein in protein[10]:
-            member_proteins.append([memberprotein[0].tag, memberprotein[0].text])
+        member_protein_container = protein.find("memberProteins")
+        for memberprotein in list(member_protein_container or []):
+            member_pdb_code = self._find_text(memberprotein, "pdbCode")
+            member_proteins.append(["pdbCode", member_pdb_code])
             member_entries.append(
                 [
                     group_name,
                     subgroup_name,
-                    memberprotein[0].text,
-                    memberprotein[1].text,
-                    memberprotein[2].text,
-                    memberprotein[3].text,
-                    memberprotein[4].text,
-                    memberprotein[5].text,
-                    memberprotein[6].text,
-                    memberprotein[7].text,
-                    [
-                        [memberprotein[8][index].tag, memberprotein[8][index].text]
-                        for index in range(len(memberprotein[8]))
-                    ],
-                    memberprotein[9].text,
-                    memberprotein[10].text,
+                    member_pdb_code,
+                    self._find_text(memberprotein, "masterProteinPdbCode"),
+                    self._find_text(memberprotein, "name"),
+                    self._find_text(memberprotein, "species"),
+                    self._find_text(memberprotein, "taxonomicDomain"),
+                    self._find_text(memberprotein, "expressedInSpecies"),
+                    self._find_text(memberprotein, "resolution"),
+                    self._find_text(memberprotein, "description"),
+                    self._extract_tag_text_pairs(memberprotein.find("bibliography")),
+                    self._find_text(memberprotein, "secondaryBibliographies"),
+                    self._extract_related_pdb_entries(memberprotein),
                     None,
                 ]
             )
@@ -286,15 +327,47 @@ class MPStrucDatasetSource(DatasetSource):
             subgroup_name,
             pdb_code,
             "MasterProtein",
-            protein[1].text,
-            protein[2].text,
-            protein[3].text,
-            protein[4].text,
-            protein[5].text,
-            protein[6].text,
-            [[protein[7][index].tag, protein[7][index].text] for index in range(len(protein[7]))],
-            protein[8].text,
-            protein[9].text,
+            self._find_text(protein, "name"),
+            self._find_text(protein, "species"),
+            self._find_text(protein, "taxonomicDomain"),
+            self._find_text(protein, "expressedInSpecies"),
+            self._find_text(protein, "resolution"),
+            self._find_text(protein, "description"),
+            self._extract_tag_text_pairs(protein.find("bibliography")),
+            self._find_text(protein, "secondaryBibliographies"),
+            self._extract_related_pdb_entries(protein),
             member_proteins,
         ]
         return master_entry, member_entries
+
+    @staticmethod
+    def _find_text(parent, tag_name, default=""):
+        if parent is None:
+            return default
+        node = parent.find(tag_name)
+        if node is None or node.text is None:
+            return default
+        text = str(node.text).strip()
+        return text if text else default
+
+    @staticmethod
+    def _extract_tag_text_pairs(container):
+        if container is None:
+            return []
+        pairs = []
+        for child in list(container):
+            pairs.append([child.tag, (child.text or "").strip() or None])
+        return pairs
+
+    def _extract_related_pdb_entries(self, parent):
+        container = parent.find("relatedPdbEntries") if parent is not None else None
+        if container is None:
+            return json.dumps([])
+
+        related_codes = []
+        for child in list(container):
+            value = (child.text or "").strip()
+            if value:
+                related_codes.append(value)
+
+        return json.dumps(related_codes)

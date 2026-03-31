@@ -17,6 +17,7 @@ from sklearn.model_selection import (
 import pandas as pd
 import numpy as np
 import joblib
+import plotly.express as px
 try:
     import shap
 except ImportError:  # pragma: no cover - optional dependency for explainability plots
@@ -80,6 +81,12 @@ FEATURE_DISPLAY_NAMES = {
     "gibbs": "Gibbs Free Energy",
     "membrane_topology_in": "Membrane Topology In",
     "membrane_topology_out": "Membrane Topology Out",
+}
+
+DR_PLOTLY_PALETTE = {
+    "Monotopic Membrane Proteins": "#01696f",
+    "Transmembrane Proteins: Alpha-helical": "#d19900",
+    "Transmembrane Proteins: Beta-barrel": "#a13544",
 }
 
 class MLJob:
@@ -586,18 +593,12 @@ class MLJob:
                 "tsne": "t-SNE Projection of MetaMP Training Records",
                 "umap": "UMAP Projection of MetaMP Training Records",
             }
-            chart = alt.Chart(obj).mark_circle().encode(
-                x='Component 1',
-                y='Component 2',
-                color=alt.Color('group:N', title='Group'),
-                tooltip=["group"]
-            ).properties(
-                width=800,
-                height=500,
+            plotly_figure = self._build_plotly_dr_figure(
+                obj,
                 title=title_map.get(key, key.upper()),
+                axis_label=key,
             )
-            chart = self._style_altair_chart(chart, font_size=18)
-            self._save_altair_figure(chart, MODEL_ROOT / key, scale_factor=3.0)
+            self._save_plotly_figure(plotly_figure, MODEL_ROOT / key)
         return self
 
     def run_classificationXXX(self, X, y, model_class, filename_prefix, X_unlabeled=None):
@@ -1838,13 +1839,28 @@ class MLJob:
         )
 
     @staticmethod
-    def _save_shap_bar_figure(importance_df, output_path, title):
+    def _style_shap_axes(ax):
+        ax.set_title("")
+        ax.set_facecolor("#ffffff")
+        ax.figure.patch.set_facecolor("#ffffff")
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(axis="both", length=0)
+        ax.grid(axis="x", color="#d7dde5", linewidth=0.8)
+
+    @staticmethod
+    def _save_shap_bar_figure(importance_df, output_path, title=None):
         plt.figure(figsize=(9, 5.8))
         ranked = importance_df.sort_values("mean_abs_shap", ascending=True)
         plt.barh(ranked["display_feature"], ranked["mean_abs_shap"], color="#1f5a91")
         plt.xlabel("Mean |SHAP value|")
         plt.ylabel("Feature")
-        plt.title(title, loc="center")
+        ax = plt.gca()
+        ax.xaxis.label.set_fontweight("bold")
+        ax.yaxis.label.set_fontweight("bold")
+        plt.setp(ax.get_xticklabels(), fontweight="bold")
+        plt.setp(ax.get_yticklabels(), fontweight="bold")
+        MLJob._style_shap_axes(ax)
         fig = plt.gcf()
         fig.tight_layout()
         MLJob._save_matplotlib_figure(fig, output_path)
@@ -1862,7 +1878,12 @@ class MLJob:
                     show=False,
                     max_display=max_display,
                 )
-                plt.title(f"SHAP Beeswarm: {class_name}", loc="center")
+                ax = plt.gca()
+                ax.xaxis.label.set_fontweight("bold")
+                ax.yaxis.label.set_fontweight("bold")
+                plt.setp(ax.get_xticklabels(), fontweight="bold")
+                plt.setp(ax.get_yticklabels(), fontweight="bold")
+                self._style_shap_axes(ax)
                 output_path = self.production_paths["figures"] / (
                     f"{artifact_id}_shap_beeswarm_{self._safe_slug(class_name)}.png"
                 )
@@ -1883,7 +1904,12 @@ class MLJob:
                     show=False,
                     max_display=max_display,
                 )
-                plt.title(f"SHAP Beeswarm: {class_name}", loc="center")
+                ax = plt.gca()
+                ax.xaxis.label.set_fontweight("bold")
+                ax.yaxis.label.set_fontweight("bold")
+                plt.setp(ax.get_xticklabels(), fontweight="bold")
+                plt.setp(ax.get_yticklabels(), fontweight="bold")
+                self._style_shap_axes(ax)
                 output_path = self.production_paths["figures"] / (
                     f"{artifact_id}_shap_beeswarm_{self._safe_slug(class_name)}.png"
                 )
@@ -1901,7 +1927,12 @@ class MLJob:
             show=False,
             max_display=max_display,
         )
-        plt.title("SHAP Beeswarm", loc="center")
+        ax = plt.gca()
+        ax.xaxis.label.set_fontweight("bold")
+        ax.yaxis.label.set_fontweight("bold")
+        plt.setp(ax.get_xticklabels(), fontweight="bold")
+        plt.setp(ax.get_yticklabels(), fontweight="bold")
+        self._style_shap_axes(ax)
         output_path = self.production_paths["figures"] / f"{artifact_id}_shap_beeswarm.png"
         fig = plt.gcf()
         fig.tight_layout()
@@ -1935,6 +1966,99 @@ class MLJob:
         output_path = Path(output_path)
         fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
         fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
+
+    @staticmethod
+    def _build_plotly_dr_figure(dataframe, title, axis_label):
+        df = dataframe.copy()
+        hover_columns = [
+            column
+            for column in df.columns
+            if column not in {"Component 1", "Component 2"}
+        ]
+        category_order = {}
+        if "group" in df.columns:
+            observed_groups = [
+                value
+                for value in DR_PLOTLY_PALETTE.keys()
+                if value in set(df["group"].dropna().astype(str))
+            ]
+            if observed_groups:
+                category_order["group"] = observed_groups
+
+        fig = px.scatter(
+            df,
+            x="Component 1",
+            y="Component 2",
+            color="group" if "group" in df.columns else None,
+            color_discrete_map=DR_PLOTLY_PALETTE if "group" in df.columns else None,
+            hover_data=hover_columns,
+            category_orders=category_order or None,
+            title=title,
+        )
+        fig.update_traces(
+            marker=dict(size=8, opacity=0.82, line=dict(width=0)),
+            selector=dict(mode="markers"),
+        )
+        axis_prefix = axis_label.upper() if str(axis_label).lower() != "tsne" else "t-SNE"
+        fig.update_layout(
+            width=1120,
+            height=760,
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            font=dict(family="Arial Black, Arial, Helvetica, sans-serif", size=18, color="#28251d"),
+            title=dict(text=f"<b>{title}</b>", x=0.5, xanchor="center", font=dict(size=24)),
+            legend=dict(
+                orientation="h",
+                x=0.5,
+                xanchor="center",
+                y=-0.18,
+                yanchor="top",
+                bgcolor="rgba(255,255,255,0.94)",
+                bordercolor="#d7dde5",
+                borderwidth=1,
+                title_text="<b>Group</b>" if "group" in df.columns else None,
+                font=dict(size=16),
+            ),
+            margin=dict(l=85, r=55, t=95, b=105),
+        )
+        fig.update_xaxes(
+            title=f"<b>{axis_prefix} 1</b>",
+            showgrid=True,
+            gridcolor="#d7dde5",
+            zeroline=False,
+            showline=False,
+            tickfont=dict(size=17),
+        )
+        fig.update_yaxes(
+            title=f"<b>{axis_prefix} 2</b>",
+            showgrid=True,
+            gridcolor="#d7dde5",
+            zeroline=False,
+            showline=False,
+            tickfont=dict(size=17),
+        )
+        return fig
+
+    @staticmethod
+    def _save_plotly_figure(fig, output_stem):
+        output_stem = Path(output_stem)
+        output_stem.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_image(str(output_stem.with_suffix(".png")), scale=3)
+        fig.write_image(str(output_stem.with_suffix(".pdf")))
+        html_path = output_stem.with_suffix(".html")
+        fig.write_html(
+            str(html_path),
+            include_plotlyjs="cdn",
+            include_mathjax=False,
+            full_html=True,
+        )
+        html_text = html_path.read_text(encoding="utf-8")
+        html_text = html_text.replace(
+            "<script type=\"text/javascript\">window.PlotlyConfig = {MathJaxConfig: 'local'};</script>",
+            "",
+        )
+        html_path.write_text(html_text, encoding="utf-8")
+        fig.write_json(str(output_stem.with_suffix(".json")), pretty=True)
 
     def _build_leakage_safe_supervised_views(self):
         X_train, X_test, y_train, y_test = self._split_supervised_base_matrix()

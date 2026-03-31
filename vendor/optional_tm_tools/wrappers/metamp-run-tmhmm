@@ -1,0 +1,125 @@
+#!/opt/venv/bin/python
+import argparse
+import csv
+import json
+import sys
+from pathlib import Path
+
+import pyTMHMM
+
+
+def read_fasta(path: Path):
+    sequence_id = None
+    chunks = []
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if sequence_id is not None:
+                yield sequence_id, "".join(chunks)
+            sequence_id = line[1:].split()[0]
+            chunks = []
+        else:
+            chunks.append(line)
+    if sequence_id is not None:
+        yield sequence_id, "".join(chunks)
+
+
+_LABEL_MAP = {
+    "I": "Inside",
+    "O": "Outside",
+    "M": "Membrane",
+}
+_SUPPORTED_TM_HMM_RESIDUES = set("ACDEFGHIKLMNPQRSTVWY")
+
+
+def annotation_to_regions(annotation: str):
+    regions = []
+    if not annotation:
+        return regions
+    index = 0
+    region_index = 1
+    while index < len(annotation):
+        label = annotation[index].upper()
+        start = index
+        while index < len(annotation) and annotation[index].upper() == label:
+            index += 1
+        end = index
+        normalized_label = _LABEL_MAP.get(label)
+        if normalized_label:
+            regions.append(
+                {
+                    "index": region_index,
+                    "start": start + 1,
+                    "end": end,
+                    "length": end - start,
+                    "label": normalized_label,
+                }
+            )
+            region_index += 1
+    return regions
+
+
+def sanitize_sequence(sequence: str):
+    cleaned = []
+    replaced = 0
+    unsupported = set()
+    for residue in str(sequence or "").strip().upper():
+        if residue in _SUPPORTED_TM_HMM_RESIDUES:
+            cleaned.append(residue)
+            continue
+        cleaned.append("A")
+        replaced += 1
+        unsupported.add(residue)
+    return "".join(cleaned), replaced, sorted(item for item in unsupported if item)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--input")
+    parser.add_argument("--output")
+    parser.add_argument("--reference", required=False)
+    args = parser.parse_args()
+
+    if args.self_test:
+        annotation = pyTMHMM.predict("MKTIIALSYIFCLVFADYKDDDDA", compute_posterior=False)
+        if not isinstance(annotation, str):
+            raise SystemExit("pyTMHMM self-test failed: expected annotation string.")
+        print("ok")
+        return
+
+    if not args.input or not args.output:
+        raise SystemExit("--input and --output are required unless --self-test is used.")
+
+    rows = []
+    for sequence_id, sequence in read_fasta(Path(args.input)):
+        sanitized_sequence, replaced_count, unsupported = sanitize_sequence(sequence)
+        if replaced_count:
+            print(
+                f"[TMHMM] Sanitized {replaced_count} unsupported residue(s) for {sequence_id}: "
+                + ",".join(unsupported),
+                file=sys.stderr,
+            )
+        annotation = pyTMHMM.predict(sanitized_sequence, compute_posterior=False)
+        regions = annotation_to_regions(annotation)
+        rows.append(
+            {
+                "pdb_code": sequence_id,
+                "tm_count": sum(1 for region in regions if region.get("label") == "Membrane"),
+                "tm_regions": json.dumps(regions),
+            }
+        )
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["pdb_code", "tm_count", "tm_regions"])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+if __name__ == "__main__":
+    main()

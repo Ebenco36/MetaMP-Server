@@ -294,6 +294,30 @@ class DashboardRegressionTests(unittest.TestCase):
         self.assertEqual(summary["tm_counts"]["DeepTMHMM"], 2)
         self.assertEqual(len(summary["tm_regions"]["DeepTMHMM"]), 2)
 
+    def test_discrepancy_summary_ignores_signalp_for_tm_disagreement(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "TM (Expert)": 0,
+            "normalized_tm_predictions": [
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "SignalP",
+                    "prediction_kind": "signal_peptide",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 1, "end": 24, "label": "Signal"},
+                        ]
+                    ),
+                }
+            ],
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
+        self.assertNotIn("SignalP", summary["tm_counts"])
+
     def test_discrepancy_summary_prefers_opm_subunit_segments_for_tm_count(self):
         record = {
             "Group (OPM)": "Transmembrane",
@@ -307,6 +331,65 @@ class DashboardRegressionTests(unittest.TestCase):
         summary = DiscrepancyReviewService._build_discrepancy_summary(record)
 
         self.assertEqual(summary["tm_counts"]["opm"], 3)
+
+    def test_tm_boundary_disagreement_requires_real_boundary_shift(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "opm_tm_regions": json.dumps(
+                [
+                    {"start": 10, "end": 30, "label": "OPM"},
+                    {"start": 40, "end": 60, "label": "OPM"},
+                ]
+            ),
+            "normalized_tm_predictions": [
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "DeepTMHMM",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 2,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 10, "end": 30, "label": "Membrane"},
+                            {"start": 48, "end": 70, "label": "Membrane"},
+                        ]
+                    ),
+                }
+            ],
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
+        self.assertTrue(summary["has_tm_boundary_disagreement"])
+
+    def test_tm_boundary_disagreement_does_not_duplicate_tm_count_disagreement(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "opm_tm_regions": json.dumps(
+                [
+                    {"start": 10, "end": 30, "label": "OPM"},
+                    {"start": 40, "end": 60, "label": "OPM"},
+                ]
+            ),
+            "normalized_tm_predictions": [
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "DeepTMHMM",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 10, "end": 30, "label": "Membrane"},
+                        ]
+                    ),
+                }
+            ],
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertTrue(summary["has_tm_disagreement"])
+        self.assertFalse(summary["has_tm_boundary_disagreement"])
 
     def test_build_candidate_payload_normalizes_group_mpstruc_from_group_column(self):
         candidate = DiscrepancyReviewService._build_candidate_payload(
@@ -1125,6 +1208,31 @@ class DashboardRegressionTests(unittest.TestCase):
             "soluble_to_membrane_transition",
             (assessment.get("details") or {}).get("context_reasons") or [],
         )
+
+    def test_benchmark_decision_downgrades_multichain_cases_from_high_confidence(self):
+        candidate = {
+            "record": {
+                "pdb_code": "6CB2",
+                "Group (Expert)": "Bitopic",
+                "TM (Expert)": 1,
+                "structure_context": {"chain_count": 2},
+                "is_replaced": False,
+            },
+            "discrepancy_summary": {
+                "has_any_disagreement": True,
+                "has_tm_boundary_disagreement": False,
+                "expert_vs_prediction_agreement": True,
+                "tm_counts": {"expert": 1, "TMbed": 1, "DeepTMHMM": 1},
+                "group_labels": {"predicted": "BITOPIC"},
+            },
+            "review": {"status": "accepted"},
+        }
+
+        decision = DiscrepancyReviewService._build_benchmark_decision(candidate)
+
+        self.assertFalse(decision["high_confidence_subset"])
+        self.assertEqual(decision["benchmark_status"], "included_with_caution")
+        self.assertIn("chain-level or assembly-level interpretation", decision["benchmark_reason"])
 
     @patch("src.Jobs.LoadProteinPredictions.load_optional_tm_prediction_frame")
     def test_optional_tm_predictor_export_writes_fasta_and_template(self, mock_frame_loader):

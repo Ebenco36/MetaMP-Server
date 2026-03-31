@@ -35,6 +35,18 @@ from src.Jobs.tasks.task1 import (
     sync_tmalphafold_predictions_task,
 )
 from src.Jobs.LoadProteinPredictions import (
+    OPTIONAL_TM_PREDICTORS,
+    VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS,
+    determine_tmalphafold_fallback_targets,
+    export_optional_tm_prediction_inputs_bulk,
+    export_optional_tm_prediction_inputs,
+    get_optional_tm_runtime_status,
+    import_optional_tm_prediction_results_bulk,
+    import_optional_tm_prediction_results,
+    normalize_optional_tm_predictor_names,
+    normalize_verified_tm_fallback_predictor_names,
+    run_optional_tm_prediction_backfill,
+    run_verified_tm_fallback_pipeline,
     run_tm_prediction_backfill,
 )
 from src.Jobs.TMAlphaFoldSync import (
@@ -479,6 +491,396 @@ def sync_tmbed_predictions_cli(
             records=tmbed_records,
             provider="MetaMP",
             prediction_kind="sequence_topology",
+            progress_callback=click.echo,
+        )
+    DashboardAnnotationDatasetService._record_payload_cache.clear()
+    click.echo(json.dumps(summary, indent=2))
+
+
+@app.cli.command("export-optional-tm-prediction-inputs")
+@click.option(
+    "--predictor",
+    required=True,
+    type=str,
+    multiple=True,
+    help=(
+        "Optional fallback predictor to prepare for import. "
+        f"Supported values include: {', '.join(OPTIONAL_TM_PREDICTORS)}. "
+        "Repeat the option to export multiple predictors, or use '--predictor all'."
+    ),
+)
+@click.option(
+    "--include-completed",
+    is_flag=True,
+    help="Also export records that already have MetaMP normalized rows for this predictor.",
+)
+@click.option(
+    "--completion-provider",
+    type=click.Choice(["MetaMP", "any", "TMAlphaFold"], case_sensitive=False),
+    default="MetaMP",
+    show_default=True,
+    help=(
+        "Which provider scope counts as already completed. "
+        "Use MetaMP to prepare fallback work owned by MetaMP even when upstream TMAlphaFold rows already exist."
+    ),
+)
+@click.option(
+    "--pdb-code",
+    "pdb_codes",
+    multiple=True,
+    help="Restrict the export to one or more specific PDB codes. Repeat the option to provide multiple codes.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Restrict the export to the first N eligible targets.",
+)
+@click.option(
+    "--fasta-out",
+    type=str,
+    default=None,
+    help="Optional FASTA output path. Defaults to the predictor-specific runtime directory.",
+)
+@click.option(
+    "--csv-out",
+    type=str,
+    default=None,
+    help="Optional CSV template output path. Defaults to the predictor-specific runtime directory.",
+)
+def export_optional_tm_prediction_inputs_cli(
+    predictor,
+    include_completed,
+    completion_provider,
+    pdb_codes,
+    limit,
+    fasta_out,
+    csv_out,
+):
+    normalized_predictors = normalize_optional_tm_predictor_names(predictor)
+    if len(normalized_predictors) == 1 and str(next(iter(predictor))).strip().lower() not in {"all", "*"}:
+        summary = export_optional_tm_prediction_inputs(
+            predictor_name=normalized_predictors[0],
+            fasta_out=fasta_out,
+            csv_out=csv_out,
+            include_completed=include_completed,
+            completion_provider=completion_provider,
+            pdb_codes=_normalize_cli_pdb_codes(pdb_codes),
+            limit=limit,
+            progress_callback=click.echo,
+        )
+    else:
+        if fasta_out or csv_out:
+            raise click.ClickException(
+                "--fasta-out and --csv-out are only supported for single-predictor export. "
+                "For '--predictor all' or repeated --predictor values, MetaMP writes each predictor "
+                "to its own runtime directory under /var/app/data/tm_predictions/external/<predictor>/."
+            )
+        summary = export_optional_tm_prediction_inputs_bulk(
+            predictor_names=normalized_predictors,
+            include_completed=include_completed,
+            completion_provider=completion_provider,
+            pdb_codes=_normalize_cli_pdb_codes(pdb_codes),
+            limit=limit,
+            progress_callback=click.echo,
+        )
+    click.echo(json.dumps(summary, indent=2))
+
+
+@app.cli.command("run-optional-tm-predictions")
+@click.option(
+    "--predictor",
+    required=True,
+    type=str,
+    multiple=True,
+    help=(
+        "Optional predictor(s) to execute. Only predictors with a local MetaMP runtime "
+        "will be executed here. Repeat the option or use '--predictor all'."
+    ),
+)
+@click.option(
+    "--include-completed/--skip-completed",
+    default=False,
+    help="Rerun predictors even when MetaMP already stores successful rows.",
+)
+@click.option(
+    "--pdb-code",
+    "pdb_codes",
+    multiple=True,
+    help="Restrict execution to one or more specific PDB codes.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Restrict execution to the first N eligible targets.",
+)
+@click.option(
+    "--use-gpu/--no-gpu",
+    default=None,
+    help="Override GPU usage for locally runnable predictors.",
+)
+@click.option(
+    "--batch-size",
+    type=int,
+    default=None,
+    help="Optional batch size override for locally runnable predictors.",
+)
+@click.option(
+    "--max-workers",
+    type=int,
+    default=None,
+    help="Optional worker-count override for locally runnable predictors.",
+)
+def run_optional_tm_predictions_cli(
+    predictor,
+    include_completed,
+    pdb_codes,
+    limit,
+    use_gpu,
+    batch_size,
+    max_workers,
+):
+    summary = run_optional_tm_prediction_backfill(
+        predictor_names=normalize_optional_tm_predictor_names(predictor),
+        include_completed=include_completed,
+        pdb_codes=_normalize_cli_pdb_codes(pdb_codes),
+        limit=limit,
+        use_gpu=use_gpu,
+        batch_size=batch_size,
+        max_workers=max_workers,
+        progress_callback=click.echo,
+    )
+    DashboardAnnotationDatasetService._record_payload_cache.clear()
+    click.echo(json.dumps(summary, indent=2))
+
+
+@app.cli.command("run-verified-tm-fallbacks")
+@click.option(
+    "--mode",
+    "fallback_mode",
+    type=click.Choice(["tmalphafold_first", "fallback_only"], case_sensitive=False),
+    default="tmalphafold_first",
+    show_default=True,
+    help=(
+        "Run TMAlphaFold first and only then local fallbacks for upstream misses, "
+        "or skip TMAlphaFold and run the verified local fallbacks directly."
+    ),
+)
+@click.option(
+    "--all",
+    "run_all",
+    is_flag=True,
+    help="Run across all eligible targets in the selected mode.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Restrict the run to the first N eligible targets.",
+)
+@click.option(
+    "--pdb-code",
+    "pdb_codes",
+    multiple=True,
+    help="Restrict the run to one or more specific PDB codes.",
+)
+@click.option(
+    "--fallback-method",
+    "fallback_methods",
+    multiple=True,
+    type=str,
+    help=(
+        "Verified local fallback method(s) to use. "
+        "Repeat to restrict the run to specific local fallback methods. "
+        f"When omitted, the full verified set is used: {', '.join(VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS)}."
+    ),
+)
+@click.option(
+    "--all-verified-methods/--bulk-safe-only",
+    "all_verified_methods",
+    default=True,
+    show_default=True,
+    help=(
+        "In bulk scope, run all verified local fallback methods or restrict the run to the "
+        "bulk-safe subset (DeepTMHMM, TMHMM)."
+    ),
+)
+@click.option(
+    "--include-completed/--skip-completed",
+    default=False,
+    help="Rerun local fallback methods even when MetaMP already stores successful rows.",
+)
+@click.option(
+    "--methods",
+    type=str,
+    default=",".join(TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS),
+    show_default=False,
+    help="Comma-separated TMAlphaFold method list for tmalphafold_first mode.",
+)
+@click.option(
+    "--with-tmdet/--without-tmdet",
+    default=True,
+    help="Include TMDET in the TMAlphaFold stage when using tmalphafold_first mode.",
+)
+@click.option(
+    "--tmalphafold-max-workers",
+    type=int,
+    default=8,
+    show_default=True,
+    help="Concurrent TMAlphaFold request count in tmalphafold_first mode.",
+)
+@click.option(
+    "--tmalphafold-timeout",
+    type=int,
+    default=30,
+    show_default=True,
+    help="Per-request timeout for TMAlphaFold in seconds.",
+)
+@click.option(
+    "--tmalphafold-refresh",
+    is_flag=True,
+    help="Refetch TMAlphaFold predictions even when successful upstream rows already exist.",
+)
+@click.option(
+    "--tmalphafold-retry-errors/--skip-tmalphafold-errors",
+    default=False,
+    help="Retry previously stored TMAlphaFold error rows instead of skipping all existing upstream rows.",
+)
+@click.option(
+    "--backfill-sequences/--skip-backfill-sequences",
+    default=True,
+    help="Backfill missing sequence_sequence values from TMAlphaFold payloads when available.",
+)
+@click.option(
+    "--use-gpu/--no-gpu",
+    default=None,
+    help="Override GPU usage for the local TMbed fallback stage.",
+)
+@click.option(
+    "--batch-size",
+    type=int,
+    default=None,
+    help="Optional batch size override for the local fallback stage.",
+)
+@click.option(
+    "--max-workers",
+    type=int,
+    default=None,
+    help="Optional worker-count override for the local fallback stage.",
+)
+def run_verified_tm_fallbacks_cli(
+    fallback_mode,
+    run_all,
+    limit,
+    pdb_codes,
+    fallback_methods,
+    all_verified_methods,
+    include_completed,
+    methods,
+    with_tmdet,
+    tmalphafold_max_workers,
+    tmalphafold_timeout,
+    tmalphafold_refresh,
+    tmalphafold_retry_errors,
+    backfill_sequences,
+    use_gpu,
+    batch_size,
+    max_workers,
+):
+    selected_codes = _normalize_cli_pdb_codes(pdb_codes)
+    if not run_all and not selected_codes and limit is None:
+        raise click.ClickException(
+            "Provide --all, --limit, or at least one --pdb-code so the fallback scope is explicit."
+        )
+
+    _ensure_ml_runtime("run-verified-tm-fallbacks", "tmbed")
+    fallback_predictors = (
+        normalize_verified_tm_fallback_predictor_names(fallback_methods)
+        if fallback_methods
+        else None
+    )
+    method_list = [item.strip() for item in str(methods or "").split(",") if item.strip()]
+    summary = run_verified_tm_fallback_pipeline(
+        fallback_mode=str(fallback_mode or "").strip().lower(),
+        fallback_predictor_names=fallback_predictors,
+        bulk_safe_only=not all_verified_methods,
+        pdb_codes=selected_codes,
+        limit=limit,
+        include_completed=include_completed,
+        use_gpu=use_gpu,
+        batch_size=batch_size,
+        max_workers=max_workers,
+        tmalphafold_methods=method_list,
+        with_tmdet=with_tmdet,
+        tmalphafold_max_workers=tmalphafold_max_workers,
+        tmalphafold_timeout=tmalphafold_timeout,
+        tmalphafold_refresh=tmalphafold_refresh,
+        tmalphafold_retry_errors=tmalphafold_retry_errors,
+        tmalphafold_backfill_sequences=backfill_sequences,
+        progress_callback=click.echo,
+    )
+    DashboardAnnotationDatasetService._record_payload_cache.clear()
+    click.echo(json.dumps(summary, indent=2))
+
+
+@app.cli.command("optional-tm-runtime-status")
+@click.option(
+    "--predictor",
+    type=str,
+    multiple=True,
+    help=(
+        "Optional predictor(s) to inspect. Repeat the option or omit it to inspect all supported optional predictors."
+    ),
+)
+def optional_tm_runtime_status_cli(predictor):
+    summary = get_optional_tm_runtime_status(
+        predictor_names=normalize_optional_tm_predictor_names(predictor) if predictor else None
+    )
+    click.echo(json.dumps(summary, indent=2))
+
+
+@app.cli.command("import-optional-tm-prediction-results")
+@click.option(
+    "--predictor",
+    required=True,
+    type=str,
+    multiple=True,
+    help=(
+        "Optional fallback predictor being imported into normalized MetaMP storage. "
+        f"Supported values include: {', '.join(OPTIONAL_TM_PREDICTORS)}. "
+        "Repeat the option to import multiple predictors, or use '--predictor all'."
+    ),
+)
+@click.option(
+    "--input-path",
+    type=str,
+    default=None,
+    help="Optional CSV results path. Defaults to the predictor-specific runtime results file.",
+)
+@click.option(
+    "--strict-missing-inputs/--skip-missing-inputs",
+    default=False,
+    help="Fail if any expected per-predictor results.csv file is missing during multi-predictor import.",
+)
+def import_optional_tm_prediction_results_cli(predictor, input_path, strict_missing_inputs):
+    normalized_predictors = normalize_optional_tm_predictor_names(predictor)
+    if len(normalized_predictors) == 1 and str(next(iter(predictor))).strip().lower() not in {"all", "*"}:
+        summary = import_optional_tm_prediction_results(
+            predictor_name=normalized_predictors[0],
+            input_path=input_path,
+            progress_callback=click.echo,
+        )
+    else:
+        if input_path:
+            raise click.ClickException(
+                "--input-path is only supported for single-predictor import. "
+                "For '--predictor all' or repeated --predictor values, MetaMP imports each predictor "
+                "from its own runtime results file under /var/app/data/tm_predictions/external/<predictor>/results.csv."
+            )
+        summary = import_optional_tm_prediction_results_bulk(
+            predictor_names=normalized_predictors,
+            skip_missing_inputs=not strict_missing_inputs,
             progress_callback=click.echo,
         )
     DashboardAnnotationDatasetService._record_payload_cache.clear()

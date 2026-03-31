@@ -1,0 +1,293 @@
+#!/opt/venv/bin/python
+import argparse
+import csv
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+def _self_test():
+    completed = subprocess.run(
+        ["tmdet", "-h"],
+        shell=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "LD_LIBRARY_PATH": f"/usr/local/lib:{os.environ.get('LD_LIBRARY_PATH', '')}".rstrip(":")},
+    )
+    help_text = "\n".join(
+        part for part in [completed.stdout or "", completed.stderr or ""] if part
+    )
+    expected_markers = ["Input PDB code", "Input PDB file full path", "Output xml file path"]
+    if completed.returncode not in (0, 1) or not all(marker in help_text for marker in expected_markers):
+        raise SystemExit(help_text or "tmdet -h failed")
+    print("ok")
+
+
+def _read_structure_manifest(path: Path):
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        rows = []
+        for row in reader:
+            pdb_code = str((row or {}).get("pdb_code") or "").strip().upper()
+            structure_url = str((row or {}).get("structure_url") or "").strip()
+            if pdb_code and structure_url:
+                rows.append({"pdb_code": pdb_code, "structure_url": structure_url})
+        return rows
+
+
+def _download_structure(url: str, destination: Path):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url, timeout=60) as response, destination.open("wb") as handle:
+        shutil.copyfileobj(response, handle)
+    return destination
+
+
+def _parse_tmdet_xml(xml_path: Path):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+
+    def _local_name(tag):
+        return str(tag or "").split("}", 1)[-1].strip().upper()
+
+    def _attribute_value(attributes, *candidate_names):
+        for candidate_name in candidate_names:
+            for key, value in (attributes or {}).items():
+                if str(key).split("}", 1)[-1].strip().lower() == str(candidate_name).strip().lower():
+                    return value
+        return None
+
+    def _chain_regions(chain):
+        parsed_regions = []
+        region_index = 1
+        chain_id = str(
+            _attribute_value(
+                chain.attrib or {},
+                "authId",
+                "AUTHID",
+                "labelId",
+                "LABELID",
+                "CHAINID",
+                "chainid",
+                "id",
+            )
+            or ""
+        ).strip()
+
+        for region in chain.iter():
+            if _local_name(region.tag) != "REGION":
+                continue
+            attributes = region.attrib or {}
+            region_type = str(_attribute_value(attributes, "type", "TYPE") or "").strip().upper()
+            if region_type not in {"H", "M"}:
+                continue
+            try:
+                start = int(
+                    _attribute_value(
+                        attributes,
+                        "startLabelId",
+                        "STARTLABELID",
+                        "startAuthId",
+                        "STARTAUTHID",
+                        "seq_beg",
+                        "SEQ_BEG",
+                        "start",
+                        "START",
+                    )
+                )
+                end = int(
+                    _attribute_value(
+                        attributes,
+                        "endLabelId",
+                        "ENDLABELID",
+                        "endAuthId",
+                        "ENDAUTHID",
+                        "seq_end",
+                        "SEQ_END",
+                        "end",
+                        "END",
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+            if end < start:
+                start, end = end, start
+            parsed_regions.append(
+                {
+                    "index": region_index,
+                    "start": start,
+                    "end": end,
+                    "length": end - start + 1,
+                    "label": f"TMDET membrane{f' chain {chain_id}' if chain_id else ''}",
+                }
+            )
+            region_index += 1
+        return parsed_regions
+
+    chain_elements = [
+        element
+        for element in root.iter()
+        if _local_name(element.tag) in {"BICHAIN", "CHAIN"}
+    ]
+    preferred_chain_regions = []
+    for chain in chain_elements:
+        chain_type = str(
+            _attribute_value(chain.attrib or {}, "type", "TYPE") or ""
+        ).strip().lower()
+        num_tm = str(
+            _attribute_value(chain.attrib or {}, "numTM", "NUMTM", "numtm") or ""
+        ).strip()
+        regions = _chain_regions(chain)
+        if not regions:
+            continue
+        if chain_type in {"alpha", "beta"} or num_tm not in {"", "0"}:
+            return regions
+        if not preferred_chain_regions:
+            preferred_chain_regions = regions
+    return preferred_chain_regions
+
+
+# def _parse_tmdet_xml(xml_path: Path):
+#     tree = ET.parse(xml_path)
+#     root = tree.getroot()
+#     regions = []
+#     region_index = 1
+#     for chain in root.findall(".//CHAIN"):
+#         chain_id = str((chain.attrib or {}).get("CHAINID") or "").strip()
+#         for region in chain.findall("./REGION"):
+#             attributes = region.attrib or {}
+#             region_type = str(attributes.get("type") or "").strip().upper()
+#             if region_type != "M":
+#                 continue
+#             try:
+#                 start = int(attributes.get("seq_beg"))
+#                 end = int(attributes.get("seq_end"))
+#             except (TypeError, ValueError):
+#                 continue
+#             if end < start:
+#                 start, end = end, start
+#             label = f"TMDET membrane{f' chain {chain_id}' if chain_id else ''}"
+#             regions.append(
+#                 {
+#                     "index": region_index,
+#                     "start": start,
+#                     "end": end,
+#                     "length": end - start + 1,
+#                     "label": label,
+#                 }
+#             )
+#             region_index += 1
+#     return regions
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--input")
+    parser.add_argument("--output")
+    parser.add_argument("--reference")
+    parser.add_argument("--structure-manifest")
+    parser.add_argument("--failures")
+    args = parser.parse_args()
+
+    if args.self_test:
+        _self_test()
+        return
+
+    if not args.output or not args.structure_manifest:
+        raise SystemExit("--output and --structure-manifest are required unless --self-test is used.")
+
+    manifest_rows = _read_structure_manifest(Path(args.structure_manifest))
+    output_rows = []
+    failure_rows = []
+    total_rows = len(manifest_rows)
+    print(f"TMDET starting on {total_rows} structure(s).", file=sys.stderr, flush=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        work_dir = Path(tmp_dir)
+        env_file = work_dir / "tmdet.env"
+        env_file.write_text("", encoding="utf-8")
+        for index, row in enumerate(manifest_rows, start=1):
+            pdb_code = row["pdb_code"]
+            structure_path = work_dir / f"{pdb_code}.cif.gz"
+            transformed_path = work_dir / f"{pdb_code}.transformed.cif.gz"
+            xml_path = work_dir / f"{pdb_code}.xml"
+            if index == 1 or index % 25 == 0 or index == total_rows:
+                print(
+                    f"TMDET progress {index}/{total_rows}: {pdb_code}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            try:
+                _download_structure(row["structure_url"], structure_path)
+                completed = subprocess.run(
+                    [
+                        "tmdet",
+                        "-pi",
+                        str(structure_path),
+                        "-po",
+                        str(transformed_path),
+                        "-x",
+                        str(xml_path),
+                        "-e",
+                        str(env_file),
+                    ],
+                    shell=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    env={**os.environ, "LD_LIBRARY_PATH": f"/usr/local/lib:{os.environ.get('LD_LIBRARY_PATH', '')}".rstrip(":")},
+                )
+                if completed.returncode != 0 or not xml_path.exists():
+                    raise RuntimeError(str(completed.stderr or completed.stdout or "missing XML output").strip())
+                regions = _parse_tmdet_xml(xml_path)
+                output_rows.append(
+                    {
+                        "pdb_code": pdb_code,
+                        "tm_count": len(regions),
+                        "tm_regions": json.dumps(regions),
+                    }
+                )
+            except Exception as exc:
+                print(
+                    f"TMDET failure {pdb_code}: {str(exc).strip() or 'TMDET execution failed'}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                failure_rows.append(
+                    {
+                        "pdb_code": pdb_code,
+                        "error_message": str(exc).strip() or "TMDET execution failed",
+                    }
+                )
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["pdb_code", "tm_count", "tm_regions"])
+        writer.writeheader()
+        for row in output_rows:
+            writer.writerow(row)
+
+    failures_path = Path(args.failures) if args.failures else output_path.with_name("failures.csv")
+    failures_path.parent.mkdir(parents=True, exist_ok=True)
+    with failures_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["pdb_code", "error_message"])
+        writer.writeheader()
+        for row in failure_rows:
+            writer.writerow(row)
+
+    if failure_rows:
+        print(
+            f"TMDET completed with {len(output_rows)} success(es) and {len(failure_rows)} failure(s).",
+            file=sys.stderr,
+        )
+
+
+if __name__ == "__main__":
+    main()

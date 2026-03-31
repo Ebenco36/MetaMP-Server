@@ -9,6 +9,7 @@ import hashlib
 import logging
 import shutil
 import site
+from functools import lru_cache
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
@@ -30,6 +31,8 @@ if not logging.getLogger().handlers:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
+
+_TMBED_UTILS_PATCH_ATTEMPTED = False
 
 
 def _is_missing_value(value):
@@ -127,6 +130,11 @@ def _find_tmbed_utils_path() -> Optional[Path]:
 
 
 def _patch_tmbed_utils() -> None:
+    global _TMBED_UTILS_PATCH_ATTEMPTED
+    if _TMBED_UTILS_PATCH_ATTEMPTED:
+        return
+    _TMBED_UTILS_PATCH_ATTEMPTED = True
+
     utils_path = _find_tmbed_utils_path()
     if utils_path is None:
         logger.warning("[Patch] tmbed/utils.py not found; skipping patch.")
@@ -171,8 +179,8 @@ def _patch_tmbed_utils() -> None:
             shutil.copy2(utils_path, backup)
             logger.info(f"[Patch] Backup -> {backup}")
     except OSError as exc:
-        logger.warning(
-            "[Patch] Unable to create writable backup for %s; continuing without patch: %s",
+        logger.info(
+            "[Patch] Unable to create writable backup for %s; assuming packaged patch is sufficient: %s",
             utils_path,
             exc,
         )
@@ -259,9 +267,50 @@ def _tmbed_gpu_flags(device: str, cpu_fallback: bool = True) -> list[str]:
 
 
 def _tmbed_thread_flags(device: str, threads: Optional[int]) -> list[str]:
-    if device == "cpu" and threads is not None:
+    if (
+        device == "cpu"
+        and threads is not None
+        and _tmbed_subcommand_supports_option("embed", "--threads")
+        and _tmbed_subcommand_supports_option("predict", "--threads")
+    ):
         return ["--threads", str(threads)]
     return []
+
+
+@lru_cache(maxsize=8)
+def _tmbed_subcommand_supports_option(subcommand: str, option_name: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "tmbed", subcommand, "--help"],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception:
+        return False
+    help_text = "\n".join(
+        part for part in [completed.stdout or "", completed.stderr or ""] if part
+    )
+    return option_name in help_text
+
+
+def _candidate_tmbed_batch_sizes(batch_size: int) -> list[int]:
+    start = max(1, int(batch_size or 1))
+    candidates = [start]
+    while start > 1:
+        start = max(1, start // 2)
+        candidates.append(start)
+        if start == 1:
+            break
+    return list(dict.fromkeys(candidates))
+
+
+def _tmbed_result_looks_resource_killed(result: subprocess.CompletedProcess) -> bool:
+    if int(result.returncode or 0) == -9:
+        return True
+    combined = f"{result.stdout or ''}\n{result.stderr or ''}".lower()
+    return "killed" in combined or "out of memory" in combined
 
 
 def _ensure_tmbed_model_downloaded(model_dir: Path, device: str) -> None:
@@ -292,31 +341,54 @@ def _run_tmbed_embed(
     model_dir: Path,
     cpu_fallback: bool = True,
 ) -> None:
-    logger.info(f"[TMbed embed] device={device} batch_size={batch_size}")
-    cmd = [
-        sys.executable,
-        "-m",
-        "tmbed",
-        "embed",
-        "-f",
-        fasta_path,
-        "-e",
-        str(embeddings_path),
-        "--batch-size",
-        str(batch_size),
-        *_tmbed_gpu_flags(device, cpu_fallback),
-        *_tmbed_thread_flags(device, threads),
-    ]
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        env=_build_tmbed_env(device, model_dir),
+    last_result = None
+    for attempt_batch_size in _candidate_tmbed_batch_sizes(batch_size):
+        logger.info(
+            f"[TMbed embed] device={device} batch_size={attempt_batch_size}"
+        )
+        cmd = [
+            sys.executable,
+            "-m",
+            "tmbed",
+            "embed",
+            "-f",
+            fasta_path,
+            "-e",
+            str(embeddings_path),
+            "--batch-size",
+            str(attempt_batch_size),
+            *_tmbed_gpu_flags(device, cpu_fallback),
+            *_tmbed_thread_flags(device, threads),
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=_build_tmbed_env(device, model_dir),
+        )
+        last_result = result
+        if result.returncode == 0:
+            logger.info(f"[TMbed embed] Saved -> {embeddings_path}")
+            return
+        if _tmbed_result_looks_resource_killed(result) and attempt_batch_size > 1:
+            logger.warning(
+                "[TMbed embed] resource kill detected at batch_size=%s; retrying with a smaller batch.",
+                attempt_batch_size,
+            )
+            continue
+        break
+
+    stderr = str((last_result.stderr if last_result is not None else "") or "").strip()
+    stdout = str((last_result.stdout if last_result is not None else "") or "").strip()
+    raise RuntimeError(
+        "TMbed embed failed"
+        + (
+            f" (returncode={last_result.returncode})"
+            if last_result is not None
+            else ""
+        )
+        + (f":\n{stderr}" if stderr else (f":\n{stdout}" if stdout else ""))
     )
-    print(result)
-    if result.returncode != 0:
-        raise RuntimeError(f"TMbed embed failed:\n{result.stderr}")
-    logger.info(f"[TMbed embed] Saved -> {embeddings_path}")
 
 
 def _run_tmbed_predict(
@@ -332,35 +404,57 @@ def _run_tmbed_predict(
 ) -> None:
     if embeddings_path.exists():
         logger.info(f"[TMbed predict] Reusing embeddings: {embeddings_path}")
-    logger.info(
-        f"[TMbed predict] device={device} out_format={out_format} batch_size={batch_size}"
+    last_result = None
+    for attempt_batch_size in _candidate_tmbed_batch_sizes(batch_size):
+        logger.info(
+            f"[TMbed predict] device={device} out_format={out_format} batch_size={attempt_batch_size}"
+        )
+        cmd = [
+            sys.executable,
+            "-m",
+            "tmbed",
+            "predict",
+            "-f",
+            fasta_path,
+            "-p",
+            pred_path,
+            "--out-format",
+            str(out_format),
+            "--batch-size",
+            str(attempt_batch_size),
+            *_tmbed_gpu_flags(device, cpu_fallback),
+            *_tmbed_thread_flags(device, threads),
+        ]
+        if embeddings_path.exists():
+            cmd += ["-e", str(embeddings_path)]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            env=_build_tmbed_env(device, model_dir),
+        )
+        last_result = result
+        if result.returncode == 0:
+            return
+        if _tmbed_result_looks_resource_killed(result) and attempt_batch_size > 1:
+            logger.warning(
+                "[TMbed predict] resource kill detected at batch_size=%s; retrying with a smaller batch.",
+                attempt_batch_size,
+            )
+            continue
+        break
+
+    stderr = str((last_result.stderr if last_result is not None else "") or "").strip()
+    stdout = str((last_result.stdout if last_result is not None else "") or "").strip()
+    raise RuntimeError(
+        "TMbed predict failed"
+        + (
+            f" (returncode={last_result.returncode})"
+            if last_result is not None
+            else ""
+        )
+        + (f":\n{stderr}" if stderr else (f":\n{stdout}" if stdout else ""))
     )
-    cmd = [
-        sys.executable,
-        "-m",
-        "tmbed",
-        "predict",
-        "-f",
-        fasta_path,
-        "-p",
-        pred_path,
-        "--out-format",
-        str(out_format),
-        "--batch-size",
-        str(batch_size),
-        *_tmbed_gpu_flags(device, cpu_fallback),
-        *_tmbed_thread_flags(device, threads),
-    ]
-    if embeddings_path.exists():
-        cmd += ["-e", str(embeddings_path)]
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        env=_build_tmbed_env(device, model_dir),
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"TMbed predict failed:\n{result.stderr}")
     pred_file = Path(pred_path)
     if not pred_file.exists() or pred_file.stat().st_size == 0:
         raise RuntimeError(
@@ -594,19 +688,52 @@ def serialize_tm_regions(regions):
     return json.dumps(regions)
 
 
+def _coerce_tm_regions_json_text(value):
+    if _is_missing_value(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        loaded = json.loads(text)
+    except json.JSONDecodeError:
+        repaired = (
+            text.replace("'\"", '"')
+            .replace("\"'", '"')
+            .replace("''", "'")
+        )
+        try:
+            loaded = json.loads(repaired)
+        except json.JSONDecodeError:
+            return None
+
+    if not isinstance(loaded, list):
+        return None
+    try:
+        return json.dumps(loaded)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_tm_regions_value(value):
     if _is_missing_value(value):
         return []
     if isinstance(value, list):
         return _normalize_tm_regions(value)
     if isinstance(value, str):
-        try:
-            loaded = json.loads(value)
-        except json.JSONDecodeError:
+        normalized = _coerce_tm_regions_json_text(value)
+        if normalized is None:
             return []
+        loaded = json.loads(normalized)
         if isinstance(loaded, list):
             return _normalize_tm_regions(loaded)
     return []
+
+
+def normalize_tm_regions_json_string(value):
+    normalized_regions = parse_tm_regions_value(value)
+    return serialize_tm_regions(normalized_regions) if normalized_regions else "[]"
 
 
 def build_tm_prediction_payload(counts, regions):
@@ -649,7 +776,7 @@ class TMbedPredictor(BasePredictor):
         format_code: int = 4,
         use_gpu: bool = True,
         cpu_fallback: bool = True,
-        batch_size: int = 4096,
+        batch_size: int = 4,
         threads: Optional[int] = None,
     ):
         super().__init__("TMbed")

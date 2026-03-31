@@ -14,4 +14,4 @@ class MPSTURC(db.Model):
     expressed_in_species = db.Column(db.Text)
     resolution = db.Column(db.String(46))
     description = db.Column(db.Text)
-    related_pdb_entries = db.Column(db.String(21))
+    related_pdb_entries = db.Column(db.Text)

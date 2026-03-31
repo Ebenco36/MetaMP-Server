@@ -17,6 +17,7 @@ from src.AI_Packages.TMAlphaFoldPredictorClient import (
     _extract_sequence_from_payload,
     TMAlphaFoldPredictorClient,
 )
+from src.AI_Packages.TMProteinPredictor import normalize_tm_regions_json_string
 from src.MP.model_tmalphafold import TMAlphaFoldPrediction
 from src.MP.model_uniprot import Uniprot
 
@@ -75,19 +76,7 @@ def _normalize_tm_regions_json_value(value):
             return json.dumps(list(value))
         except (TypeError, ValueError):
             return "[]"
-    text = str(value).strip()
-    if not text or text.lower() in {"nan", "none", "null", "na", "n/a"}:
-        return "[]"
-    try:
-        parsed = json.loads(text)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return "[]"
-    if isinstance(parsed, list):
-        try:
-            return json.dumps(parsed)
-        except (TypeError, ValueError):
-            return "[]"
-    return "[]"
+    return normalize_tm_regions_json_string(value)
 
 
 def normalize_tmalphafold_methods(methods=None):
@@ -295,6 +284,8 @@ def mirror_local_tm_prediction_rows(
             continue
         tm_count = _normalize_tm_count_value((row or {}).get(f"{method}_tm_count"))
         tm_regions_json = _normalize_tm_regions_json_value((row or {}).get(f"{method}_tm_regions"))
+        if tm_count is None and tm_regions_json == "[]":
+            continue
         normalized_records_by_pdb[pdb_code] = {
             "pdb_code": pdb_code,
             "tm_count": tm_count,

@@ -1313,7 +1313,7 @@ def export_exploratory_dr_figures(docker_bin: str, app_container: str, snapshot_
 
     copied_paths: set[str] = set()
     for stem in ("pca", "tsne", "umap"):
-        for suffix in (".png", ".pdf"):
+        for suffix in (".png", ".pdf", ".html", ".json"):
             container_path = f"/var/app/data/models/{stem}{suffix}"
             destination_path = exploratory_dir / f"{stem}{suffix}"
             try:
@@ -1519,9 +1519,32 @@ def main() -> None:
             / "exploratory_dr"
             / "umap.pdf"
         ),
+        "exploratory_pca_html": str(
+            snapshot_dir
+            / "copied"
+            / "publication_figures"
+            / "exploratory_dr"
+            / "pca.html"
+        ),
+        "exploratory_tsne_html": str(
+            snapshot_dir
+            / "copied"
+            / "publication_figures"
+            / "exploratory_dr"
+            / "tsne.html"
+        ),
+        "exploratory_umap_html": str(
+            snapshot_dir
+            / "copied"
+            / "publication_figures"
+            / "exploratory_dr"
+            / "umap.html"
+        ),
         "publication_figure_pdfs": list_relative_files(publication_figures_root, ".pdf"),
         "production_ml_figure_pdfs": list_relative_files(production_figures_root, ".pdf"),
         "publication_figure_pngs": list_relative_files(publication_figures_root, ".png"),
+        "publication_figure_htmls": list_relative_files(publication_figures_root, ".html"),
+        "publication_figure_json": list_relative_files(publication_figures_root, ".json"),
     }
     write_json(snapshot_dir / "metadata" / "publication_manifest.json", manifest)
 
