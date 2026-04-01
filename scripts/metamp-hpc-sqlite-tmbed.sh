@@ -209,7 +209,6 @@ validate_project_inputs() {
   require_file "$ROOT_DIR/manage.py"
   require_file "$ROOT_DIR/requirements.txt"
   require_file "$ROOT_DIR/requirements-ml.txt"
-  require_file "$ROOT_DIR/datasets/expert_annotation_predicted.csv"
   [[ -d "$ROOT_DIR/datasets" ]] || die "Required dataset directory not found: $ROOT_DIR/datasets"
 }
 
@@ -222,7 +221,12 @@ prepare_python_env() {
   export APP_SETTINGS=config.config.ProductionConfig
   export DATABASE_URL="sqlite:///$SQLITE_PATH"
   export INGESTION_DATASET_BASE_DIR="$ROOT_DIR/datasets"
-  export DASHBOARD_ANNOTATION_DATASET_PATH="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
+  if [[ -f "$ROOT_DIR/datasets/expert_annotation_predicted.csv" ]]; then
+    export DASHBOARD_ANNOTATION_DATASET_PATH="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
+  else
+    unset DASHBOARD_ANNOTATION_DATASET_PATH || true
+    log "Optional expert annotation dataset not found; continuing without DASHBOARD_ANNOTATION_DATASET_PATH."
+  fi
   export SEMI_SUPERVISED_MODEL_DIR="$RUNTIME_ROOT/data/models/semi-supervised"
   export LIVE_GROUP_PREDICTIONS_PATH="$RUNTIME_ROOT/data/models/live_group_predictions.csv"
   export TM_PREDICTION_OUTPUT_CSV="$RUNTIME_ROOT/data/tm_predictions/tm_summary.csv"
