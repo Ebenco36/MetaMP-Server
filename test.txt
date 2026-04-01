@@ -1,3 +1,5 @@
-git pull
-chmod +x scripts/metamp-hpc-sqlite-tmbed.sh
-sbatch scripts/metamp-hpc-sqlite-tmbed.sh --venv-dir /scratch/awotoroe/MetaMP-Server/.venv --rebuild-db --runtime-root /scratch/$USER/metamp-sqlite
+sbatch scripts/metamp-hpc-sqlite-tmbed.sh \
+  --rebuild-db \
+  --recreate-venv \
+  --runtime-root /scratch/$USER/metamp-sqlite \
+  --tmbed-source-dir /scratch/awotoroe/MetaMP-Server/tmbed

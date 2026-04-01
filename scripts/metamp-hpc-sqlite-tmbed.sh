@@ -27,6 +27,7 @@ SQLITE_PATH=""
 CSV_EXPORT_PATH=""
 VENV_DIR=""
 PYTHON_BIN=""
+TMBED_SOURCE_DIR="${TMBED_SOURCE_DIR:-}"
 BOOTSTRAP_PYTHON_BIN="${BOOTSTRAP_PYTHON_BIN:-}"
 PIP_CERT_PATH="${PIP_CERT_PATH:-}"
 PIP_EXTRA_ARGS="${PIP_EXTRA_ARGS:-}"
@@ -63,6 +64,7 @@ Options:
   --csv-export PATH        CSV export path. Default: <runtime-root>/membrane_protein_tmalphafold_predictions.csv
   --venv-dir PATH          Virtualenv directory to create/use. Default: <runtime-root>/.venv
   --python-bin PATH        Explicit Python interpreter to use. Overrides --venv-dir.
+  --tmbed-source-dir PATH  Optional local TMbed source tree to expose on PYTHONPATH.
   --bootstrap-python PATH  Python executable used to create the virtualenv. Default: python3
   --pip-cert PATH          CA bundle path for pip/requests SSL verification.
   --pip-extra-args TEXT    Extra arguments appended to pip install commands.
@@ -91,6 +93,22 @@ write_filtered_ml_requirements() {
   require_file "$source_requirements"
   grep -viE '^[[:space:]]*tmbed([[:space:]]|@|=|>|<)' "$source_requirements" > "$filtered_requirements"
   printf '%s\n' "$filtered_requirements"
+}
+
+configure_tmbed_source() {
+  if [[ -z "$TMBED_SOURCE_DIR" && -d "$ROOT_DIR/tmbed/tmbed" ]]; then
+    TMBED_SOURCE_DIR="$ROOT_DIR/tmbed"
+  fi
+  if [[ -n "$TMBED_SOURCE_DIR" && ! -d "$TMBED_SOURCE_DIR/tmbed" ]]; then
+    die "TMbed source directory does not look valid: $TMBED_SOURCE_DIR"
+  fi
+}
+
+verify_tmbed_runtime() {
+  if "$PYTHON_BIN" -c "import tmbed" >/dev/null 2>&1; then
+    return 0
+  fi
+  die "TMbed is not importable in the HPC runtime. Provide --tmbed-source-dir /path/to/tmbed or make the TMbed source available on the HPC checkout."
 }
 
 resolve_bootstrap_python() {
@@ -144,6 +162,10 @@ prepare_virtualenv() {
     log "Using CA bundle for pip: $PIP_CERT_PATH"
   fi
 
+  if [[ -n "$TMBED_SOURCE_DIR" ]]; then
+    export PYTHONPATH="$TMBED_SOURCE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  fi
+
   if [[ "$INSTALL_DEPS" -eq 1 ]]; then
     log "Installing MetaMP dependencies into $VENV_DIR"
     local pip_args=()
@@ -156,6 +178,8 @@ prepare_virtualenv() {
     "$PYTHON_BIN" -m ensurepip --upgrade
     "$PYTHON_BIN" -m pip install "${pip_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$filtered_ml_requirements"
   fi
+
+  verify_tmbed_runtime
 }
 
 resolve_python_runtime() {
@@ -219,7 +243,6 @@ validate_project_inputs() {
   require_file "$ROOT_DIR/manage.py"
   require_file "$ROOT_DIR/requirements.txt"
   require_file "$ROOT_DIR/requirements-ml.txt"
-  [[ -d "$ROOT_DIR/tmbed/tmbed" ]] || die "Required local TMbed source tree not found: $ROOT_DIR/tmbed/tmbed"
   [[ -d "$ROOT_DIR/datasets" ]] || die "Required dataset directory not found: $ROOT_DIR/datasets"
 }
 
@@ -231,7 +254,6 @@ prepare_python_env() {
   export FLASK_ENV=production
   export APP_SETTINGS=config.config.ProductionConfig
   export DATABASE_URL="sqlite:///$SQLITE_PATH"
-  export PYTHONPATH="$ROOT_DIR/tmbed${PYTHONPATH:+:$PYTHONPATH}"
   export INGESTION_DATASET_BASE_DIR="$ROOT_DIR/datasets"
   if [[ -f "$ROOT_DIR/datasets/expert_annotation_predicted.csv" ]]; then
     export DASHBOARD_ANNOTATION_DATASET_PATH="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
@@ -293,6 +315,7 @@ export_predictions_csv() {
 main() {
   cd "$ROOT_DIR"
   validate_project_inputs
+  configure_tmbed_source
   prepare_runtime_paths
   resolve_python_runtime
   prepare_python_env
@@ -300,6 +323,11 @@ main() {
   log "Python runtime: $PYTHON_BIN"
   if [[ -n "$VENV_DIR" ]]; then
     log "Virtualenv: $VENV_DIR"
+  fi
+  if [[ -n "$TMBED_SOURCE_DIR" ]]; then
+    log "TMbed source dir: $TMBED_SOURCE_DIR"
+  else
+    log "TMbed source dir: <not provided>"
   fi
   log "SQLite database: $SQLITE_PATH"
   log "CSV export path: $CSV_EXPORT_PATH"
@@ -336,6 +364,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --python-bin)
       PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --tmbed-source-dir)
+      TMBED_SOURCE_DIR="$2"
       shift 2
       ;;
     --bootstrap-python)
