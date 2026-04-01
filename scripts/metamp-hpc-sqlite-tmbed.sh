@@ -85,6 +85,14 @@ require_file() {
   [[ -f "$1" ]] || die "Required file not found: $1"
 }
 
+write_filtered_ml_requirements() {
+  local source_requirements="$ROOT_DIR/requirements-ml.txt"
+  local filtered_requirements="$RUNTIME_ROOT/requirements-ml.local.txt"
+  require_file "$source_requirements"
+  grep -viE '^[[:space:]]*tmbed([[:space:]]|@|=|>|<)' "$source_requirements" > "$filtered_requirements"
+  printf '%s\n' "$filtered_requirements"
+}
+
 resolve_bootstrap_python() {
   if [[ -n "$BOOTSTRAP_PYTHON_BIN" && -x "$BOOTSTRAP_PYTHON_BIN" ]]; then
     return 0
@@ -139,12 +147,14 @@ prepare_virtualenv() {
   if [[ "$INSTALL_DEPS" -eq 1 ]]; then
     log "Installing MetaMP dependencies into $VENV_DIR"
     local pip_args=()
+    local filtered_ml_requirements
     if [[ -n "$PIP_EXTRA_ARGS" ]]; then
       # shellcheck disable=SC2206
       pip_args=($PIP_EXTRA_ARGS)
     fi
+    filtered_ml_requirements="$(write_filtered_ml_requirements)"
     "$PYTHON_BIN" -m ensurepip --upgrade
-    "$PYTHON_BIN" -m pip install "${pip_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$ROOT_DIR/requirements-ml.txt"
+    "$PYTHON_BIN" -m pip install "${pip_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$filtered_ml_requirements"
   fi
 }
 
@@ -209,6 +219,7 @@ validate_project_inputs() {
   require_file "$ROOT_DIR/manage.py"
   require_file "$ROOT_DIR/requirements.txt"
   require_file "$ROOT_DIR/requirements-ml.txt"
+  [[ -d "$ROOT_DIR/tmbed/tmbed" ]] || die "Required local TMbed source tree not found: $ROOT_DIR/tmbed/tmbed"
   [[ -d "$ROOT_DIR/datasets" ]] || die "Required dataset directory not found: $ROOT_DIR/datasets"
 }
 
@@ -220,6 +231,7 @@ prepare_python_env() {
   export FLASK_ENV=production
   export APP_SETTINGS=config.config.ProductionConfig
   export DATABASE_URL="sqlite:///$SQLITE_PATH"
+  export PYTHONPATH="$ROOT_DIR/tmbed${PYTHONPATH:+:$PYTHONPATH}"
   export INGESTION_DATASET_BASE_DIR="$ROOT_DIR/datasets"
   if [[ -f "$ROOT_DIR/datasets/expert_annotation_predicted.csv" ]]; then
     export DASHBOARD_ANNOTATION_DATASET_PATH="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
