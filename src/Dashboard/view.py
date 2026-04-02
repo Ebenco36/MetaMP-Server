@@ -626,9 +626,12 @@ class DiscrepancyReviewResource(Resource):
 
 class DiscrepancyBenchmarkStatusResource(Resource):
     def get(self):
-        metadata = DiscrepancyBenchmarkExportService.ensure_fresh_export_metadata(
-            include_all=False
-        )
+        try:
+            metadata = DiscrepancyBenchmarkExportService.ensure_fresh_export_metadata(
+                include_all=False
+            )
+        except FileNotFoundError as exc:
+            return ApiResponse.error(message=str(exc), status_code=404)
         return ApiResponse.success(
             data=metadata,
             message="Fetched discrepancy benchmark export metadata successfully",

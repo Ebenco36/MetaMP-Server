@@ -81,6 +81,7 @@ load_env_file() {
   source "$ENV_FILE"
   set +a
   export POSTGRES_IMAGE="${POSTGRES_IMAGE_OVERRIDE:-${REGISTRY_NAMESPACE:-ebenco36}/${POSTGRES_STATE_IMAGE_NAME:-metamp_postgres_state}:${IMAGE_TAG:-latest}}"
+  export SNAPSHOT_ASSETS_IMAGE="${SNAPSHOT_ASSETS_IMAGE_OVERRIDE:-${REGISTRY_NAMESPACE:-ebenco36}/${SNAPSHOT_ASSETS_IMAGE_NAME:-metamp_runtime_snapshot}:${IMAGE_TAG:-latest}}"
 }
 
 run_compose() {
@@ -133,8 +134,9 @@ done
 load_env_file
 
 log "Using snapshot PostgreSQL image: $POSTGRES_IMAGE"
+log "Using snapshot runtime image: $SNAPSHOT_ASSETS_IMAGE"
 log "Pulling latest reviewer images..."
-run_compose pull postgres redis flask-app frontend
+run_compose pull postgres redis snapshot-assets flask-app frontend
 
 if [[ "$KEEP_DATA" -ne 1 ]]; then
   log "Resetting reviewer stack volumes so the exact published snapshot is restored..."

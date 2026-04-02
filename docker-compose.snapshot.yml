@@ -1,4 +1,18 @@
 services:
+  snapshot-assets:
+    image: ${SNAPSHOT_ASSETS_IMAGE:-ebenco36/metamp_runtime_snapshot:latest}
+    container_name: testmpvis_snapshot_assets
+    restart: "no"
+    command: >
+      sh -c "mkdir -p /seed-target/datasets /seed-target/models /seed-target/tm_predictions &&
+      cp -R /runtime-data/datasets/. /seed-target/datasets/ 2>/dev/null || true &&
+      cp -R /runtime-data/models/. /seed-target/models/ 2>/dev/null || true &&
+      cp -R /runtime-data/tm_predictions/. /seed-target/tm_predictions/ 2>/dev/null || true"
+    volumes:
+      - flask-app-data:/seed-target
+    networks:
+      - app-networks
+
   flask-app:
     image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
     container_name: testmpvis_app
@@ -15,6 +29,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      snapshot-assets:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:8081/api/v1/health/ready || exit 1"]
       interval: 30s

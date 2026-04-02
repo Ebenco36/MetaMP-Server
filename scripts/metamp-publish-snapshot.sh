@@ -89,6 +89,7 @@ fi
 snapshot_args=(export --env-file "$ENV_FILE" --snapshot-dir "$SNAPSHOT_DIR" --top-models "$TOP_MODELS")
 stack_args=("$COMMAND" --env-file "$ENV_FILE")
 postgres_args=("$COMMAND" --env-file "$ENV_FILE" --snapshot-dir "$SNAPSHOT_DIR")
+runtime_args=("$COMMAND" --env-file "$ENV_FILE" --snapshot-dir "$SNAPSHOT_DIR")
 
 if [[ "$SKIP_FRONTEND" -eq 1 ]]; then
   stack_args+=(--skip-frontend)
@@ -97,6 +98,7 @@ fi
 if [[ "$NO_CACHE" -eq 1 ]]; then
   stack_args+=(--no-cache)
   postgres_args+=(--no-cache)
+  runtime_args+=(--no-cache)
 fi
 
 log "Exporting runtime snapshot to $SNAPSHOT_DIR"
@@ -107,6 +109,9 @@ bash "$ROOT_DIR/scripts/metamp-stack-images.sh" "${stack_args[@]}"
 
 log "Building or pushing stateful PostgreSQL snapshot image"
 bash "$ROOT_DIR/scripts/metamp-stateful-postgres-image.sh" "${postgres_args[@]}"
+
+log "Building or pushing runtime snapshot assets image"
+bash "$ROOT_DIR/scripts/metamp-stateful-runtime-image.sh" "${runtime_args[@]}"
 
 log "Snapshot publish flow complete."
 log "Use $ROOT_DIR/docker-compose.snapshot.yml with the pushed images for a no-background-jobs runtime."

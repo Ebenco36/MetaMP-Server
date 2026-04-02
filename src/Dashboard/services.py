@@ -1556,10 +1556,13 @@ class DashboardAnnotationDatasetService:
         )
         if row is None:
             return None
-        return {
-            column.name: getattr(row, column.name)
-            for column in MembraneProteinData.__table__.columns
-        }
+        payload = {}
+        for column in MembraneProteinData.__table__.columns:
+            value = getattr(row, column.name, None)
+            if value is None and getattr(column, "key", None) not in (None, column.name):
+                value = getattr(row, column.key, None)
+            payload[column.name] = value
+        return payload
 
     @classmethod
     def _load_local_merged_dataset(cls):
