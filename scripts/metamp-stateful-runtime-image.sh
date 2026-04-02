@@ -116,7 +116,7 @@ build_image() {
   local image_ref build_dir
   image_ref="$(resolve_image_ref)"
   build_dir="$(build_context)"
-  trap 'rm -rf "$build_dir"' EXIT
+  trap "rm -rf '$build_dir'" EXIT
 
   local build_args=(build -t "$image_ref")
   if [[ "$NO_CACHE" -eq 1 ]]; then

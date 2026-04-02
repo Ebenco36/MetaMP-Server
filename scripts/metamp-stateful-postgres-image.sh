@@ -141,7 +141,7 @@ build_image() {
   dump_source="$(resolve_dump_path)"
   image_ref="$(resolve_image_ref)"
   build_dir="$(build_context "$dump_source")"
-  trap 'rm -rf "$build_dir"' EXIT
+  trap "rm -rf '$build_dir'" EXIT
 
   local build_args=(build -t "$image_ref")
   if [[ "$NO_CACHE" -eq 1 ]]; then

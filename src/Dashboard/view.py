@@ -548,6 +548,11 @@ class DiscrepancyReviewListResource(Resource):
             )
         except FileNotFoundError as exc:
             return ApiResponse.error(message=str(exc), status_code=404)
+        except OSError as exc:
+            return ApiResponse.error(
+                message=f"Discrepancy review data is not readable yet: {exc}",
+                status_code=503,
+            )
 
         return ApiResponse.success(
             data=data,
@@ -632,6 +637,11 @@ class DiscrepancyBenchmarkStatusResource(Resource):
             )
         except FileNotFoundError as exc:
             return ApiResponse.error(message=str(exc), status_code=404)
+        except OSError as exc:
+            return ApiResponse.error(
+                message=f"Discrepancy benchmark data is not readable yet: {exc}",
+                status_code=503,
+            )
         return ApiResponse.success(
             data=metadata,
             message="Fetched discrepancy benchmark export metadata successfully",

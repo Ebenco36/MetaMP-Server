@@ -1492,18 +1492,15 @@ class TrainingAnalyticsService:
     def _build_grouped_method_chart(self, variable, mark_type="line", bin_value=None):
         dataset = getChartForQuestion(column=variable, filter="")
         chart_data = dataset[self.CHART_VIEW_COLUMNS]
-        chart = alt.Chart.from_dict(
-            group_data_by_methods(
-                chart_data,
-                columns=["bibliography_year", variable],
-                col_color=variable,
-                chart_type=mark_type,
-                bin_value=bin_value,
-                interactive=True,
-                arange_legend="vertical",
-            )
+        return group_data_by_methods(
+            chart_data,
+            columns=["bibliography_year", variable],
+            col_color=variable,
+            chart_type=mark_type,
+            bin_value=bin_value,
+            interactive=True,
+            arange_legend="vertical",
         )
-        return convert_chart(chart)
 
     def _build_resolution_boxplot(self, method, cache_prefix):
         if not method:

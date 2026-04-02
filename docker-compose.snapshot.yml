@@ -7,7 +7,8 @@ services:
       sh -c "mkdir -p /seed-target/datasets /seed-target/models /seed-target/tm_predictions &&
       cp -R /runtime-data/datasets/. /seed-target/datasets/ 2>/dev/null || true &&
       cp -R /runtime-data/models/. /seed-target/models/ 2>/dev/null || true &&
-      cp -R /runtime-data/tm_predictions/. /seed-target/tm_predictions/ 2>/dev/null || true"
+      cp -R /runtime-data/tm_predictions/. /seed-target/tm_predictions/ 2>/dev/null || true &&
+      chmod -R a+rX /seed-target/datasets /seed-target/models /seed-target/tm_predictions 2>/dev/null || true"
     volumes:
       - flask-app-data:/seed-target
     networks:

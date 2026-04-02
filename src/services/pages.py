@@ -611,7 +611,7 @@ class Pages:
         return convert_chart((chart))
 
     def average_resolution_over_years(self, data):
-        data = data.dropna(subset=["processed_resolution", "bibliography_year"])
+        data = data.dropna(subset=["processed_resolution", "bibliography_year"]).copy()
         if "rcsentinfo_experimental_method" in data:
             # Rename databases for better readability
             experimental_method_list = {
@@ -619,9 +619,9 @@ class Pages:
                 'NMR': 'NMR (Nuclear Magnetic Resonance)',
                 'X-ray': 'X-ray Crystallography (X-ray)'
             }
-            data['rcsentinfo_experimental_method'] = data['rcsentinfo_experimental_method'].replace(experimental_method_list)
+            data.loc[:, 'rcsentinfo_experimental_method'] = data['rcsentinfo_experimental_method'].replace(experimental_method_list)
             
-        data["bibliography_year"] = pd.to_numeric(
+        data.loc[:, "bibliography_year"] = pd.to_numeric(
             data["bibliography_year"], errors="coerce"
         )
         # Group by year and experimental method, calculate average resolution

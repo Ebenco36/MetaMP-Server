@@ -8,6 +8,7 @@ from pathlib import Path
 CURRENT_DATASET_FILES = [
     "datasets/expert_annotation_predicted.csv",
     "datasets/Mpstruct_dataset.csv",
+    "datasets/PDB_data.csv",
     "datasets/PDB_data_transformed.csv",
     "datasets/Quantitative_data.csv",
     "datasets/NEWOPM.csv",
@@ -40,8 +41,8 @@ PRODUCTION_SMALL_DIRS = [
 
 
 def _copy_file_if_exists(source_root: Path, relative_path: str, output_root: Path) -> None:
-    source_path = source_root / relative_path
-    if not source_path.exists() or not source_path.is_file():
+    source_path = _resolve_source_path(source_root, relative_path)
+    if source_path is None or not source_path.exists() or not source_path.is_file():
         return
     destination_path = output_root / relative_path
     destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +62,24 @@ def _copy_tree_if_exists(source_root: Path, relative_path: str, output_root: Pat
 
 def _truthy(value) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _resolve_source_path(source_root: Path, relative_path: str):
+    candidates = [source_root / relative_path]
+
+    if relative_path.startswith("datasets/"):
+        candidates.extend(
+            [
+                source_root / "data" / relative_path,
+                source_root / "src" / relative_path,
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return None
 
 
 def _to_float(value) -> float:
@@ -219,7 +238,7 @@ def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int
         "registry_row_count": len(filtered_rows),
         "includes_database_dump": False,
         "notes": [
-            "Only runtime-required dataset CSVs were exported; raw ingestion intermediates were omitted.",
+            "Runtime-required dataset CSVs were exported from the active application dataset locations.",
             "Only the top production ML bundles were retained to reduce snapshot size.",
             "Use the shell snapshot workflow to add the PostgreSQL dump and restore it on another machine.",
         ],

@@ -5,6 +5,7 @@ import ast
 import re
 import io
 import hashlib
+import os
 from numbers import Number
 from functools import lru_cache
 from pathlib import Path
@@ -216,12 +217,14 @@ class DashboardConfigurationService:
                 continue
 
             current_candidate = root / "PDB_data.csv"
-            if current_candidate.exists():
+            if current_candidate.exists() and os.access(current_candidate, os.R_OK):
                 return current_candidate
 
             dated_candidates = sorted(root.glob("PDB_data_*.csv"), reverse=True)
             for candidate in dated_candidates:
-                if candidate.name == "PDB_data.csv":
+                if candidate.name == "PDB_data.csv" or "transformed" in candidate.name.lower():
+                    continue
+                if not os.access(candidate, os.R_OK):
                     continue
                 return candidate
 
@@ -1586,44 +1589,68 @@ class DashboardAnnotationDatasetService:
         if cached is not None:
             return cached
 
-        quantitative = pd.read_csv(quantitative_path)
+        try:
+            quantitative = pd.read_csv(quantitative_path)
+        except (OSError, PermissionError) as exc:
+            logger.warning(
+                "Unable to read quantitative dataset %s: %s",
+                quantitative_path,
+                exc,
+            )
+            return pd.DataFrame()
         quantitative = quantitative.rename(columns={"Pdb Code": "pdb_code"})
 
         merged = quantitative
 
         pdb_path = path_map["pdb"]
         if pdb_path and pdb_path.exists():
-            pdb_df = pd.read_csv(pdb_path).rename(columns={"Pdb Code": "pdb_code"})
-            merged = merged.merge(pdb_df, on="pdb_code", how="left", suffixes=("", "_pdb"))
+            try:
+                pdb_df = pd.read_csv(pdb_path).rename(columns={"Pdb Code": "pdb_code"})
+            except (OSError, PermissionError) as exc:
+                logger.warning(
+                    "Unable to read transformed PDB dataset %s: %s",
+                    pdb_path,
+                    exc,
+                )
+            else:
+                merged = merged.merge(pdb_df, on="pdb_code", how="left", suffixes=("", "_pdb"))
 
         raw_pdb_path = path_map["pdb_raw"]
         if raw_pdb_path and raw_pdb_path.exists():
-            raw_pdb_df = pd.read_csv(raw_pdb_path, low_memory=False)
-            if "Pdb Code" in raw_pdb_df.columns and "pdb_code" not in raw_pdb_df.columns:
-                raw_pdb_df["pdb_code"] = raw_pdb_df["Pdb Code"]
-            raw_pdb_fields = [
-                field
-                for field in [
-                    "pdb_code",
-                    "rcsb_entry_container_identifiers_assembly_ids",
-                    "rcsb_entry_container_identifiers_entity_ids",
-                    "rcsb_entry_container_identifiers_polymer_entity_ids",
-                    "rcsb_entry_container_identifiers_non_polymer_entity_ids",
-                    "rcsb_entry_container_identifiers_branched_entity_ids",
-                    "rcsb_entry_container_identifiers_model_ids",
-                    "em_entity_assembly",
-                    "em_experiment_entity_assembly_id",
-                ]
-                if field in raw_pdb_df.columns
-            ]
-            if raw_pdb_fields:
-                raw_pdb_df = raw_pdb_df[raw_pdb_fields].drop_duplicates(subset="pdb_code")
-                merged = merged.merge(
-                    raw_pdb_df,
-                    on="pdb_code",
-                    how="left",
-                    suffixes=("", "_pdb_raw"),
+            try:
+                raw_pdb_df = pd.read_csv(raw_pdb_path, low_memory=False)
+            except (OSError, PermissionError) as exc:
+                logger.warning(
+                    "Unable to read raw PDB dataset %s: %s",
+                    raw_pdb_path,
+                    exc,
                 )
+            else:
+                if "Pdb Code" in raw_pdb_df.columns and "pdb_code" not in raw_pdb_df.columns:
+                    raw_pdb_df["pdb_code"] = raw_pdb_df["Pdb Code"]
+                raw_pdb_fields = [
+                    field
+                    for field in [
+                        "pdb_code",
+                        "rcsb_entry_container_identifiers_assembly_ids",
+                        "rcsb_entry_container_identifiers_entity_ids",
+                        "rcsb_entry_container_identifiers_polymer_entity_ids",
+                        "rcsb_entry_container_identifiers_non_polymer_entity_ids",
+                        "rcsb_entry_container_identifiers_branched_entity_ids",
+                        "rcsb_entry_container_identifiers_model_ids",
+                        "em_entity_assembly",
+                        "em_experiment_entity_assembly_id",
+                    ]
+                    if field in raw_pdb_df.columns
+                ]
+                if raw_pdb_fields:
+                    raw_pdb_df = raw_pdb_df[raw_pdb_fields].drop_duplicates(subset="pdb_code")
+                    merged = merged.merge(
+                        raw_pdb_df,
+                        on="pdb_code",
+                        how="left",
+                        suffixes=("", "_pdb_raw"),
+                    )
 
         opm_df = cls._load_opm_dataset_frame()
         if not opm_df.empty:
@@ -1634,32 +1661,40 @@ class DashboardAnnotationDatasetService:
 
         tm_summary_path = path_map["tm_summary"]
         if tm_summary_path and tm_summary_path.exists():
-            tm_summary_df = pd.read_csv(tm_summary_path)
-            if "id" in tm_summary_df.columns and "pdb_code" not in tm_summary_df.columns:
-                tm_summary_df["pdb_code"] = tm_summary_df["id"]
-            tm_summary_fields = [
-                field
-                for field in [
-                    "pdb_code",
-                    "TMbed_tm_count",
-                    "TMbed_tm_regions",
-                    "DeepTMHMM_tm_count",
-                    "DeepTMHMM_tm_regions",
-                    "TMDET_tm_count",
-                    "TMDET_tm_regions",
-                    "TMHMM_tm_count",
-                    "TMHMM_tm_regions",
-                ]
-                if field in tm_summary_df.columns
-            ]
-            if tm_summary_fields:
-                tm_summary_df = tm_summary_df[tm_summary_fields].drop_duplicates(subset="pdb_code")
-                merged = merged.merge(
-                    tm_summary_df,
-                    on="pdb_code",
-                    how="left",
-                    suffixes=("", "_tm_summary"),
+            try:
+                tm_summary_df = pd.read_csv(tm_summary_path)
+            except (OSError, PermissionError) as exc:
+                logger.warning(
+                    "Unable to read TM prediction summary %s: %s",
+                    tm_summary_path,
+                    exc,
                 )
+            else:
+                if "id" in tm_summary_df.columns and "pdb_code" not in tm_summary_df.columns:
+                    tm_summary_df["pdb_code"] = tm_summary_df["id"]
+                tm_summary_fields = [
+                    field
+                    for field in [
+                        "pdb_code",
+                        "TMbed_tm_count",
+                        "TMbed_tm_regions",
+                        "DeepTMHMM_tm_count",
+                        "DeepTMHMM_tm_regions",
+                        "TMDET_tm_count",
+                        "TMDET_tm_regions",
+                        "TMHMM_tm_count",
+                        "TMHMM_tm_regions",
+                    ]
+                    if field in tm_summary_df.columns
+                ]
+                if tm_summary_fields:
+                    tm_summary_df = tm_summary_df[tm_summary_fields].drop_duplicates(subset="pdb_code")
+                    merged = merged.merge(
+                        tm_summary_df,
+                        on="pdb_code",
+                        how="left",
+                        suffixes=("", "_tm_summary"),
+                    )
 
         if "subunits" in merged.columns:
             merged["opm_tm_regions"] = merged["subunits"].apply(cls._parse_opm_tm_regions)
@@ -1674,8 +1709,16 @@ class DashboardAnnotationDatasetService:
 
         uniprot_path = path_map["uniprot"]
         if uniprot_path and uniprot_path.exists():
-            uniprot_df = pd.read_csv(uniprot_path)
-            merged = merged.merge(uniprot_df, on="pdb_code", how="left", suffixes=("", "_uniprot"))
+            try:
+                uniprot_df = pd.read_csv(uniprot_path)
+            except (OSError, PermissionError) as exc:
+                logger.warning(
+                    "Unable to read UniProt dataset %s: %s",
+                    uniprot_path,
+                    exc,
+                )
+            else:
+                merged = merged.merge(uniprot_df, on="pdb_code", how="left", suffixes=("", "_uniprot"))
 
         merged = merged.replace({np.nan: None})
         return cls._set_process_cached_dataframe(cache_key, merged)
