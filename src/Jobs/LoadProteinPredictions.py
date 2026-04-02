@@ -42,7 +42,8 @@ VERIFIED_LOCAL_TM_FALLBACK_PREDICTORS = ("TMbed", "DeepTMHMM", "TMHMM", "TMDET")
 BULK_SAFE_TM_FALLBACK_PREDICTORS = ("DeepTMHMM", "TMHMM")
 VERIFIED_LOCAL_TM_FALLBACK_EXECUTION_ORDER = ("DeepTMHMM", "TMHMM", "TMDET", "TMbed")
 OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZES = {
-    "TMDET": 100,
+    "TMDET": 25,
+    "TMHMM": 25,
 }
 OPTIONAL_TM_PREDICTOR_SPECS = {
     "TMbed": {"execution_mode": "local_sequence", "prediction_kind": "sequence_topology"},
@@ -298,7 +299,15 @@ def get_optional_tm_tool_home(app_config=None):
 
 
 def get_optional_tm_tool_paths(app_config=None):
-    tool_home = get_optional_tm_tool_home(app_config=app_config)
+    configured_tool_home = get_optional_tm_tool_home(app_config=app_config)
+    candidate_homes = []
+    live_vendor_home = Path("/var/app/vendor/optional_tm_tools")
+    cwd_vendor_home = Path.cwd() / "vendor/optional_tm_tools"
+    for candidate in (live_vendor_home, cwd_vendor_home, configured_tool_home):
+        if candidate not in candidate_homes:
+            candidate_homes.append(candidate)
+    existing_homes = [candidate for candidate in candidate_homes if candidate.exists()]
+    tool_home = existing_homes[0] if existing_homes else configured_tool_home
     bin_dir = tool_home / "bin"
     wrappers_dir = tool_home / "wrappers"
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -307,6 +316,7 @@ def get_optional_tm_tool_paths(app_config=None):
         "tool_home": tool_home,
         "bin_dir": bin_dir,
         "wrappers_dir": wrappers_dir,
+        "candidate_homes": candidate_homes,
     }
 
 
@@ -974,24 +984,39 @@ def import_optional_tm_prediction_results_bulk(
     return aggregate_summary
 
 
-def _format_optional_tm_local_command(command_spec, *, predictor_name, fasta_path, results_path, reference_path, work_dir):
+def _format_optional_tm_local_command(
+    command_spec,
+    *,
+    predictor_name,
+    fasta_path,
+    results_path,
+    reference_path,
+    failures_path,
+    structure_manifest_path,
+    work_dir,
+):
     substitutions = {
         "predictor": predictor_name,
         "input_fasta": str(fasta_path),
         "output_csv": str(results_path),
         "results_csv": str(results_path),
-        "failures_csv": str(get_optional_tm_prediction_paths(predictor_name)["failures_path"]),
+        "failures_csv": str(failures_path),
         "reference_csv": str(reference_path),
         "work_dir": str(work_dir),
-        "structure_manifest": str(get_optional_tm_prediction_paths(predictor_name)["structure_manifest_path"]),
+        "structure_manifest": str(structure_manifest_path),
     }
     if isinstance(command_spec, str):
         return command_spec.format(**substitutions)
     return [str(item).format(**substitutions) for item in command_spec]
 
 
-def _get_optional_tm_local_command_batch_size(predictor_name):
+def _get_optional_tm_local_command_batch_size(predictor_name, batch_size_override=None):
     normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    if batch_size_override not in (None, ""):
+        try:
+            return max(int(batch_size_override), 1)
+        except (TypeError, ValueError):
+            pass
     configured_value = (
         current_app.config.get("OPTIONAL_TM_LOCAL_COMMAND_BATCH_SIZE")
         if has_app_context()
@@ -1173,6 +1198,8 @@ def _execute_optional_tm_local_command_once(
         fasta_path=input_paths["fasta_path"],
         results_path=input_paths["results_path"],
         reference_path=input_paths["reference_path"],
+        failures_path=input_paths["failures_path"],
+        structure_manifest_path=input_paths["structure_manifest_path"],
         work_dir=input_paths["predictor_dir"],
     )
     _emit_progress(
@@ -1296,11 +1323,66 @@ def _load_optional_tm_completion_codes(
             db.func.upper(db.func.trim(TMAlphaFoldPrediction.pdb_code)).in_(selected_codes)
         )
 
-    return {
+    completed_codes = {
         str(row.pdb_code or "").strip().upper()
         for row in query.all()
         if str(row.pdb_code or "").strip()
     }
+    if "error" not in normalized_statuses and normalized_statuses == ["success"]:
+        permanent_error_query = TMAlphaFoldPrediction.query.with_entities(
+            TMAlphaFoldPrediction.pdb_code,
+            TMAlphaFoldPrediction.error_message,
+        ).filter(
+            TMAlphaFoldPrediction.provider == normalized_provider,
+            TMAlphaFoldPrediction.method == normalized_name,
+            db.func.lower(db.func.trim(TMAlphaFoldPrediction.status)) == "error",
+        )
+        if selected_codes:
+            permanent_error_query = permanent_error_query.filter(
+                db.func.upper(db.func.trim(TMAlphaFoldPrediction.pdb_code)).in_(selected_codes)
+            )
+        completed_codes |= {
+            str(row.pdb_code or "").strip().upper()
+            for row in permanent_error_query.all()
+            if _is_permanent_optional_tm_error(
+                predictor_name=normalized_name,
+                error_message=getattr(row, "error_message", None),
+            )
+            and str(row.pdb_code or "").strip()
+        }
+
+    return completed_codes
+
+
+def _is_permanent_optional_tm_error(predictor_name, error_message):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    message = str(error_message or "").strip().lower()
+    if not message:
+        return False
+
+    generic_permanent_markers = (
+        "no usable sequence could be fetched",
+        "sequence unavailable",
+        "unsupported completion provider scope",
+        "not locally runnable",
+    )
+    if any(marker in message for marker in generic_permanent_markers):
+        return True
+
+    if normalized_name == "TMDET":
+        tmdet_permanent_markers = (
+            "protein is too large",
+            "number of residues:",
+            "exiting.",
+        )
+        if all(marker in message for marker in tmdet_permanent_markers):
+            return True
+
+    return False
+
+
+def _fallback_completion_statuses(retry_errors=False):
+    return ("success",) if retry_errors else ("success", "error")
 
 
 def _persist_optional_tm_error_rows(
@@ -1467,9 +1549,11 @@ def import_optional_tm_prediction_failures(
 def run_optional_tm_local_command(
     predictor_name,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     completion_provider="MetaMP",
+    batch_size=None,
     progress_callback=None,
 ):
     normalized_name = normalize_optional_tm_predictor_name(predictor_name)
@@ -1492,6 +1576,7 @@ def run_optional_tm_local_command(
     export_summary = export_optional_tm_prediction_inputs(
         predictor_name=normalized_name,
         include_completed=include_completed,
+        retry_errors=retry_errors,
         pdb_codes=pdb_codes,
         limit=limit,
         completion_provider=completion_provider,
@@ -1530,13 +1615,16 @@ def run_optional_tm_local_command(
         }
 
     path_config = get_optional_tm_prediction_paths(normalized_name)
-    batch_size = _get_optional_tm_local_command_batch_size(normalized_name)
+    batch_size = _get_optional_tm_local_command_batch_size(
+        normalized_name,
+        batch_size_override=batch_size,
+    )
     execution_mode = get_optional_tm_predictor_spec(normalized_name).get("execution_mode")
     command_summary = None
     failure_summary = None
     import_summary = None
     processed_records = 0
-    if batch_size and execution_mode == "external_structure" and int(export_summary.get("record_count") or 0) > batch_size:
+    if batch_size and int(export_summary.get("record_count") or 0) > batch_size:
         chunks = _prepare_optional_tm_command_chunks(
             normalized_name,
             export_summary,
@@ -1544,7 +1632,7 @@ def run_optional_tm_local_command(
         )
         _emit_progress(
             progress_callback,
-            f"Running {normalized_name} in {len(chunks)} chunk(s) of up to {batch_size} record(s) with incremental imports.",
+            f"Running {normalized_name} in {len(chunks)} chunk(s) of up to {batch_size} record(s) with incremental imports and resumable persistence.",
         )
         command_summaries = []
         failure_summaries = []
@@ -1581,9 +1669,18 @@ def run_optional_tm_local_command(
                 progress_callback,
                 f"Persisted {normalized_name} chunk {chunk['index']}/{chunk['total_chunks']} to normalized storage ({chunk_processed} record(s) processed this chunk, {processed_records} total).",
             )
+            _emit_progress(
+                progress_callback,
+                (
+                    f"Database save confirmed for {normalized_name} chunk "
+                    f"{chunk['index']}/{chunk['total_chunks']}. Continuing to the next chunk."
+                ),
+            )
         command_summary = {
             "predictor": normalized_name,
             "chunked": True,
+            "batch_size": int(batch_size),
+            "incremental_persistence": True,
             "chunk_count": int(len(command_summaries)),
             "chunks": command_summaries,
             "return_code": 0,
@@ -1592,6 +1689,7 @@ def run_optional_tm_local_command(
         failure_summary = {
             "predictor": normalized_name,
             "chunked": True,
+            "batch_size": int(batch_size),
             "chunk_count": int(len(failure_summaries)),
             "processed_records": int(
                 sum(int(item.get("processed_records") or 0) for item in failure_summaries)
@@ -1610,6 +1708,7 @@ def run_optional_tm_local_command(
         import_summary = {
             "predictor": normalized_name,
             "chunked": True,
+            "batch_size": int(batch_size),
             "chunk_count": int(len(import_summaries)),
             "processed_records": int(
                 sum(int(item.get("processed_records") or 0) for item in import_summaries)
@@ -1628,6 +1727,8 @@ def run_optional_tm_local_command(
         processed_records = int(import_summary.get("processed_records") or 0) + int(
             failure_summary.get("processed_records") or 0
         )
+        command_summary["batch_size"] = int(batch_size) if batch_size else None
+        command_summary["incremental_persistence"] = False
     return {
         "predictor": normalized_name,
         "command_configured": True,
@@ -1650,6 +1751,7 @@ def run_optional_tm_local_command(
 def run_optional_tm_prediction_backfill(
     predictor_names=None,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     use_gpu=None,
@@ -1704,6 +1806,7 @@ def run_optional_tm_prediction_backfill(
             batch_size=batch_size,
             max_workers=max_workers,
             include_completed=include_completed,
+            retry_errors=retry_errors,
             pdb_codes=pdb_codes,
             limit=limit,
             progress_callback=progress_callback,
@@ -1720,9 +1823,11 @@ def run_optional_tm_prediction_backfill(
         command_summary = run_optional_tm_local_command(
             predictor_name=predictor_name,
             include_completed=include_completed,
+            retry_errors=retry_errors,
             pdb_codes=pdb_codes,
             limit=limit,
             completion_provider="MetaMP",
+            batch_size=batch_size,
             progress_callback=progress_callback,
         )
         aggregate["per_predictor"][predictor_name] = {
@@ -1825,6 +1930,7 @@ def determine_verified_tm_fallback_targets(
     pdb_codes=None,
     limit=None,
     completion_provider="MetaMP",
+    retry_errors=False,
     progress_callback=None,
 ):
     normalized_predictors = normalize_verified_tm_fallback_predictor_names(predictor_names)
@@ -1849,7 +1955,7 @@ def determine_verified_tm_fallback_targets(
             predictor_name,
             provider=completion_provider,
             pdb_codes=target_codes,
-            statuses=("success", "error"),
+            statuses=_fallback_completion_statuses(retry_errors=retry_errors),
         )
 
     missing_by_pdb = {}
@@ -1932,6 +2038,7 @@ def run_verified_tm_fallback_pipeline(
     pdb_codes=None,
     limit=None,
     include_completed=False,
+    retry_errors=False,
     use_gpu=None,
     batch_size=None,
     max_workers=None,
@@ -1985,6 +2092,7 @@ def run_verified_tm_fallback_pipeline(
         ],
         "selected_pdb_codes": selected_codes,
         "limit": limit,
+        "retry_errors": bool(retry_errors),
         "tmalphafold": None,
         "fallback_scope": None,
         "omitted_fallback_scope": None,
@@ -2049,6 +2157,7 @@ def run_verified_tm_fallback_pipeline(
             pdb_codes=selected_codes,
             limit=limit,
             completion_provider="MetaMP",
+            retry_errors=retry_errors,
             progress_callback=progress_callback,
         )
         if summary["omitted_verified_predictors"]:
@@ -2057,6 +2166,7 @@ def run_verified_tm_fallback_pipeline(
                 pdb_codes=selected_codes,
                 limit=limit,
                 completion_provider="MetaMP",
+                retry_errors=retry_errors,
                 progress_callback=progress_callback,
             )
         fallback_codes = selected_target_codes if include_completed else summary["fallback_scope"]["pdb_codes"]
@@ -2089,6 +2199,7 @@ def run_verified_tm_fallback_pipeline(
             pdb_codes=target_selection_codes,
             limit=fallback_limit,
             completion_provider="MetaMP",
+            retry_errors=retry_errors,
             progress_callback=progress_callback,
         )
         predictor_codes = target_selection_codes if include_completed else predictor_scope["pdb_codes"]
@@ -2112,6 +2223,7 @@ def run_verified_tm_fallback_pipeline(
         predictor_summary = run_optional_tm_prediction_backfill(
             predictor_names=[predictor_name],
             include_completed=include_completed,
+            retry_errors=retry_errors,
             pdb_codes=predictor_codes,
             limit=None,
             use_gpu=use_gpu,
@@ -2177,6 +2289,7 @@ def get_optional_tm_runtime_status(predictor_names=None, app_config=None):
 def load_optional_tm_prediction_frame(
     predictor_name,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     completion_provider="MetaMP",
@@ -2242,7 +2355,7 @@ def load_optional_tm_prediction_frame(
             normalized_name,
             provider=completion_provider,
             pdb_codes=all_data["pdb_code"].tolist(),
-            statuses=("success", "error"),
+            statuses=_fallback_completion_statuses(retry_errors=retry_errors),
         )
         pending_mask = all_data[[count_col, region_col]].fillna("").astype(str).apply(
             lambda column: column.str.strip().eq("")
@@ -2462,6 +2575,7 @@ def export_optional_tm_prediction_inputs(
     fasta_out=None,
     csv_out=None,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     completion_provider="MetaMP",
@@ -2472,6 +2586,7 @@ def export_optional_tm_prediction_inputs(
     frame = load_optional_tm_prediction_frame(
         predictor_name=normalized_name,
         include_completed=include_completed,
+        retry_errors=retry_errors,
         pdb_codes=pdb_codes,
         limit=limit,
         completion_provider=completion_provider,
@@ -2572,6 +2687,7 @@ def export_optional_tm_prediction_inputs(
 def export_optional_tm_prediction_inputs_bulk(
     predictor_names=None,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     completion_provider="MetaMP",
@@ -2601,7 +2717,7 @@ def export_optional_tm_prediction_inputs_bulk(
                 normalized_name,
                 provider=completion_provider,
                 pdb_codes=predictor_frame["pdb_code"].tolist(),
-                statuses=("success", "error"),
+                statuses=_fallback_completion_statuses(retry_errors=retry_errors),
             )
             pending_mask = predictor_frame[[count_col, region_col]].fillna("").astype(str).apply(
                 lambda column: column.str.strip().eq("")
@@ -2960,6 +3076,7 @@ def load_pending_tm_prediction_frame(
     include_tmbed=True,
     include_deeptmhmm=True,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     progress_callback=None,
@@ -3053,7 +3170,7 @@ def load_pending_tm_prediction_frame(
                 predictor_name,
                 provider="MetaMP",
                 pdb_codes=all_data["pdb_code"].tolist(),
-                statuses=("success", "error"),
+                statuses=_fallback_completion_statuses(retry_errors=retry_errors),
             )
             if completed_codes:
                 predictor_missing_mask &= ~normalized_pdb_codes.isin(completed_codes)
@@ -3186,7 +3303,7 @@ def run_tm_prediction_for_sequences(
         use_db=False,
         write_csv=False,
     )
-    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu}
+    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu, "batch_size": None, "threads": None}
     if len(dataframe) <= 1:
         tmbed_kwargs.update({"batch_size": 1, "threads": 1})
     if include_tmbed:
@@ -3225,6 +3342,7 @@ def run_tm_prediction_backfill(
     csv_out=None,
     resume_from_csv=None,
     include_completed=False,
+    retry_errors=False,
     pdb_codes=None,
     limit=None,
     progress_callback=None,
@@ -3257,6 +3375,7 @@ def run_tm_prediction_backfill(
         include_tmbed=include_tmbed,
         include_deeptmhmm=include_deeptmhmm,
         include_completed=include_completed,
+        retry_errors=retry_errors,
         pdb_codes=pdb_codes,
         limit=limit,
         progress_callback=progress_callback,
@@ -3337,7 +3456,7 @@ def run_tm_prediction_backfill(
                 all_data[count_col] = pd.NA
             if region_col in all_data.columns:
                 all_data[region_col] = pd.NA
-    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu}
+    tmbed_kwargs = {"format_code": 0, "use_gpu": use_gpu, "batch_size": None, "threads": None}
     if len(all_data) <= 1:
         tmbed_kwargs.update({"batch_size": 1, "threads": 1})
     if include_tmbed:
@@ -3381,6 +3500,13 @@ def run_tm_prediction_backfill(
             _emit_progress(
                 progress_callback,
                 f"Persisted TMbed/normalized predictor results for batch {start}-{end} of {total}.",
+            )
+            _emit_progress(
+                progress_callback,
+                (
+                    f"Database save confirmed for TMbed/DeepTMHMM batch {start}-{end} of {total}. "
+                    "Continuing to the next batch."
+                ),
             )
 
     result_df = analyzer.analyze(

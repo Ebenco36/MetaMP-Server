@@ -28,6 +28,7 @@ CSV_EXPORT_PATH=""
 VENV_DIR=""
 PYTHON_BIN=""
 TMBED_SOURCE_DIR="${TMBED_SOURCE_DIR:-}"
+WHEELHOUSE_DIR="${WHEELHOUSE_DIR:-}"
 BOOTSTRAP_PYTHON_BIN="${BOOTSTRAP_PYTHON_BIN:-}"
 PIP_CERT_PATH="${PIP_CERT_PATH:-}"
 PIP_EXTRA_ARGS="${PIP_EXTRA_ARGS:-}"
@@ -65,6 +66,7 @@ Options:
   --venv-dir PATH          Virtualenv directory to create/use. Default: <runtime-root>/.venv
   --python-bin PATH        Explicit Python interpreter to use. Overrides --venv-dir.
   --tmbed-source-dir PATH  Optional local TMbed source tree to expose on PYTHONPATH.
+  --wheelhouse-dir PATH    Optional offline wheelhouse directory for pip installs.
   --bootstrap-python PATH  Python executable used to create the virtualenv. Default: python3
   --pip-cert PATH          CA bundle path for pip/requests SSL verification.
   --pip-extra-args TEXT    Extra arguments appended to pip install commands.
@@ -95,6 +97,20 @@ write_filtered_ml_requirements() {
   printf '%s\n' "$filtered_requirements"
 }
 
+configure_wheelhouse() {
+  if [[ -z "$WHEELHOUSE_DIR" && -d "$ROOT_DIR/vendor/wheels" ]]; then
+    WHEELHOUSE_DIR="$ROOT_DIR/vendor/wheels"
+  fi
+  if [[ -n "$WHEELHOUSE_DIR" && ! -d "$WHEELHOUSE_DIR" ]]; then
+    die "Wheelhouse directory not found: $WHEELHOUSE_DIR"
+  fi
+}
+
+has_wheelhouse() {
+  [[ -n "$WHEELHOUSE_DIR" && -d "$WHEELHOUSE_DIR" ]] || return 1
+  find "$WHEELHOUSE_DIR" -maxdepth 1 -type f | grep -q .
+}
+
 configure_tmbed_source() {
   if [[ -z "$TMBED_SOURCE_DIR" && -d "$ROOT_DIR/tmbed/tmbed" ]]; then
     TMBED_SOURCE_DIR="$ROOT_DIR/tmbed"
@@ -108,7 +124,7 @@ verify_tmbed_runtime() {
   if "$PYTHON_BIN" -c "import tmbed" >/dev/null 2>&1; then
     return 0
   fi
-  die "TMbed is not importable in the HPC runtime. Provide --tmbed-source-dir /path/to/tmbed or make the TMbed source available on the HPC checkout."
+  die "TMbed is not importable in the HPC runtime. Provide --tmbed-source-dir /path/to/tmbed or --wheelhouse-dir with a Linux-compatible tmbed wheel."
 }
 
 resolve_bootstrap_python() {
@@ -170,13 +186,26 @@ prepare_virtualenv() {
     log "Installing MetaMP dependencies into $VENV_DIR"
     local pip_args=()
     local filtered_ml_requirements
+    local pip_install_args=()
     if [[ -n "$PIP_EXTRA_ARGS" ]]; then
       # shellcheck disable=SC2206
       pip_args=($PIP_EXTRA_ARGS)
     fi
     filtered_ml_requirements="$(write_filtered_ml_requirements)"
+    if has_wheelhouse; then
+      log "Using offline wheelhouse: $WHEELHOUSE_DIR"
+      pip_install_args+=(--no-index --find-links "$WHEELHOUSE_DIR")
+    fi
     "$PYTHON_BIN" -m ensurepip --upgrade
-    "$PYTHON_BIN" -m pip install "${pip_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$filtered_ml_requirements"
+    "$PYTHON_BIN" -m pip install "${pip_args[@]}" "${pip_install_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$filtered_ml_requirements"
+    if [[ -z "$TMBED_SOURCE_DIR" ]] && has_wheelhouse; then
+      local tmbed_wheel
+      tmbed_wheel="$(find "$WHEELHOUSE_DIR" -maxdepth 1 -type f -name 'tmbed-*.whl' | head -n 1 || true)"
+      if [[ -n "$tmbed_wheel" ]]; then
+        log "Installing TMbed from wheelhouse: $(basename "$tmbed_wheel")"
+        "$PYTHON_BIN" -m pip install "${pip_args[@]}" "${pip_install_args[@]}" "$tmbed_wheel"
+      fi
+    fi
   fi
 
   verify_tmbed_runtime
@@ -315,6 +344,7 @@ export_predictions_csv() {
 main() {
   cd "$ROOT_DIR"
   validate_project_inputs
+  configure_wheelhouse
   configure_tmbed_source
   prepare_runtime_paths
   resolve_python_runtime
@@ -328,6 +358,11 @@ main() {
     log "TMbed source dir: $TMBED_SOURCE_DIR"
   else
     log "TMbed source dir: <not provided>"
+  fi
+  if [[ -n "$WHEELHOUSE_DIR" ]]; then
+    log "Wheelhouse dir: $WHEELHOUSE_DIR"
+  else
+    log "Wheelhouse dir: <not provided>"
   fi
   log "SQLite database: $SQLITE_PATH"
   log "CSV export path: $CSV_EXPORT_PATH"
@@ -368,6 +403,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tmbed-source-dir)
       TMBED_SOURCE_DIR="$2"
+      shift 2
+      ;;
+    --wheelhouse-dir)
+      WHEELHOUSE_DIR="$2"
       shift 2
       ;;
     --bootstrap-python)

@@ -28,7 +28,7 @@ resolve_docker_bin() {
       DOCKER_BIN="$(command -v "$candidate")"
       return 0
     fi
-  fi
+  done
   for candidate in \
     /Applications/Docker.app/Contents/Resources/bin/docker \
     /usr/local/bin/docker \

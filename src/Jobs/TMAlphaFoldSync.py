@@ -1,5 +1,6 @@
 import json
 import math
+import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from types import SimpleNamespace
@@ -25,6 +26,20 @@ from src.MP.model_uniprot import Uniprot
 def _emit_progress(progress_callback, message):
     if progress_callback is not None:
         progress_callback(message)
+
+
+def _resolve_tmalphafold_persist_batch_size(default=25):
+    configured_value = (
+        current_app.config.get("TMALPHAFOLD_PERSIST_BATCH_SIZE")
+        if has_app_context()
+        else None
+    ) or os.getenv("TMALPHAFOLD_PERSIST_BATCH_SIZE")
+    if configured_value not in (None, ""):
+        try:
+            return max(int(configured_value), 1)
+        except (TypeError, ValueError):
+            pass
+    return int(default)
 
 
 def _ensure_tmalphafold_storage(progress_callback=None):
@@ -561,7 +576,11 @@ def sync_tmalphafold_predictions(
     client = TMAlphaFoldPredictorClient(timeout=timeout)
     futures = []
     predictions = []
-    persist_batch_size = 25
+    persist_batch_size = _resolve_tmalphafold_persist_batch_size(default=25)
+    _emit_progress(
+        progress_callback,
+        f"TMAlphaFold will persist normalized predictions in batches of {persist_batch_size}.",
+    )
     pending_upserts = []
     total_persisted_rows = 0
     total_inserted_rows = 0
@@ -664,6 +683,13 @@ def sync_tmalphafold_predictions(
                         f"{total_persisted_rows} cumulative row(s) written so far)."
                     ),
                 )
+                _emit_progress(
+                    progress_callback,
+                    (
+                        f"TMAlphaFold database save confirmed for batch ending at request "
+                        f"{completed}/{total_jobs}. Continuing with the remaining requests."
+                    ),
+                )
 
     updated_count = len(predictions)
     sequence_summary = {
@@ -731,6 +757,7 @@ def sync_tmalphafold_predictions(
         "with_tmdet": with_tmdet,
         "retry_errors": bool(retry_errors),
         "max_workers": max_workers,
+        "persist_batch_size": persist_batch_size,
         "refresh": bool(refresh),
         "sequence_backfill": sequence_summary,
         "method_statuses": method_statuses,

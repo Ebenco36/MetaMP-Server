@@ -67,3 +67,28 @@ class DiscrepancyReview(db.Model):
     )
 
     reviewer = db.relationship(UserModel, backref='discrepancy_reviews')
+
+
+class StructureExpertNote(db.Model):
+    __tablename__ = "structure_expert_notes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pdb_code = db.Column(db.Text, nullable=False, index=True)
+    canonical_pdb_code = db.Column(db.Text, nullable=True, index=True)
+    title = db.Column(db.Text, nullable=True)
+    comment = db.Column(db.Text, nullable=False)
+    category = db.Column(db.Text, nullable=False, default="annotation")
+    status = db.Column(db.Text, nullable=False, default="open")
+    suggested_group = db.Column(db.Text, nullable=True)
+    suggested_tm_count = db.Column(db.Integer, nullable=True)
+    source_context = db.Column(JSON, nullable=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.datetime.utcnow,
+        onupdate=datetime.datetime.utcnow,
+        nullable=False,
+    )
+
+    author = db.relationship(UserModel, backref='structure_expert_notes')

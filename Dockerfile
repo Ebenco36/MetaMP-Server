@@ -41,6 +41,8 @@ RUN pip install --upgrade pip setuptools wheel && \
 
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
+ARG INCLUDE_ML=false
+
 ENV DEBIAN_FRONTEND=noninteractive \
     FLASK_DEBUG=False \
     MALLOC_ARENA_MAX=2 \
@@ -119,7 +121,7 @@ COPY migrations ./migrations
 COPY public ./public
 COPY src ./src
 COPY utils ./utils
-COPY vendor ./vendor
+COPY vendor/optional_tm_tools ./vendor/optional_tm_tools
 COPY serverConfig/fix_vegafusion_issues.py ./serverConfig/fix_vegafusion_issues.py
 COPY serverConfig/fix_tmbed_issues.py ./serverConfig/fix_tmbed_issues.py
 COPY .env.production ./.env.production
@@ -231,18 +233,18 @@ RUN set -eu; \
     fi
 
 RUN python /var/app/serverConfig/fix_vegafusion_issues.py || true
-RUN python /var/app/serverConfig/fix_tmbed_issues.py || true
+RUN if [ "$INCLUDE_ML" = "true" ]; then python /var/app/serverConfig/fix_tmbed_issues.py || true; fi
 
 RUN TMBED_SITE_PACKAGES="$(python -c 'import site; paths = [path for path in site.getsitepackages() if path.endswith("site-packages")]; print(paths[0] if paths else "")')" && \
-    if [ -n "$TMBED_SITE_PACKAGES" ] && [ -d "$TMBED_SITE_PACKAGES/tmbed" ]; then \
+    if [ "$INCLUDE_ML" = "true" ] && [ -n "$TMBED_SITE_PACKAGES" ] && [ -d "$TMBED_SITE_PACKAGES/tmbed" ]; then \
         rm -rf "$TMBED_SITE_PACKAGES/tmbed/models" && \
         ln -sfn /var/app/data/tmbed-models "$TMBED_SITE_PACKAGES/tmbed/models"; \
     fi && \
-    find /var/app/vendor /opt/metamp-optional-tools -type f \( -name "*.sh" -o -name "metamp-*" -o -name "metamp-run-*" \) -exec chmod +x {} + || true && \
-    chown -R appuser:appuser /var/app/data/tmbed-models /var/app/vendor /opt/metamp-optional-tools
+    find /var/app/vendor/optional_tm_tools /opt/metamp-optional-tools -type f \( -name "*.sh" -o -name "metamp-*" -o -name "metamp-run-*" \) -exec chmod +x {} + || true && \
+    chown -R appuser:appuser /var/app/data/tmbed-models /var/app/vendor/optional_tm_tools /opt/metamp-optional-tools
 
 USER appuser
 
 EXPOSE 8081
 
-CMD ["sh", "-c", "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models /var/app/logs /tmp/matplotlib /tmp/numba_cache && exec gunicorn --workers ${GUNICORN_WORKERS:-1} --timeout ${GUNICORN_TIMEOUT:-180} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-60} --max-requests ${GUNICORN_MAX_REQUESTS:-200} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-25} --worker-tmp-dir /dev/shm -k gevent --bind 0.0.0.0:8081 --access-logfile - --error-logfile - server:app"]
+CMD ["sh", "-c", "mkdir -p /var/app/data/models/semi-supervised /var/app/data/tmbed-models /var/app/logs /tmp/matplotlib /tmp/numba_cache && exec gunicorn --workers ${GUNICORN_WORKERS:-1} --timeout ${GUNICORN_TIMEOUT:-180} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-60} --max-requests ${GUNICORN_MAX_REQUESTS:-200} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-25} --worker-tmp-dir /dev/shm -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker --bind 0.0.0.0:8081 --access-logfile - --error-logfile - server:app"]

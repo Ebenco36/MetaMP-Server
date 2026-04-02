@@ -9,6 +9,7 @@ import hashlib
 import logging
 import shutil
 import site
+import platform
 from functools import lru_cache
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -22,6 +23,10 @@ try:
     import torch
 except ImportError:  # pragma: no cover - exercised in non-ML runtime images
     torch = None
+try:
+    import psutil
+except ImportError:  # pragma: no cover - exercised when psutil is unavailable
+    psutil = None
 
 
 logger = logging.getLogger("tmbed_runner")
@@ -275,6 +280,134 @@ def _tmbed_thread_flags(device: str, threads: Optional[int]) -> list[str]:
     ):
         return ["--threads", str(threads)]
     return []
+
+
+def _physical_cpu_count() -> int:
+    count = None
+    if psutil is not None:
+        try:
+            count = psutil.cpu_count(logical=False)
+        except Exception:
+            count = None
+    if not count:
+        count = os.cpu_count() or 1
+    return max(1, int(count))
+
+
+def _system_memory_gb() -> Optional[float]:
+    if psutil is not None:
+        try:
+            return float(psutil.virtual_memory().total) / (1024 ** 3)
+        except Exception:
+            return None
+    return None
+
+
+def _fasta_sequence_lengths(fasta_text: str) -> list[int]:
+    lengths = []
+    current_length = 0
+    for raw_line in str(fasta_text or "").splitlines():
+        line = str(raw_line or "").strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if current_length:
+                lengths.append(current_length)
+            current_length = 0
+            continue
+        current_length += len(line)
+    if current_length:
+        lengths.append(current_length)
+    return lengths
+
+
+def _recommend_tmbed_batch_size(
+    device: str,
+    sequence_lengths: list[int],
+    requested_batch_size: Optional[int],
+) -> int:
+    if requested_batch_size not in (None, ""):
+        try:
+            return max(1, int(requested_batch_size))
+        except (TypeError, ValueError):
+            pass
+
+    if not sequence_lengths:
+        return 1
+
+    max_length = max(sequence_lengths)
+    avg_length = sum(sequence_lengths) / max(1, len(sequence_lengths))
+    memory_gb = _system_memory_gb() or 0.0
+
+    if device == "cuda":
+        batch_size = 4
+        if max_length >= 3000 or avg_length >= 1800:
+            batch_size = 1
+        elif max_length >= 1800 or avg_length >= 1100:
+            batch_size = 2
+        elif memory_gb >= 48 and max_length < 1200 and avg_length < 800:
+            batch_size = 6
+        return max(1, batch_size)
+
+    if device == "mps":
+        batch_size = 2
+        if max_length >= 2200 or avg_length >= 1400:
+            batch_size = 1
+        elif memory_gb >= 48 and max_length < 1200 and avg_length < 700:
+            batch_size = 4
+        elif memory_gb >= 32 and max_length < 1600 and avg_length < 900:
+            batch_size = 3
+        return max(1, batch_size)
+
+    batch_size = 2
+    if max_length >= 2200 or avg_length >= 1400:
+        batch_size = 1
+    elif memory_gb >= 48 and max_length < 1200 and avg_length < 700:
+        batch_size = 4
+    elif memory_gb >= 24 and max_length < 1800 and avg_length < 900:
+        batch_size = 3
+    return max(1, batch_size)
+
+
+def _recommend_tmbed_threads(device: str, requested_threads: Optional[int]) -> Optional[int]:
+    if requested_threads not in (None, ""):
+        try:
+            return max(1, int(requested_threads))
+        except (TypeError, ValueError):
+            return None
+    if device != "cpu":
+        return None
+    return max(1, min(8, _physical_cpu_count()))
+
+
+def _plan_tmbed_runtime(
+    fasta_text: str,
+    device: str,
+    requested_batch_size: Optional[int],
+    requested_threads: Optional[int],
+) -> dict:
+    sequence_lengths = _fasta_sequence_lengths(fasta_text)
+    planned_batch_size = _recommend_tmbed_batch_size(
+        device=device,
+        sequence_lengths=sequence_lengths,
+        requested_batch_size=requested_batch_size,
+    )
+    planned_threads = _recommend_tmbed_threads(
+        device=device,
+        requested_threads=requested_threads,
+    )
+    return {
+        "sequence_count": int(len(sequence_lengths)),
+        "max_length": int(max(sequence_lengths)) if sequence_lengths else 0,
+        "avg_length": float(sum(sequence_lengths) / max(1, len(sequence_lengths)))
+        if sequence_lengths
+        else 0.0,
+        "batch_size": int(planned_batch_size),
+        "threads": planned_threads,
+        "memory_gb": _system_memory_gb(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+    }
 
 
 @lru_cache(maxsize=8)
@@ -776,7 +909,7 @@ class TMbedPredictor(BasePredictor):
         format_code: int = 4,
         use_gpu: bool = True,
         cpu_fallback: bool = True,
-        batch_size: int = 4,
+        batch_size: Optional[int] = None,
         threads: Optional[int] = None,
     ):
         super().__init__("TMbed")
@@ -796,6 +929,27 @@ class TMbedPredictor(BasePredictor):
         _ensure_tmbed_model_downloaded(model_dir, device)
 
         fasta_text = Path(fasta_path).read_text()
+        runtime_plan = _plan_tmbed_runtime(
+            fasta_text=fasta_text,
+            device=device,
+            requested_batch_size=self.batch_size,
+            requested_threads=self.threads,
+        )
+        logger.info(
+            "[TMbed plan] device=%s sequences=%s max_len=%s avg_len=%.1f batch_size=%s threads=%s memory_gb=%s machine=%s",
+            device,
+            runtime_plan["sequence_count"],
+            runtime_plan["max_length"],
+            runtime_plan["avg_length"],
+            runtime_plan["batch_size"],
+            runtime_plan["threads"],
+            (
+                f"{runtime_plan['memory_gb']:.1f}"
+                if runtime_plan["memory_gb"] is not None
+                else "unknown"
+            ),
+            runtime_plan["machine"],
+        )
         cache_dir = model_dir / "embedding-cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         embeddings_path = cache_dir / f"{_fasta_hash(fasta_text)}.h5"
@@ -813,8 +967,8 @@ class TMbedPredictor(BasePredictor):
                     fasta_path=fasta_path,
                     embeddings_path=embeddings_path,
                     device=device,
-                    batch_size=self.batch_size,
-                    threads=self.threads,
+                    batch_size=runtime_plan["batch_size"],
+                    threads=runtime_plan["threads"],
                     model_dir=model_dir,
                     cpu_fallback=self.cpu_fallback,
                 )
@@ -826,8 +980,8 @@ class TMbedPredictor(BasePredictor):
                 embeddings_path=embeddings_path,
                 out_format=self.format_code,
                 device=device,
-                batch_size=self.batch_size,
-                threads=self.threads,
+                batch_size=runtime_plan["batch_size"],
+                threads=runtime_plan["threads"],
                 model_dir=model_dir,
                 cpu_fallback=self.cpu_fallback,
             )
@@ -875,8 +1029,8 @@ class TMbedPredictor(BasePredictor):
                             fasta_path=single_fasta.name,
                             embeddings_path=single_embeddings_path,
                             device=device,
-                            batch_size=self.batch_size,
-                            threads=self.threads,
+                            batch_size=1,
+                            threads=runtime_plan["threads"],
                             model_dir=model_dir,
                             cpu_fallback=self.cpu_fallback,
                         )
@@ -888,8 +1042,8 @@ class TMbedPredictor(BasePredictor):
                         embeddings_path=single_embeddings_path,
                         out_format=self.format_code,
                         device=device,
-                        batch_size=self.batch_size,
-                        threads=self.threads,
+                        batch_size=1,
+                        threads=runtime_plan["threads"],
                         model_dir=model_dir,
                         cpu_fallback=self.cpu_fallback,
                     )

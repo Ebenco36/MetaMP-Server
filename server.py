@@ -2,6 +2,7 @@ import os
 from app import app
 import logging
 from logging.handlers import RotatingFileHandler
+from src.core.extensions import socketio
 
 port = os.getenv("FLASK_RUN_PORT")
 host = os.getenv("FLASK_RUN_HOST")
@@ -24,4 +25,4 @@ if not app.debug:
     app.logger.addHandler(file_handler)
     
 if __name__ == '__main__':
-    app.run(host=host, port=port)
+    socketio.run(app, host=host, port=port)

@@ -1,0 +1,88 @@
+services:
+  flask-app:
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
+    container_name: testmpvis_app
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.docker.deployment
+    environment:
+      FLASK_ENV: production
+    ports:
+      - "${FLASK_RUN_PORT:-5400}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:8081/api/v1/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    volumes:
+      - flask-app-data:/var/app/data
+    networks:
+      - app-networks
+
+  postgres:
+    container_name: testmetaMPDB
+    image: ${POSTGRES_IMAGE:-postgres:latest}
+    restart: unless-stopped
+    env_file:
+      - .env.docker.deployment
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mpvis_db}
+      POSTGRES_USER: ${DB_USER:-mpvis_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mpvis_user}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mpvis_user} -d ${DB_NAME:-mpvis_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-networks
+
+  frontend:
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:${FRONTEND_IMAGE_TAG:-latest}
+    container_name: testMPfrontend
+    restart: unless-stopped
+    depends_on:
+      flask-app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    environment:
+      - REACT_APP_BACKEND_URL=http://localhost:${FLASK_RUN_PORT:-5400}
+    networks:
+      - app-networks
+
+  redis:
+    image: redis
+    container_name: testmetaMPRedis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-networks
+
+networks:
+  app-networks:
+    driver: bridge
+
+volumes:
+  flask-app-data:
+  pgdata:
+  redis-data:

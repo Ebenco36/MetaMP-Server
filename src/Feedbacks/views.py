@@ -7,7 +7,11 @@ from src.Feedbacks.serializers import (
     FeedbackQuestionWithAnswersSchema,
     FeedbackSchema,
 )
-from src.Feedbacks.services import FeedbackQuestionService, UserFeedbackService
+from src.Feedbacks.services import (
+    FeedbackQuestionService,
+    StructureExpertNoteService,
+    UserFeedbackService,
+)
 from src.middlewares.auth_middleware import token_required
 from src.utils.response import ApiResponse
 
@@ -129,4 +133,46 @@ class UserFeedbackListResource(Resource):
         
         return ApiResponse.success(
             result, 'Feedback list fetched successfully', 200
+        )
+
+
+class StructureExpertNoteResource(Resource):
+    def __init__(self):
+        self.structure_expert_note_service = StructureExpertNoteService()
+
+    @token_required
+    def get(self, pdb_code):
+        limit = request.args.get("limit", default=StructureExpertNoteService.DEFAULT_LIST_LIMIT, type=int)
+        try:
+            payload = self.structure_expert_note_service.list_notes_for_record(
+                pdb_code,
+                limit=limit,
+            )
+        except LookupError as error:
+            return ApiResponse.error(str(error), 404)
+
+        return ApiResponse.success(
+            payload,
+            "Structure expert notes fetched successfully",
+            200,
+        )
+
+    @token_required
+    def post(self, pdb_code):
+        current_user = g.current_user
+        try:
+            payload = self.structure_expert_note_service.create_note_for_record(
+                pdb_code,
+                request.get_json() or {},
+                current_user,
+            )
+        except ValidationError as error:
+            return ApiResponse.error("Validation Error", 400, error.messages)
+        except LookupError as error:
+            return ApiResponse.error(str(error), 404)
+
+        return ApiResponse.success(
+            payload,
+            "Structure expert note submitted successfully",
+            201,
         )

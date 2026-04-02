@@ -1,15 +1,50 @@
 #!/opt/venv/bin/python
 import argparse
 import csv
+import fcntl
+import gzip
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlparse
+
+
+DEFAULT_TIMEOUT_SECONDS = int(os.getenv("METAMP_TMDET_TIMEOUT_SECONDS", "900"))
+DEFAULT_BOOTSTRAP_ATTEMPTS = int(os.getenv("METAMP_TMDET_BOOTSTRAP_ATTEMPTS", "12"))
+DEFAULT_READY_FILE_COUNT = int(os.getenv("METAMP_TMDET_READY_FILE_COUNT", "43000"))
+DEFAULT_ENABLE_PREWARM = str(os.getenv("METAMP_TMDET_ENABLE_PREWARM", "")).strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+DEFAULT_RUNTIME_LOCK_TIMEOUT_SECONDS = int(os.getenv("METAMP_TMDET_LOCK_TIMEOUT_SECONDS", "3600"))
+DEFAULT_WARMUP_PDB_CODE = str(os.getenv("METAMP_TMDET_WARMUP_PDB_CODE", "1A91")).strip().upper()
+DEFAULT_WARMUP_STRUCTURE_URL = str(
+    os.getenv("METAMP_TMDET_WARMUP_STRUCTURE_URL", f"https://files.rcsb.org/download/{DEFAULT_WARMUP_PDB_CODE}.cif.gz")
+).strip()
+DEFAULT_RUNTIME_ROOT = Path(
+    os.getenv(
+        "METAMP_TMDET_RUNTIME_ROOT",
+        "/var/app/data/tm_predictions/external/tmdet/runtime",
+    )
+)
+DEFAULT_DATA_ROOT = Path("/tmp/TmDet/data")
+CCD_BOOTSTRAP_MARKERS = (
+    "Chemical component directory is not set",
+    "Preparing to install Chemical Component Directory",
+    "Installing CCD files:",
+)
+OBSERVED_DEFAULT_CCD_DIR = DEFAULT_DATA_ROOT / "ccd"
+CCD_INSTALL_PROGRESS_EVERY = 5000
 
 
 def _self_test():
@@ -47,6 +82,393 @@ def _download_structure(url: str, destination: Path):
     with urllib.request.urlopen(url, timeout=60) as response, destination.open("wb") as handle:
         shutil.copyfileobj(response, handle)
     return destination
+
+
+def _download_file_atomic(url: str, destination: Path):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tmp_destination = destination.with_suffix(destination.suffix + ".tmp")
+    if tmp_destination.exists():
+        tmp_destination.unlink()
+    with urllib.request.urlopen(url, timeout=300) as response, tmp_destination.open("wb") as handle:
+        shutil.copyfileobj(response, handle)
+    tmp_destination.replace(destination)
+    return destination
+
+
+def _ensure_default_data_root(runtime_root: Path):
+    default_parent = DEFAULT_DATA_ROOT.parent
+    default_parent.mkdir(parents=True, exist_ok=True)
+    if DEFAULT_DATA_ROOT.is_symlink():
+        current_target = DEFAULT_DATA_ROOT.resolve()
+        if current_target == runtime_root:
+            return
+        DEFAULT_DATA_ROOT.unlink()
+    elif DEFAULT_DATA_ROOT.exists():
+        runtime_has_content = any(runtime_root.iterdir())
+        if not runtime_has_content:
+            for child in DEFAULT_DATA_ROOT.iterdir():
+                destination = runtime_root / child.name
+                if destination.exists():
+                    continue
+                shutil.move(str(child), str(destination))
+        shutil.rmtree(DEFAULT_DATA_ROOT, ignore_errors=True)
+    DEFAULT_DATA_ROOT.symlink_to(runtime_root, target_is_directory=True)
+
+
+def _prepare_runtime_paths():
+    runtime_root = DEFAULT_RUNTIME_ROOT.expanduser().resolve()
+    ccd_dir = runtime_root / "ccd"
+    scratch_dir = runtime_root / "scratch"
+    cc_file = runtime_root / "components.cif.gz"
+    ready_marker = runtime_root / ".ccd_ready"
+    lock_file = runtime_root / ".runtime.lock"
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    ccd_dir.mkdir(parents=True, exist_ok=True)
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_default_data_root(runtime_root)
+    env_file = runtime_root / "tmdet.env"
+    default_env_file = runtime_root / ".env"
+    env_contents = (
+        f"PDBTM_DATA_ROOT={runtime_root}\n"
+        f"chemCompDirectory={ccd_dir}\n"
+        f"TMDET_CC_DIR={ccd_dir}\n"
+        f"TMDET_CC_FILE={cc_file}\n"
+        "TMDET_CC_URL=https://files.wwpdb.org/pub/pdb/data/monomers/components.cif.gz\n"
+    )
+    if not env_file.exists() or env_file.read_text(encoding="utf-8") != env_contents:
+        env_file.write_text(env_contents, encoding="utf-8")
+    if not default_env_file.exists() or default_env_file.read_text(encoding="utf-8") != env_contents:
+        default_env_file.write_text(env_contents, encoding="utf-8")
+    return {
+        "runtime_root": runtime_root,
+        "ccd_dir": ccd_dir,
+        "cc_file": cc_file,
+        "scratch_dir": scratch_dir,
+        "env_file": env_file,
+        "default_env_file": default_env_file,
+        "ready_marker": ready_marker,
+        "lock_file": lock_file,
+    }
+
+
+def _is_valid_gzip(path: Path):
+    if not path.exists() or path.stat().st_size <= 0:
+        return False
+    try:
+        with gzip.open(path, "rb") as handle:
+            while handle.read(1024 * 1024):
+                pass
+        return True
+    except Exception:
+        return False
+
+
+def _repair_incomplete_ccd_archive(runtime_paths):
+    archive_path = Path(runtime_paths["cc_file"])
+    if not archive_path.exists():
+        return
+    if _is_valid_gzip(archive_path):
+        return
+    print(
+        f"TMDET detected incomplete CCD archive at {archive_path}; removing it so TMDET can redownload cleanly.",
+        file=sys.stderr,
+        flush=True,
+    )
+    archive_path.unlink(missing_ok=True)
+
+
+def _ensure_ccd_archive(runtime_paths):
+    archive_path = Path(runtime_paths["cc_file"])
+    if _is_valid_gzip(archive_path):
+        return archive_path
+    ccd_url = str(os.getenv("TMDET_CC_URL") or "https://files.wwpdb.org/pub/pdb/data/monomers/components.cif.gz").strip()
+    print(
+        f"TMDET downloading CCD archive from {ccd_url}.",
+        file=sys.stderr,
+        flush=True,
+    )
+    _download_file_atomic(ccd_url, archive_path)
+    if not _is_valid_gzip(archive_path):
+        raise RuntimeError(f"Downloaded CCD archive is invalid: {archive_path}")
+    print(
+        f"TMDET CCD archive ready at {archive_path}.",
+        file=sys.stderr,
+        flush=True,
+    )
+    return archive_path
+
+
+def _ccd_target_path(ccd_dir: Path, component_id: str):
+    normalized = str(component_id or "").strip().upper()
+    if not normalized:
+        normalized = "UNKNOWN"
+    first = normalized[0]
+    second = normalized[1] if len(normalized) > 1 else "_"
+    return ccd_dir / first / second / f"{normalized}.cif"
+
+
+def _install_ccd_from_archive(runtime_paths):
+    ccd_dir = Path(runtime_paths["ccd_dir"])
+    current_count = _count_runtime_ccd_files(runtime_paths)
+    if current_count >= DEFAULT_READY_FILE_COUNT:
+        _mark_runtime_ready(runtime_paths)
+        print(
+            f"TMDET CCD directory already populated ({current_count} file(s)); skipping install.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    archive_path = _ensure_ccd_archive(runtime_paths)
+    print(
+        f"TMDET installing CCD files into {ccd_dir} from {archive_path}.",
+        file=sys.stderr,
+        flush=True,
+    )
+    written = 0
+    current_component_id = None
+    current_handle = None
+    try:
+        with gzip.open(archive_path, "rt", encoding="utf-8", errors="ignore") as source:
+            for line in source:
+                if line.startswith("data_"):
+                    if current_handle is not None:
+                        current_handle.close()
+                        current_handle = None
+                    current_component_id = line[5:].strip().upper()
+                    target_path = _ccd_target_path(ccd_dir, current_component_id)
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    current_handle = target_path.open("w", encoding="utf-8")
+                    written += 1
+                    if written % CCD_INSTALL_PROGRESS_EVERY == 0:
+                        print(
+                            f"TMDET CCD install progress: {written} component file(s) written.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                if current_handle is not None:
+                    current_handle.write(line)
+        if current_handle is not None:
+            current_handle.close()
+            current_handle = None
+    finally:
+        if current_handle is not None:
+            current_handle.close()
+    final_count = _count_runtime_ccd_files(runtime_paths)
+    if final_count <= 0:
+        raise RuntimeError("TMDET CCD install produced no component files.")
+    _mark_runtime_ready(runtime_paths)
+    print(
+        f"TMDET CCD install completed ({final_count} file(s) available).",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+@contextmanager
+def _exclusive_runtime_lock(runtime_paths):
+    lock_path = Path(runtime_paths["lock_file"])
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    start_time = time.time()
+    with lock_path.open("w") as handle:
+        announced_wait = False
+        while True:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if not announced_wait:
+                    print(
+                        "TMDET runtime is busy with another TMDET process; waiting for exclusive access.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    announced_wait = True
+                if time.time() - start_time >= max(DEFAULT_RUNTIME_LOCK_TIMEOUT_SECONDS, 1):
+                    raise TimeoutError(
+                        "Timed out waiting for exclusive TMDET runtime access."
+                    )
+                time.sleep(1.0)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _build_subprocess_env(runtime_paths):
+    return {
+        **os.environ,
+        "LD_LIBRARY_PATH": f"/usr/local/lib:{os.environ.get('LD_LIBRARY_PATH', '')}".rstrip(":"),
+        "TMDET_ENV_FILE": str(runtime_paths["env_file"]),
+        "PDBTM_DATA_ROOT": str(runtime_paths["runtime_root"]),
+        "TMDET_CC_DIR": str(runtime_paths["ccd_dir"]),
+        "TMDET_CC_FILE": str(runtime_paths["cc_file"]),
+        "TMDET_CC_URL": "https://files.wwpdb.org/pub/pdb/data/monomers/components.cif.gz",
+    }
+
+
+def _run_tmdet(structure_path: Path, transformed_path: Path, xml_path: Path, runtime_paths, timeout_seconds: int):
+    return subprocess.run(
+        [
+            "tmdet",
+            "-pi",
+            str(structure_path),
+            "-po",
+            str(transformed_path),
+            "-x",
+            str(xml_path),
+            "-e",
+            str(runtime_paths["env_file"]),
+        ],
+        shell=False,
+        capture_output=True,
+        text=True,
+        timeout=max(int(timeout_seconds), 1),
+        cwd=str(runtime_paths["runtime_root"]),
+        env=_build_subprocess_env(runtime_paths),
+    )
+
+
+def _combined_process_output(completed):
+    return "\n".join(part for part in [completed.stderr or "", completed.stdout or ""] if part).strip()
+
+
+def _should_retry_after_ccd_bootstrap(message: str):
+    normalized = str(message or "")
+    return any(marker in normalized for marker in CCD_BOOTSTRAP_MARKERS)
+
+
+def _count_default_ccd_files():
+    try:
+        return int(sum(1 for _ in OBSERVED_DEFAULT_CCD_DIR.rglob("*.cif")))
+    except Exception:
+        return 0
+
+
+def _count_runtime_ccd_files(runtime_paths):
+    try:
+        return int(sum(1 for _ in Path(runtime_paths["ccd_dir"]).rglob("*.cif")))
+    except Exception:
+        return 0
+
+
+def _runtime_is_warm(runtime_paths):
+    ready_marker = Path(runtime_paths["ready_marker"])
+    if ready_marker.exists():
+        return True
+    return _count_runtime_ccd_files(runtime_paths) >= DEFAULT_READY_FILE_COUNT
+
+
+def _mark_runtime_ready(runtime_paths):
+    ready_marker = Path(runtime_paths["ready_marker"])
+    ready_marker.write_text(
+        json.dumps(
+            {
+                "ccd_file_count": _count_runtime_ccd_files(runtime_paths),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _run_tmdet_with_bootstrap_retries(
+    *,
+    pdb_code,
+    structure_path,
+    transformed_path,
+    xml_path,
+    runtime_paths,
+    timeout_seconds,
+    progress_label=None,
+):
+    completed = _run_tmdet(
+        structure_path,
+        transformed_path,
+        xml_path,
+        runtime_paths,
+        timeout_seconds,
+    )
+    combined_output = _combined_process_output(completed)
+    bootstrap_attempt = 0
+    while (
+        (completed.returncode != 0 or not xml_path.exists())
+        and _should_retry_after_ccd_bootstrap(combined_output)
+        and bootstrap_attempt < max(DEFAULT_BOOTSTRAP_ATTEMPTS - 1, 0)
+    ):
+        bootstrap_attempt += 1
+        label = progress_label or pdb_code
+        print(
+            "TMDET bootstrap detected for "
+            + label
+            + f"; retry {bootstrap_attempt}/{max(DEFAULT_BOOTSTRAP_ATTEMPTS - 1, 0)} "
+            + f"after CCD warmup (observed_default_ccd_files={_count_default_ccd_files()}).",
+            file=sys.stderr,
+            flush=True,
+        )
+        completed = _run_tmdet(
+            structure_path,
+            transformed_path,
+            xml_path,
+            runtime_paths,
+            max(int(timeout_seconds), 1800),
+        )
+        combined_output = _combined_process_output(completed)
+    if completed.returncode == 0 and xml_path.exists() and _runtime_is_warm(runtime_paths):
+        _mark_runtime_ready(runtime_paths)
+    return completed, combined_output
+
+
+def _warm_runtime(runtime_paths, timeout_seconds):
+    if _runtime_is_warm(runtime_paths):
+        print(
+            f"TMDET CCD cache already warm ({_count_runtime_ccd_files(runtime_paths)} file(s)); skipping warmup.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return
+    print(
+        "TMDET CCD cache is cold; warming runtime with "
+        + DEFAULT_WARMUP_PDB_CODE
+        + ".",
+        file=sys.stderr,
+        flush=True,
+    )
+    with tempfile.TemporaryDirectory(dir=str(runtime_paths["scratch_dir"])) as tmp_dir:
+        work_dir = Path(tmp_dir)
+        structure_path = work_dir / f"{DEFAULT_WARMUP_PDB_CODE}.cif.gz"
+        transformed_path = work_dir / f"{DEFAULT_WARMUP_PDB_CODE}.transformed.cif.gz"
+        xml_path = work_dir / f"{DEFAULT_WARMUP_PDB_CODE}.xml"
+        _download_structure(DEFAULT_WARMUP_STRUCTURE_URL, structure_path)
+        completed, combined_output = _run_tmdet_with_bootstrap_retries(
+            pdb_code=DEFAULT_WARMUP_PDB_CODE,
+            structure_path=structure_path,
+            transformed_path=transformed_path,
+            xml_path=xml_path,
+            runtime_paths=runtime_paths,
+            timeout_seconds=timeout_seconds,
+            progress_label=f"warmup:{DEFAULT_WARMUP_PDB_CODE}",
+        )
+        if completed.returncode != 0 or not xml_path.exists():
+            raise RuntimeError(
+                "TMDET warmup failed before chunk processing could begin: "
+                + (combined_output or "missing XML output")
+            )
+        _mark_runtime_ready(runtime_paths)
+        print(
+            f"TMDET CCD warmup completed ({_count_runtime_ccd_files(runtime_paths)} file(s) available).",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def _log_cold_cache_notice(runtime_paths):
+    if _runtime_is_warm(runtime_paths):
+        return
+    print(
+        "TMDET CCD cache is cold; TMDET will follow its standard documented auto-install flow on the requested structure(s).",
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _parse_tmdet_xml(xml_path: Path):
@@ -194,6 +616,12 @@ def main():
     parser.add_argument("--reference")
     parser.add_argument("--structure-manifest")
     parser.add_argument("--failures")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=DEFAULT_TIMEOUT_SECONDS,
+        help="Per-structure TMDET timeout in seconds.",
+    )
     args = parser.parse_args()
 
     if args.self_test:
@@ -207,64 +635,70 @@ def main():
     output_rows = []
     failure_rows = []
     total_rows = len(manifest_rows)
-    print(f"TMDET starting on {total_rows} structure(s).", file=sys.stderr, flush=True)
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        work_dir = Path(tmp_dir)
-        env_file = work_dir / "tmdet.env"
-        env_file.write_text("", encoding="utf-8")
-        for index, row in enumerate(manifest_rows, start=1):
-            pdb_code = row["pdb_code"]
-            structure_path = work_dir / f"{pdb_code}.cif.gz"
-            transformed_path = work_dir / f"{pdb_code}.transformed.cif.gz"
-            xml_path = work_dir / f"{pdb_code}.xml"
-            if index == 1 or index % 25 == 0 or index == total_rows:
-                print(
-                    f"TMDET progress {index}/{total_rows}: {pdb_code}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-            try:
-                _download_structure(row["structure_url"], structure_path)
-                completed = subprocess.run(
-                    [
-                        "tmdet",
-                        "-pi",
-                        str(structure_path),
-                        "-po",
-                        str(transformed_path),
-                        "-x",
-                        str(xml_path),
-                        "-e",
-                        str(env_file),
-                    ],
-                    shell=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    env={**os.environ, "LD_LIBRARY_PATH": f"/usr/local/lib:{os.environ.get('LD_LIBRARY_PATH', '')}".rstrip(":")},
-                )
-                if completed.returncode != 0 or not xml_path.exists():
-                    raise RuntimeError(str(completed.stderr or completed.stdout or "missing XML output").strip())
-                regions = _parse_tmdet_xml(xml_path)
-                output_rows.append(
-                    {
-                        "pdb_code": pdb_code,
-                        "tm_count": len(regions),
-                        "tm_regions": json.dumps(regions),
-                    }
-                )
-            except Exception as exc:
-                print(
-                    f"TMDET failure {pdb_code}: {str(exc).strip() or 'TMDET execution failed'}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                failure_rows.append(
-                    {
-                        "pdb_code": pdb_code,
-                        "error_message": str(exc).strip() or "TMDET execution failed",
-                    }
-                )
+    runtime_paths = _prepare_runtime_paths()
+    print(
+        f"TMDET starting on {total_rows} structure(s) with timeout={int(args.timeout_seconds)}s.",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(
+        f"TMDET runtime configured with chemCompDirectory={runtime_paths['ccd_dir']}.",
+        file=sys.stderr,
+        flush=True,
+    )
+    with _exclusive_runtime_lock(runtime_paths):
+        _repair_incomplete_ccd_archive(runtime_paths)
+        _ensure_ccd_archive(runtime_paths)
+        _install_ccd_from_archive(runtime_paths)
+        if DEFAULT_ENABLE_PREWARM:
+            _warm_runtime(runtime_paths, args.timeout_seconds)
+        else:
+            _log_cold_cache_notice(runtime_paths)
+        with tempfile.TemporaryDirectory(dir=str(runtime_paths["scratch_dir"])) as tmp_dir:
+            work_dir = Path(tmp_dir)
+            for index, row in enumerate(manifest_rows, start=1):
+                pdb_code = row["pdb_code"]
+                structure_path = work_dir / f"{pdb_code}.cif.gz"
+                transformed_path = work_dir / f"{pdb_code}.transformed.cif.gz"
+                xml_path = work_dir / f"{pdb_code}.xml"
+                if index == 1 or index % 25 == 0 or index == total_rows:
+                    print(
+                        f"TMDET progress {index}/{total_rows}: {pdb_code}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                try:
+                    _download_structure(row["structure_url"], structure_path)
+                    completed, combined_output = _run_tmdet_with_bootstrap_retries(
+                        pdb_code=pdb_code,
+                        structure_path=structure_path,
+                        transformed_path=transformed_path,
+                        xml_path=xml_path,
+                        runtime_paths=runtime_paths,
+                        timeout_seconds=args.timeout_seconds,
+                    )
+                    if completed.returncode != 0 or not xml_path.exists():
+                        raise RuntimeError(combined_output or "missing XML output")
+                    regions = _parse_tmdet_xml(xml_path)
+                    output_rows.append(
+                        {
+                            "pdb_code": pdb_code,
+                            "tm_count": len(regions),
+                            "tm_regions": json.dumps(regions),
+                        }
+                    )
+                except Exception as exc:
+                    print(
+                        f"TMDET failure {pdb_code}: {str(exc).strip() or 'TMDET execution failed'}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    failure_rows.append(
+                        {
+                            "pdb_code": pdb_code,
+                            "error_message": str(exc).strip() or "TMDET execution failed",
+                        }
+                    )
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

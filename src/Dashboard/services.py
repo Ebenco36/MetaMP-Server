@@ -27,7 +27,8 @@ from sqlalchemy.orm import aliased
 from sqlalchemy import select, func, Table
 from sqlalchemy.exc import SQLAlchemyError
 from src.MP.model import MembraneProteinData
-from src.Feedbacks.models import DiscrepancyReview
+from src.Feedbacks.models import DiscrepancyReview, StructureExpertNote
+from src.Feedbacks.services import StructureExpertNoteService
 from src.Dashboard.scientific_assessment import build_scientific_assessment
 from src.Dashboard.group_standardization import (
     collapse_group_label_for_disagreement,
@@ -627,12 +628,40 @@ class DashboardAnnotationDatasetService:
         record["annotation_lineage"] = cls._build_annotation_lineage(record)
         record["record_resolution"] = cls._build_record_resolution(record)
         record["discrepancy_review"] = DiscrepancyReviewService.get_review_payload_for_record(record)
-        record["benchmark_decision"] = (
-            DiscrepancyReviewService._build_candidate_payload(record).get("benchmark_decision")
+        candidate_payload = DiscrepancyReviewService._build_candidate_payload(record)
+        note_summary = candidate_payload.get("expert_note_summary") or {
+            "note_count": 0,
+            "open_note_count": 0,
+            "latest_note_at": None,
+            "latest_note_excerpt": None,
+            "recent_notes": [],
+        }
+        record["expert_note_summary"] = note_summary
+        record["expert_note_count"] = note_summary.get("note_count", 0)
+        record["open_expert_note_count"] = note_summary.get("open_note_count", 0)
+        record["benchmark_decision"] = candidate_payload.get("benchmark_decision")
+        discrepancy_summary = candidate_payload.get("discrepancy_summary") or {}
+        record["has_group_disagreement"] = bool(discrepancy_summary.get("has_group_disagreement"))
+        record["has_tm_disagreement"] = bool(discrepancy_summary.get("has_tm_disagreement"))
+        record["has_tm_boundary_disagreement"] = bool(discrepancy_summary.get("has_tm_boundary_disagreement"))
+        record["has_any_disagreement"] = bool(discrepancy_summary.get("has_any_disagreement"))
+        record["group_disagreement"] = record["has_group_disagreement"]
+        record["tm_disagreement"] = record["has_tm_disagreement"]
+        record["tm_boundary_disagreement"] = record["has_tm_boundary_disagreement"]
+        record["benchmark_recommended"] = (
+            (record.get("scientific_assessment") or {}).get("recommended_for_sequence_topology_benchmark")
         )
+        scientific_flags = ((record.get("scientific_assessment") or {}).get("flags") or {})
+        record["context_dependent_topology"] = scientific_flags.get("context_dependent_topology")
+        record["non_canonical_membrane_case"] = scientific_flags.get("non_canonical_membrane_case")
+        record["multichain_context"] = scientific_flags.get("multichain_context")
+        record["benchmark_status"] = (record.get("benchmark_decision") or {}).get("benchmark_status")
+        record["benchmark_reason"] = (record.get("benchmark_decision") or {}).get("benchmark_reason")
         record["ui_sections"] = cls._build_ui_sections(record)
         record["field_glossary_keys"] = DashboardFieldMetadataService.record_field_glossary_keys()
-        payload = cls._to_json_safe(record)
+        payload = DiscrepancyReviewService._inject_frontend_compatibility_aliases(
+            cls._to_json_safe(record)
+        )
         cls._remember_record_payload(normalized_code, payload)
         return payload
 
@@ -3049,7 +3078,13 @@ class DashboardAnnotationDatasetService:
 
 class DiscrepancyReviewService:
     VALID_STATUSES = {"open", "reviewed", "accepted", "rejected", "uncertain"}
+    CANDIDATE_PAYLOAD_SCHEMA_VERSION = 4
     TM_BOUNDARY_DISAGREEMENT_TOLERANCE = 5
+    TM_BOUNDARY_REFERENCE_SOURCES = {"opm"}
+    TM_BOUNDARY_PREDICTOR_SOURCES = {"tmbed", "deeptmhmm", "tmhmm", "phobius", "topcons", "cctop", "tmdet"}
+    TM_BOUNDARY_COMPARABLE_SOURCES = (
+        TM_BOUNDARY_REFERENCE_SOURCES | TM_BOUNDARY_PREDICTOR_SOURCES
+    )
     _REVIEW_SENTINEL = object()
     DEFAULT_PAGE_SIZE = 25
     MAX_PAGE_SIZE = 200
@@ -3088,29 +3123,137 @@ class DiscrepancyReviewService:
         return signature
 
     @classmethod
-    def _has_tm_boundary_disagreement(cls, tm_regions):
-        comparable_signatures = []
-        for regions in (tm_regions or {}).values():
+    def _iter_comparable_tm_boundary_signatures(cls, tm_regions):
+        comparable = []
+        for source_name, regions in (tm_regions or {}).items():
+            normalized_source = str(source_name or "").strip().lower()
+            if normalized_source and normalized_source not in cls.TM_BOUNDARY_COMPARABLE_SOURCES:
+                continue
             signature = cls._build_tm_boundary_signature(regions)
             if signature:
-                comparable_signatures.append(signature)
+                comparable.append((normalized_source, str(source_name or ""), signature))
+        return comparable
 
+    @classmethod
+    def _signature_boundary_shift_exceeds_tolerance(cls, left_signature, right_signature):
+        if len(left_signature) != len(right_signature):
+            return False
+        for (left_start, left_end), (right_start, right_end) in zip(left_signature, right_signature):
+            if (
+                abs(left_start - right_start) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
+                or abs(left_end - right_end) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _has_tm_boundary_disagreement(cls, tm_regions):
+        comparable_signatures = cls._iter_comparable_tm_boundary_signatures(tm_regions)
         if len(comparable_signatures) < 2:
             return False
 
-        signature_lengths = {len(signature) for signature in comparable_signatures}
+        comparable_source_names = {normalized_source for normalized_source, _, _ in comparable_signatures}
+        if not comparable_source_names.intersection(cls.TM_BOUNDARY_REFERENCE_SOURCES):
+            return False
+        if not comparable_source_names.intersection(cls.TM_BOUNDARY_PREDICTOR_SOURCES):
+            return False
+
+        signature_lengths = {len(signature) for _, _, signature in comparable_signatures}
         if len(signature_lengths) > 1:
             return False
 
-        reference = comparable_signatures[0]
-        for candidate in comparable_signatures[1:]:
-            for (ref_start, ref_end), (cand_start, cand_end) in zip(reference, candidate):
-                if (
-                    abs(ref_start - cand_start) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
-                    or abs(ref_end - cand_end) > cls.TM_BOUNDARY_DISAGREEMENT_TOLERANCE
+        for index, (_, _, reference_signature) in enumerate(comparable_signatures):
+            for _, _, candidate_signature in comparable_signatures[index + 1:]:
+                if cls._signature_boundary_shift_exceeds_tolerance(
+                    reference_signature,
+                    candidate_signature,
                 ):
                     return True
         return False
+
+    @classmethod
+    def _inject_frontend_compatibility_aliases(cls, payload):
+        prepared = dict(payload or {})
+        discrepancy_summary = prepared.get("discrepancy_summary") or {}
+        scientific_assessment = (
+            prepared.get("scientific_assessment")
+            or discrepancy_summary.get("scientific_assessment")
+            or ((prepared.get("record") or {}).get("scientific_assessment"))
+            or {}
+        )
+        scientific_flags = scientific_assessment.get("flags") or {}
+        benchmark_decision = prepared.get("benchmark_decision") or {}
+
+        has_group_disagreement = prepared.get(
+            "has_group_disagreement",
+            discrepancy_summary.get("has_group_disagreement"),
+        )
+        has_tm_disagreement = prepared.get(
+            "has_tm_disagreement",
+            discrepancy_summary.get("has_tm_disagreement"),
+        )
+        has_tm_boundary_disagreement = prepared.get(
+            "has_tm_boundary_disagreement",
+            discrepancy_summary.get("has_tm_boundary_disagreement"),
+        )
+
+        if has_group_disagreement is not None:
+            prepared.setdefault("has_group_disagreement", has_group_disagreement)
+            prepared.setdefault("group_disagreement", has_group_disagreement)
+        if has_tm_disagreement is not None:
+            prepared.setdefault("has_tm_disagreement", has_tm_disagreement)
+            prepared.setdefault("tm_disagreement", has_tm_disagreement)
+        if has_tm_boundary_disagreement is not None:
+            prepared.setdefault("has_tm_boundary_disagreement", has_tm_boundary_disagreement)
+            prepared.setdefault("tm_boundary_disagreement", has_tm_boundary_disagreement)
+
+        prepared.setdefault(
+            "benchmark_recommended",
+            scientific_assessment.get("recommended_for_sequence_topology_benchmark"),
+        )
+        prepared.setdefault(
+            "scientific_confidence",
+            scientific_assessment.get("confidence"),
+        )
+        prepared.setdefault(
+            "review_recommended",
+            scientific_assessment.get("review_recommended"),
+        )
+        prepared.setdefault(
+            "context_dependent_topology",
+            scientific_flags.get("context_dependent_topology"),
+        )
+        prepared.setdefault(
+            "non_canonical_membrane_case",
+            scientific_flags.get("non_canonical_membrane_case"),
+        )
+        prepared.setdefault(
+            "multichain_context",
+            scientific_flags.get("multichain_context"),
+        )
+        prepared.setdefault(
+            "benchmark_status",
+            benchmark_decision.get("benchmark_status"),
+        )
+        prepared.setdefault(
+            "benchmark_reason",
+            benchmark_decision.get("benchmark_reason"),
+        )
+        note_summary = prepared.get("expert_note_summary") or {}
+        prepared.setdefault("expert_note_summary", note_summary)
+        prepared.setdefault("expert_note_count", note_summary.get("note_count", 0))
+        prepared.setdefault("open_expert_note_count", note_summary.get("open_note_count", 0))
+        prepared.setdefault("latest_expert_note_at", note_summary.get("latest_note_at"))
+        prepared.setdefault("latest_expert_note_excerpt", note_summary.get("latest_note_excerpt"))
+        record = prepared.get("record")
+        if isinstance(record, dict) and "scientific_assessment" not in record and scientific_assessment:
+            record_with_assessment = dict(record)
+            record_with_assessment["scientific_assessment"] = scientific_assessment
+            if note_summary and "expert_note_summary" not in record_with_assessment:
+                record_with_assessment["expert_note_summary"] = note_summary
+                record_with_assessment["expert_note_count"] = note_summary.get("note_count", 0)
+            prepared["record"] = record_with_assessment
+        return prepared
 
     @classmethod
     def list_candidates(
@@ -3278,6 +3421,7 @@ class DiscrepancyReviewService:
         enriched_records = DashboardAnnotationDatasetService._attach_normalized_tm_prediction_payloads(
             raw_records
         )
+        note_index = StructureExpertNoteService.build_note_index_for_records(enriched_records)
         candidates = []
         for cleaned_record in enriched_records:
             candidate = cls._build_candidate_payload(
@@ -3285,6 +3429,10 @@ class DiscrepancyReviewService:
                 review=cls._find_review_for_record(
                     cleaned_record,
                     review_index=review_index,
+                ),
+                note_summary=note_index.get(
+                    cls._review_key(cleaned_record)
+                    or cls._normalize_text(cleaned_record.get("canonical_pdb_code"))
                 ),
                 include_ui_sections=False,
             )
@@ -3308,8 +3456,10 @@ class DiscrepancyReviewService:
     def _candidate_cache_version(cls):
         dataset_path = DashboardConfigurationService.get_annotation_dataset_path()
         return (
+            cls.CANDIDATE_PAYLOAD_SCHEMA_VERSION,
             DashboardAnnotationDatasetService._enriched_cache_key(dataset_path),
             cls._review_state_key(),
+            cls._expert_note_state_key(),
         )
 
     @staticmethod
@@ -3403,6 +3553,23 @@ class DiscrepancyReviewService:
         return (
             int(review_count or 0),
             latest_reviewed_at.isoformat() if latest_reviewed_at else None,
+        )
+
+    @staticmethod
+    def _expert_note_state_key():
+        try:
+            StructureExpertNoteService._ensure_table_exists()
+            note_count, latest_updated_at = db.session.query(
+                func.count(StructureExpertNote.id),
+                func.max(StructureExpertNote.updated_at),
+            ).one()
+        except Exception as exc:
+            logger.warning("Unable to build structure expert note cache fingerprint: %s", exc)
+            return ("unavailable",)
+
+        return (
+            int(note_count or 0),
+            latest_updated_at.isoformat() if latest_updated_at else None,
         )
 
     @classmethod
@@ -3574,7 +3741,13 @@ class DiscrepancyReviewService:
         return cls._serialize_review(review)
 
     @classmethod
-    def _build_candidate_payload(cls, record, review=_REVIEW_SENTINEL, include_ui_sections=False):
+    def _build_candidate_payload(
+        cls,
+        record,
+        review=_REVIEW_SENTINEL,
+        note_summary=None,
+        include_ui_sections=False,
+    ):
         normalized_record = DashboardAnnotationDatasetService._normalize_record_metadata(
             dict(record)
         )
@@ -3601,14 +3774,32 @@ class DiscrepancyReviewService:
             "discrepancy_summary": cls._build_discrepancy_summary(normalized_record),
             "review": cls.get_review_payload_for_record(normalized_record, review=review),
             "record": normalized_record,
+            "expert_note_summary": note_summary
+            or StructureExpertNoteService.build_note_index_for_records([normalized_record]).get(
+                cls._review_key(normalized_record)
+                or cls._normalize_text(normalized_record.get("canonical_pdb_code")),
+                {
+                    "note_count": 0,
+                    "open_note_count": 0,
+                    "latest_note_at": None,
+                    "latest_note_excerpt": None,
+                    "recent_notes": [],
+                },
+            ),
         }
+        candidate["record"]["expert_note_summary"] = candidate["expert_note_summary"]
+        candidate["record"]["expert_note_count"] = candidate["expert_note_summary"].get("note_count", 0)
+        candidate["record"]["scientific_assessment"] = (
+            candidate["discrepancy_summary"].get("scientific_assessment")
+            or candidate["record"].get("scientific_assessment")
+        )
         if include_ui_sections:
             candidate["ui_sections"] = DashboardAnnotationDatasetService._build_ui_sections(normalized_record)
             normalized_record["ui_sections"] = candidate["ui_sections"]
         candidate["benchmark_decision"] = cls._build_benchmark_decision(candidate)
         if include_ui_sections:
             candidate["source_freshness"] = candidate["ui_sections"].get("live_status") or {}
-        return candidate
+        return cls._inject_frontend_compatibility_aliases(candidate)
 
     @staticmethod
     def _resolve_record_year(record):
@@ -4439,13 +4630,18 @@ class DiscrepancyBenchmarkExportService:
             "tmdet_tm_regions": json.dumps(tm_regions.get("TMDET") or []),
             "tmhmm_tm_regions": json.dumps(tm_regions.get("TMHMM") or []),
             "has_group_disagreement": bool(discrepancy.get("has_group_disagreement")),
+            "group_disagreement": bool(discrepancy.get("has_group_disagreement")),
             "has_tm_disagreement": bool(discrepancy.get("has_tm_disagreement")),
+            "tm_disagreement": bool(discrepancy.get("has_tm_disagreement")),
             "has_tm_boundary_disagreement": bool(discrepancy.get("has_tm_boundary_disagreement")),
+            "tm_boundary_disagreement": bool(discrepancy.get("has_tm_boundary_disagreement")),
             "has_any_disagreement": bool(discrepancy.get("has_any_disagreement")),
             "expert_vs_prediction_agreement": discrepancy.get("expert_vs_prediction_agreement"),
             "benchmark_recommended": scientific_assessment.get(
                 "recommended_for_sequence_topology_benchmark"
             ),
+            "scientific_confidence": scientific_assessment.get("confidence"),
+            "review_recommended": scientific_assessment.get("review_recommended"),
             "context_dependent_topology": scientific_flags.get("context_dependent_topology"),
             "non_canonical_membrane_case": scientific_flags.get("non_canonical_membrane_case"),
             "multichain_context": scientific_flags.get("multichain_context"),
@@ -4627,6 +4823,17 @@ class DashboardFieldMetadataService:
                 "description": "Human-readable explanation derived from benchmark inclusion rules, exclusion rules, and scientific assessment notes.",
                 "source": "benchmark_decision",
                 "interpretation": "Use together with Benchmark Decision and Benchmark Recommended to understand whether a record is benchmark-eligible, cautionary, or scientifically atypical.",
+            },
+            "scientific_confidence": {
+                "label": "Scientific Confidence",
+                "description": "Heuristic confidence tier attached to the scientific-assessment rule set for this record.",
+                "source": "scientific_assessment.confidence",
+                "allowed_values": {
+                    "high": "At least one matched override or keyword rule carried high-confidence evidence.",
+                    "medium": "No high-confidence rule matched, but at least one medium-confidence rule matched.",
+                    "low": "Only low-confidence heuristic rules matched.",
+                    "none": "No scientific-assessment rule contributed a confidence signal.",
+                },
             },
             "Group (Expert)": {
                 "label": "Group (Expert)",
@@ -5656,7 +5863,7 @@ class DashboardRecordPresenter:
     @classmethod
     def build_paginated_result(cls, paginated_items, total_item_count, membrane_protein, opm, uniprot):
         total_columns = cls._count_visible_columns(membrane_protein, opm, uniprot)
-        items_list = [
+        base_items = [
             OrderedDict(
                 [
                     ("id", mp_data.id),
@@ -5676,6 +5883,19 @@ class DashboardRecordPresenter:
             )
             for mp_data, op_data, up_data in paginated_items.items
         ]
+        note_index = StructureExpertNoteService.build_note_index_for_records(base_items)
+        items_list = []
+        for item in base_items:
+            note_summary = note_index.get(
+                str(item.get("pdb_code") or "").strip().upper(),
+                StructureExpertNoteService._default_summary(),
+            )
+            item["expert_note_summary"] = note_summary
+            item["expert_note_count"] = note_summary.get("note_count", 0)
+            item["open_expert_note_count"] = note_summary.get("open_note_count", 0)
+            item["latest_expert_note_at"] = note_summary.get("latest_note_at")
+            item["latest_expert_note_excerpt"] = note_summary.get("latest_note_excerpt")
+            items_list.append(item)
         return {
             "items": items_list,
             "page": paginated_items.page,
@@ -5714,12 +5934,80 @@ def _normalize_filter_text(value):
     return normalized
 
 
+def _normalize_dashboard_filter_value(value):
+    if isinstance(value, (list, tuple, set)):
+        normalized_values = [
+            normalized
+            for item in value
+            for normalized in [_normalize_filter_text(item)]
+            if normalized
+        ]
+        return normalized_values or None
+
+    normalized = _normalize_filter_text(value)
+    return normalized or None
+
+
 def _collect_search_columns(model, column_names):
     return [
         getattr(model, column_name)
         for column_name in column_names
         if hasattr(model, column_name)
     ]
+
+
+def _build_dashboard_global_search_clause(search_term, MP, OP, UP):
+    normalized_search_term = _normalize_filter_text(search_term)
+    if not normalized_search_term:
+        return None
+
+    search_columns = (
+        _collect_search_columns(MP, [
+            "name",
+            "pdb_code",
+            "group",
+            "subgroup",
+            "species",
+            "taxonomic_domain",
+            "description",
+            "related_pdb_entries",
+            "struct_title",
+            "rcsentinfo_experimental_method",
+            "expressed_in_species",
+        ])
+        + _collect_search_columns(OP, [
+            "family_name_cache",
+            "species_name_cache",
+            "membrane_name_cache",
+            "family_superfamily_name",
+            "family_superfamily_classtype_name",
+            "famsupclasstype_type_name",
+        ])
+        + _collect_search_columns(UP, [
+            "uniprot_id",
+            "comment_disease",
+            "comment_disease_name",
+            "protein_recommended_name",
+            "protein_alternative_name",
+            "associated_genes",
+            "molecular_function",
+            "cellular_component",
+            "biological_process",
+            "keywords",
+            "comment_function",
+        ])
+    )
+    token_conditions = []
+    for token in re.split(r"\s+", normalized_search_term):
+        token = token.strip()
+        if not token:
+            continue
+        token_conditions.append(
+            or_(*[column.ilike(f"%{token}%") for column in search_columns])
+        )
+    if not token_conditions:
+        return None
+    return and_(*token_conditions)
 
 def apply_search_and_filter(query, search_terms, MP, OP, UP):
     data = search_terms.get("search_terms", {})
@@ -5743,52 +6031,9 @@ def apply_search_and_filter(query, search_terms, MP, OP, UP):
 
     # Global search term
     if search_term:
-        search_columns = (
-            _collect_search_columns(MP, [
-                "name",
-                "pdb_code",
-                "group",
-                "subgroup",
-                "species",
-                "taxonomic_domain",
-                "description",
-                "related_pdb_entries",
-                "struct_title",
-                "rcsentinfo_experimental_method",
-                "expressed_in_species",
-            ])
-            + _collect_search_columns(OP, [
-                "family_name_cache",
-                "species_name_cache",
-                "membrane_name_cache",
-                "family_superfamily_name",
-                "family_superfamily_classtype_name",
-                "famsupclasstype_type_name",
-            ])
-            + _collect_search_columns(UP, [
-                "uniprot_id",
-                "comment_disease",
-                "comment_disease_name",
-                "protein_recommended_name",
-                "protein_alternative_name",
-                "associated_genes",
-                "molecular_function",
-                "cellular_component",
-                "biological_process",
-                "keywords",
-                "comment_function",
-            ])
-        )
-        token_conditions = []
-        for token in re.split(r"\s+", search_term):
-            token = token.strip()
-            if not token:
-                continue
-            token_conditions.append(
-                or_(*[column.ilike(f"%{token}%") for column in search_columns])
-            )
-        if token_conditions:
-            conditions.append(and_(*token_conditions))
+        global_search_clause = _build_dashboard_global_search_clause(search_term, MP, OP, UP)
+        if global_search_clause is not None:
+            conditions.append(global_search_clause)
 
     # MembraneProteinData filters
     if group:
@@ -6008,9 +6253,18 @@ def get_table_as_dataframe_download(table_name, columns=None, filter_column=None
     total_rows = None
     if not filter_column and not filter_value:
         # Execute a count query without any filter condition
-        total_rows = db.session.execute(select([func.count()]).select_from(table)).scalar()
+        total_rows = db.session.execute(select(func.count()).select_from(table)).scalar()
     elif filter_column:
-        total_rows = db.session.execute(select([func.count()]).select_from(table).where(getattr(table.columns, filter_column) == filter_value)).scalar()
+        count_query = select(func.count()).select_from(table)
+        if isinstance(filter_value, (list, tuple, set)):
+            count_query = count_query.where(
+                getattr(table.columns, filter_column).in_(filter_value)
+            )
+        else:
+            count_query = count_query.where(
+                getattr(table.columns, filter_column) == filter_value
+            )
+        total_rows = db.session.execute(count_query).scalar()
 
     return {'data': df, 'total_rows': total_rows}
 

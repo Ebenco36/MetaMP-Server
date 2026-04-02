@@ -34,7 +34,6 @@ cloudpickle==3.1.1
 colorama==0.4.6
 colorlog==4.8.0
 contourpy==1.2.0
-cron-descriptor==1.4.0
 croniter==2.0.3
 cryptography==41.0.7
 cycler==0.12.1
@@ -62,12 +61,14 @@ flask-marshmallow==0.15.0
 Flask-Migrate==4.0.7
 Flask-RESTful==0.3.10
 Flask-SQLAlchemy==3.1.1
+Flask-SocketIO==5.3.6
 Flask-WTF==1.2.1
 fonttools==4.46.0
 frozenlist==1.4.0
 geographiclib==2.0
 geopy==2.4.1
 gevent==23.9.1
+gevent-websocket==0.10.1
 greenlet==3.1.1
 gunicorn==21.2.0
 h11==0.14.0

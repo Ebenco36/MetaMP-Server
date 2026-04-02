@@ -8,7 +8,11 @@ def update_tmbed_package():
     try:
         tmbed = importlib.import_module("tmbed")
     except Exception as exc:
-        return f"TMbed not available; skipping patch ({exc})."
+        return (
+            "TMbed is not installed in this image; skipping TMbed patch. "
+            "This is expected for non-ML services such as celery-worker or celery-beat "
+            f"({exc})."
+        )
 
     package_dir = Path(tmbed.__file__).resolve().parent
     patched_files = []

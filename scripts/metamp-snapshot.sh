@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 DEFAULT_SNAPSHOT_ROOT="$ROOT_DIR/release-snapshots"
+DEFAULT_RUNTIME_COMPOSE_FILE="$ROOT_DIR/docker-compose.snapshot.yml"
 DOCKER_BIN="${DOCKER_BIN:-}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
 COMPOSE_RUNNER_MODE=""
@@ -12,6 +13,7 @@ SNAPSHOT_DIR=""
 TOP_MODELS=5
 WITH_FRONTEND=0
 WITH_LOCAL_FRONTEND=0
+WITH_BACKGROUND_JOBS=0
 SKIP_BUILD=0
 
 log() {
@@ -33,7 +35,7 @@ resolve_docker_bin() {
       DOCKER_BIN="$(command -v "$candidate")"
       return 0
     fi
-  fi
+  done
 
   for candidate in \
     /Applications/Docker.app/Contents/Resources/bin/docker \
@@ -86,6 +88,7 @@ Options:
   --env-file PATH           Use a different Docker env file. Default: .env.docker.deployment
   --with-frontend           Start the frontend service when loading.
   --with-local-frontend     Start the frontend via docker-compose.local-frontend.yml when loading.
+  --with-background-jobs    Also start celery workers and celery-beat during snapshot load.
   --skip-build              Skip image refresh during load.
   -h, --help                Show this help.
 EOF
@@ -111,12 +114,40 @@ compose_args() {
   printf '%s\n' "${args[@]}"
 }
 
+runtime_compose_args() {
+  local args=(
+    --env-file "$ENV_FILE"
+  )
+  if [[ "$WITH_BACKGROUND_JOBS" -eq 1 ]]; then
+    args+=(-f "$ROOT_DIR/docker-compose.yml")
+  else
+    args+=(-f "$DEFAULT_RUNTIME_COMPOSE_FILE")
+  fi
+  if [[ "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
+    args+=(-f "$ROOT_DIR/docker-compose.local-frontend.yml")
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
 run_compose() {
   resolve_compose_runner
   local args=()
   while IFS= read -r line; do
     args+=("$line")
   done < <(compose_args)
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
+}
+
+run_runtime_compose() {
+  resolve_compose_runner
+  local args=()
+  while IFS= read -r line; do
+    args+=("$line")
+  done < <(runtime_compose_args)
   if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
     "$DOCKER_BIN" compose "${args[@]}" "$@"
   else
@@ -140,11 +171,14 @@ wait_for_backend() {
 start_runtime_for_load() {
   if [[ "$SKIP_BUILD" -ne 1 ]]; then
     log "Pulling runtime images for snapshot load..."
-    local pull_services=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
+    local pull_services=(postgres redis flask-app)
+    if [[ "$WITH_BACKGROUND_JOBS" -eq 1 ]]; then
+      pull_services+=(celery-worker celery-worker-ml celery-worker-tm celery-beat)
+    fi
     if [[ "$WITH_FRONTEND" -eq 1 && "$WITH_LOCAL_FRONTEND" -eq 0 ]]; then
       pull_services+=(frontend)
     fi
-    run_compose pull "${pull_services[@]}"
+    run_runtime_compose pull "${pull_services[@]}"
 
     if [[ "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
       log "Building local frontend image from the MPVisualization workspace..."
@@ -152,13 +186,20 @@ start_runtime_for_load() {
     fi
   fi
 
-  local services=(postgres redis flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
+  local services=(postgres redis flask-app)
+  if [[ "$WITH_BACKGROUND_JOBS" -eq 1 ]]; then
+    services+=(celery-worker celery-worker-ml celery-worker-tm celery-beat)
+  fi
   if [[ "$WITH_FRONTEND" -eq 1 ]]; then
     services+=(frontend)
   fi
 
-  log "Starting runtime services..."
-  run_compose up -d "${services[@]}"
+  if [[ "$WITH_BACKGROUND_JOBS" -eq 1 ]]; then
+    log "Starting runtime services with background jobs enabled..."
+  else
+    log "Starting snapshot runtime without background jobs..."
+  fi
+  run_runtime_compose up -d "${services[@]}"
   wait_for_backend
 }
 
@@ -196,22 +237,22 @@ load_snapshot() {
 
   if [[ -d "$SNAPSHOT_DIR/datasets" ]]; then
     log "Loading snapshot datasets into flask-app runtime volume..."
-    run_compose exec -T flask-app sh -lc "mkdir -p '$RUNTIME_DATASET_DIR'"
-    run_compose cp "$SNAPSHOT_DIR/datasets/." "flask-app:$RUNTIME_DATASET_DIR"
-    run_compose exec -T -u root flask-app sh -lc "chmod -R a+rwX '$RUNTIME_DATASET_DIR' || true"
+    run_runtime_compose exec -T flask-app sh -lc "mkdir -p '$RUNTIME_DATASET_DIR'"
+    run_runtime_compose cp "$SNAPSHOT_DIR/datasets/." "flask-app:$RUNTIME_DATASET_DIR"
+    run_runtime_compose exec -T -u root flask-app sh -lc "chmod -R a+rwX '$RUNTIME_DATASET_DIR' || true"
   fi
 
   if [[ -d "$SNAPSHOT_DIR/data/models" ]]; then
     log "Loading snapshot ML artifacts into flask-app runtime volume..."
-    run_compose exec -T flask-app sh -lc "mkdir -p /var/app/data/models"
-    run_compose cp "$SNAPSHOT_DIR/data/models/." "flask-app:/var/app/data/models"
-    run_compose exec -T -u root flask-app sh -lc "chmod -R a+rwX /var/app/data/models || true"
+    run_runtime_compose exec -T flask-app sh -lc "mkdir -p /var/app/data/models"
+    run_runtime_compose cp "$SNAPSHOT_DIR/data/models/." "flask-app:/var/app/data/models"
+    run_runtime_compose exec -T -u root flask-app sh -lc "chmod -R a+rwX /var/app/data/models || true"
   fi
 
   if [[ -f "$SNAPSHOT_DIR/initdb/all_tables.dump" ]]; then
     log "Restoring PostgreSQL database dump..."
-    run_compose cp "$SNAPSHOT_DIR/initdb/all_tables.dump" "postgres:/tmp/metamp_snapshot.dump"
-    run_compose exec -T postgres sh -lc 'export PGPASSWORD="${POSTGRES_PASSWORD:-postgres}"; pg_restore --clean --if-exists --no-owner -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-mpvis_db}" /tmp/metamp_snapshot.dump'
+    run_runtime_compose cp "$SNAPSHOT_DIR/initdb/all_tables.dump" "postgres:/tmp/metamp_snapshot.dump"
+    run_runtime_compose exec -T postgres sh -lc 'export PGPASSWORD="${POSTGRES_PASSWORD:-postgres}"; pg_restore --clean --if-exists --no-owner -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-mpvis_db}" /tmp/metamp_snapshot.dump'
   else
     log "No all_tables.dump found in snapshot; skipping DB restore."
   fi
@@ -252,6 +293,10 @@ while [[ $# -gt 0 ]]; do
     --with-local-frontend)
       WITH_LOCAL_FRONTEND=1
       WITH_FRONTEND=1
+      shift
+      ;;
+    --with-background-jobs)
+      WITH_BACKGROUND_JOBS=1
       shift
       ;;
     --skip-build)

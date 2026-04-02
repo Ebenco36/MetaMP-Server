@@ -3,7 +3,8 @@ from src.Feedbacks.views import (
     FeedbackListResource, 
     UserFeedbackListResource, 
     FeedbackQuestionResourceAPI,
-    FeedbackQuestionUpdateResourceAPI
+    FeedbackQuestionUpdateResourceAPI,
+    StructureExpertNoteResource,
 )
 
 def feedback_routes(api):
@@ -12,3 +13,4 @@ def feedback_routes(api):
     api.add_resource(FeedbackListResource, '/feedback/all')
     api.add_resource(FeedbackQuestionResourceAPI, '/admin/feedback-questions')
     api.add_resource(FeedbackQuestionUpdateResourceAPI, '/admin/feedback-questions/<int:question_id>')
+    api.add_resource(StructureExpertNoteResource, '/structure-expert-notes/<string:pdb_code>')

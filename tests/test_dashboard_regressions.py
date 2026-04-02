@@ -107,6 +107,12 @@ class DashboardRegressionTests(unittest.TestCase):
         self.assertIn("tm_boundaries", record["ui_sections"])
         self.assertIn("scientific_flags", record["ui_sections"])
         self.assertIn("field_glossary_keys", record)
+        self.assertIn("group_disagreement", record)
+        self.assertIn("tm_disagreement", record)
+        self.assertIn("tm_boundary_disagreement", record)
+        self.assertIn("benchmark_status", record)
+        self.assertIn("benchmark_reason", record)
+        self.assertIn("benchmark_recommended", record)
 
     def test_tm_boundary_enrichment_is_available(self):
         record = DashboardAnnotationDatasetService.get_record("1O5W")
@@ -389,6 +395,121 @@ class DashboardRegressionTests(unittest.TestCase):
         summary = DiscrepancyReviewService._build_discrepancy_summary(record)
 
         self.assertTrue(summary["has_tm_disagreement"])
+        self.assertFalse(summary["has_tm_boundary_disagreement"])
+
+    def test_tm_boundary_disagreement_includes_tmdet_when_shift_is_within_tolerance(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "opm_tm_regions": json.dumps(
+                [
+                    {"start": 10, "end": 30, "label": "OPM"},
+                ]
+            ),
+            "TMDET_tm_count": 1,
+            "TMDET_tm_regions": json.dumps(
+                [
+                    {"start": 14, "end": 34, "label": "TMDET membrane"},
+                ]
+            ),
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
+        self.assertFalse(summary["has_tm_boundary_disagreement"])
+
+    def test_tm_boundary_disagreement_detects_tmdet_shift_beyond_tolerance(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "opm_tm_regions": json.dumps(
+                [
+                    {"start": 10, "end": 30, "label": "OPM"},
+                ]
+            ),
+            "TMDET_tm_count": 1,
+            "TMDET_tm_regions": json.dumps(
+                [
+                    {"start": 16, "end": 36, "label": "TMDET membrane"},
+                ]
+            ),
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
+        self.assertTrue(summary["has_tm_boundary_disagreement"])
+
+    def test_tm_boundary_disagreement_uses_pairwise_source_comparison(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "opm_tm_regions": json.dumps(
+                [
+                    {"start": 10, "end": 30, "label": "OPM"},
+                ]
+            ),
+            "normalized_tm_predictions": [
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "DeepTMHMM",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 14, "end": 34, "label": "Membrane"},
+                        ]
+                    ),
+                },
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "TMHMM",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 6, "end": 26, "label": "Membrane"},
+                        ]
+                    ),
+                },
+            ],
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
+        self.assertTrue(summary["has_tm_boundary_disagreement"])
+
+    def test_tm_boundary_disagreement_requires_opm_reference_boundaries(self):
+        record = {
+            "Group (Expert)": "Bitopic",
+            "normalized_tm_predictions": [
+                {
+                    "provider": "MetaMP",
+                    "method": "TMbed",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 10, "end": 30, "label": "Membrane"},
+                        ]
+                    ),
+                },
+                {
+                    "provider": "TMAlphaFold",
+                    "method": "DeepTMHMM",
+                    "prediction_kind": "sequence_topology",
+                    "tm_count": 1,
+                    "tm_regions_json": json.dumps(
+                        [
+                            {"start": 20, "end": 40, "label": "Membrane"},
+                        ]
+                    ),
+                },
+            ],
+        }
+
+        summary = DiscrepancyReviewService._build_discrepancy_summary(record)
+
+        self.assertFalse(summary["has_tm_disagreement"])
         self.assertFalse(summary["has_tm_boundary_disagreement"])
 
     def test_build_candidate_payload_normalizes_group_mpstruc_from_group_column(self):

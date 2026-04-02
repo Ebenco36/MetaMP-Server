@@ -8,6 +8,7 @@ from src.core.celery_factory import configure_celery
 from src.core.config import configure_runtime_environment
 from src.core.error_handlers import configure_logging, register_error_handlers
 from src.core.extensions import admin, babel, cors, db, mail
+from src.Feedbacks.realtime import configure_socketio, register_structure_note_socket_handlers
 from src.middlewares.auth_middleware import token_required
 from src.routes import RouteInitialization
 from src.utils.response import ApiResponse
@@ -51,6 +52,8 @@ def create_app() -> Flask:
     babel.init_app(app)
     admin.init_app(app)
     configure_celery(app)
+    configure_socketio(app)
+    register_structure_note_socket_handlers()
 
     configure_logging(app)
     register_error_handlers(app)

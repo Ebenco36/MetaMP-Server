@@ -140,7 +140,7 @@ run_compose() {
     args+=("$line")
   done < <(compose_args)
   if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
-    "$DOCKER_BIN" compose "${args[@]}" "$@"
+    COMPOSE_BAKE="${COMPOSE_BAKE:-true}" "$DOCKER_BIN" compose "${args[@]}" "$@"
   else
     "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
   fi
@@ -319,7 +319,7 @@ start_stack() {
   resolve_docker_bin
 
   local services=(postgres redis flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
-  local build_services=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
+  local build_services=(flask-app celery-worker)
 
   if [[ "$WITH_FRONTEND" -eq 1 || "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
     services+=(frontend)
@@ -334,7 +334,7 @@ start_stack() {
       build_args+=(--no-cache)
     fi
     build_args+=("${build_services[@]}")
-    log "Building service images..."
+    log "Building service images for the two unique backend image variants..."
     run_compose "${build_args[@]}"
   else
     log "Skipping image build."

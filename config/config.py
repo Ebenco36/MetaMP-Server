@@ -77,6 +77,9 @@ class Config(object):
         'CELERY_BEAT_SCHEDULE_FILENAME',
         './celery-beat/celerybeat-schedule'
     )
+    SOCKETIO_CORS_ALLOWED_ORIGINS=os.getenv('SOCKETIO_CORS_ALLOWED_ORIGINS', '*')
+    SOCKETIO_PING_INTERVAL=os.getenv('SOCKETIO_PING_INTERVAL', '25')
+    SOCKETIO_PING_TIMEOUT=os.getenv('SOCKETIO_PING_TIMEOUT', '60')
 
 
 

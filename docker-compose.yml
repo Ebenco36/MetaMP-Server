@@ -29,7 +29,7 @@ services:
     volumes:
       - flask-app-data:/var/app/data
       - ./datasets:/var/app/datasets:ro
-      - ./vendor:/var/app/vendor
+      - ./vendor/optional_tm_tools:/var/app/vendor/optional_tm_tools
     networks:
       - app-networks
 
@@ -57,7 +57,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
-      - ./vendor:/var/app/vendor
+      - ./vendor/optional_tm_tools:/var/app/vendor/optional_tm_tools
     networks:
       - app-networks
 
@@ -85,7 +85,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
-      - ./vendor:/var/app/vendor
+      - ./vendor/optional_tm_tools:/var/app/vendor/optional_tm_tools
     networks:
       - app-networks
 
@@ -113,7 +113,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
-      - ./vendor:/var/app/vendor
+      - ./vendor/optional_tm_tools:/var/app/vendor/optional_tm_tools
     networks:
       - app-networks
 
@@ -141,7 +141,7 @@ services:
         condition: service_healthy
     volumes:
       - flask-app-data:/var/app/data
-      - ./vendor:/var/app/vendor
+      - ./vendor/optional_tm_tools:/var/app/vendor/optional_tm_tools
     networks:
       - app-networks
 

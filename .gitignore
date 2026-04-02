@@ -154,3 +154,7 @@ loadDump.txt
 Results_correct.tex
 docs/
 metamp-sqlite/
+vendor/wheels/
+
+release-snapshots
+test.txt

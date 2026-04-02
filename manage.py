@@ -81,7 +81,11 @@ def _ensure_ml_runtime(command_name, package_name):
     raise click.ClickException(
         f"{command_name} requires the ML runtime package '{package_name}', which is not installed in this container. "
         "Run the command in the ML container instead:\n"
-        f"docker compose --env-file .env.docker.deployment exec -T celery-worker-ml env FLASK_APP=manage.py flask {command_name}"
+        f"docker compose --env-file .env.docker.deployment exec -T celery-worker-ml env FLASK_APP=manage.py flask {command_name}\n\n"
+        "If you want native macOS MPS, Linux CUDA, or CPU execution outside Docker, use:\n"
+        "bash scripts/metamp-native-tmbed.sh doctor\n"
+        "bash scripts/metamp-native-tmbed.sh sync --all\n"
+        "bash scripts/metamp-native-tmbed.sh fallback --all"
     )
 
 
@@ -780,6 +784,11 @@ def run_optional_tm_predictions_cli(
     help="Rerun local fallback methods even when MetaMP already stores successful rows.",
 )
 @click.option(
+    "--retry-errors/--skip-errors",
+    default=False,
+    help="Retry previously stored MetaMP fallback error rows without forcing successful rows to rerun.",
+)
+@click.option(
     "--methods",
     type=str,
     default=",".join(TMALPHAFOLD_SEQUENCE_METHODS + TMALPHAFOLD_AUX_METHODS),
@@ -845,6 +854,7 @@ def run_verified_tm_fallbacks_cli(
     fallback_methods,
     all_verified_methods,
     include_completed,
+    retry_errors,
     methods,
     with_tmdet,
     tmalphafold_max_workers,
@@ -876,6 +886,7 @@ def run_verified_tm_fallbacks_cli(
         pdb_codes=selected_codes,
         limit=limit,
         include_completed=include_completed,
+        retry_errors=retry_errors,
         use_gpu=use_gpu,
         batch_size=batch_size,
         max_workers=max_workers,
