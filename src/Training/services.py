@@ -1259,7 +1259,112 @@ def outlier_detection_implementation(
                 color='independent'
             ).configure_view(strokeWidth=0)
     else:
+        return build_single_feature_outlier_chart(
+            df,
+            column_list[0] if column_list else None,
+            width_chart_single2,
+            categorical_columns=categorical_columns,
+            algorithm=algorithm,
+        )
+
+
+def build_single_feature_outlier_chart(
+    data,
+    feature_name,
+    chart_width,
+    categorical_columns=None,
+    algorithm="DBSCAN",
+):
+    if not feature_name or feature_name not in data.columns:
         return {}
+
+    categorical_columns = categorical_columns or [
+        "group",
+        "subgroup",
+        "rcsentinfo_experimental_method",
+        "pdb_code",
+    ]
+
+    available_categorical_columns = [
+        column for column in categorical_columns if column in data.columns
+    ]
+    chart_data = data[[feature_name] + available_categorical_columns].copy()
+    chart_data[feature_name] = pd.to_numeric(chart_data[feature_name], errors="coerce")
+    chart_data = chart_data.dropna(subset=[feature_name]).reset_index(drop=True)
+
+    if chart_data.empty:
+        return {}
+
+    q1 = chart_data[feature_name].quantile(0.25)
+    q3 = chart_data[feature_name].quantile(0.75)
+    iqr = q3 - q1
+    if pd.isna(iqr) or iqr == 0:
+        lower_bound = q1
+        upper_bound = q3
+    else:
+        lower_bound = q1 - (1.5 * iqr)
+        upper_bound = q3 + (1.5 * iqr)
+
+    chart_data["Outlier"] = chart_data[feature_name].apply(
+        lambda value: "Outlier"
+        if value < lower_bound or value > upper_bound
+        else "Inlier"
+    )
+    chart_data = chart_data.sort_values(feature_name).reset_index(drop=True)
+    chart_data["rank"] = chart_data.index + 1
+    chart_values = chart_data.to_dict(orient="records")
+    chart_source = alt.Data(values=chart_values)
+
+    feature_label = feature_name.replace("_", " ").title()
+    outlier_title = f"{algorithm} fallback view for {feature_label}"
+
+    if (
+        chart_data[feature_name].min() > 0
+        and chart_data[feature_name].max() / chart_data[feature_name].min() >= 100
+    ):
+        y_encoding = alt.Y(
+            f"{feature_name}:Q",
+            title=feature_label,
+            scale=alt.Scale(type="log"),
+        )
+    else:
+        y_encoding = alt.Y(f"{feature_name}:Q", title=feature_label)
+
+    main_width = max(int(chart_width * 0.78), 360)
+    boxplot_width = max(int(chart_width * 0.18), 120)
+
+    ranked_points = alt.Chart(chart_source).mark_circle(size=70).encode(
+        x=alt.X("rank:Q", title="Sorted Record Rank"),
+        y=y_encoding,
+        color=alt.Color(
+            "Outlier:N",
+            legend=alt.Legend(
+                orient="bottom",
+                direction="vertical",
+                labelLimit=0,
+            ),
+        ),
+        tooltip=available_categorical_columns + [f"{feature_name}:Q", "Outlier:N"],
+    ).properties(
+        title=outlier_title,
+        width=main_width,
+    )
+
+    summary_boxplot = alt.Chart(chart_source).mark_boxplot().encode(
+        y=y_encoding,
+        color=alt.value("#005EB8"),
+        tooltip=[f"{feature_name}:Q"],
+    ).properties(
+        title="Distribution",
+        width=boxplot_width,
+    )
+
+    return alt.hconcat(
+        ranked_points,
+        summary_boxplot,
+    ).resolve_scale(
+        color="independent"
+    ).configure_view(strokeWidth=0)
     
     
 def protein_regrouping(
@@ -1292,6 +1397,18 @@ class TrainingAnalyticsService:
         "TRANSMEMBRANE PROTEINS:BETA-BARREL",
         "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL",
     ]
+    OUTLIER_DEFAULT_FEATURES = {
+        "EM": [
+            "molecular_weight",
+            "reconstruction_num_particles",
+            "processed_resolution",
+        ],
+        "X-ray": [
+            "cell_length_a",
+            "cell_length_b",
+            "cell_length_c",
+        ],
+    }
     CACHE_TTL_SECONDS = int(timedelta(days=10).total_seconds())
 
     def __init__(self, cache=None):
@@ -1432,6 +1549,26 @@ class TrainingAnalyticsService:
     @staticmethod
     def _get_variables(payload):
         return payload.get("variables") or {}
+
+    @staticmethod
+    def _normalize_feature_selection(features):
+        if features is None:
+            return []
+        if isinstance(features, str):
+            text = features.strip()
+            if not text:
+                return []
+            if text.startswith("[") and text.endswith("]"):
+                try:
+                    loaded = json.loads(text)
+                    if isinstance(loaded, list):
+                        return [str(item).strip() for item in loaded if str(item).strip()]
+                except Exception:
+                    pass
+            return [text]
+        if isinstance(features, (list, tuple, set)):
+            return [str(item).strip() for item in features if str(item).strip()]
+        return [str(features).strip()]
 
     def _build_grouped_count_chart(self, variable, cache_prefix):
         if not variable:
@@ -1574,10 +1711,17 @@ class TrainingAnalyticsService:
 
     def _build_outlier_chart(self, data_type, features, chart_width, create_pairwise_plot):
         all_data, _, _, _, _ = DataService.get_data_from_DB()
+        normalized_input_features = self._normalize_feature_selection(features)
+        if not normalized_input_features:
+            raise ValueError("Missing outlier feature selection.")
         normalized_features = [
             "molecular_weight" if feature == "emt_molecular_weight" else feature
-            for feature in features
+            for feature in normalized_input_features
         ]
+        normalized_features = self._expand_outlier_features(
+            data_type,
+            normalized_features,
+        )
         numerical_data, categorical_data = preprocess_data(all_data, data_type)
         width_chart_single = (chart_width / len(normalized_features)) - 70
         return convert_chart(
@@ -1592,6 +1736,19 @@ class TrainingAnalyticsService:
                 create_pairwise_plot_bool=create_pairwise_plot,
             )
         )
+
+    def _expand_outlier_features(self, data_type, selected_features):
+        expanded_features = []
+        for feature in selected_features or []:
+            if feature and feature not in expanded_features:
+                expanded_features.append(feature)
+
+        default_features = self.OUTLIER_DEFAULT_FEATURES.get(data_type, [])
+        for feature in default_features:
+            if feature not in expanded_features:
+                expanded_features.append(feature)
+
+        return expanded_features
 
     def _build_inconsistency_chart(self, method, chart_width):
         if not method:

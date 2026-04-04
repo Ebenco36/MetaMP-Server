@@ -7,7 +7,7 @@ User=root
 Group=www-data
 WorkingDirectory=/var/app
 ExecStart=gunicorn --workers 4 \
-  --graceful-timeout 30 -k gevent \
+  --graceful-timeout 30 -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
   --bind unix:/var/app/mpvis-app.sock \
   --access-logfile /var/app/logs/access.log \
   --error-logfile /var/app/logs/error.log \

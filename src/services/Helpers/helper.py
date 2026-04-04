@@ -727,26 +727,38 @@ import datetime
 from math import ceil
 def get_latest_master_file():
     """
-    Return the path to the most recent country_data_YYYY-MM-DD.csv in datasets/.
-    If none exist, returns None.
+    Return the path to the most recent country_data_YYYY-MM-DD.csv found in the
+    active MetaMP dataset locations. Reviewer/runtime images seed datasets under
+    /var/app/data/datasets, while local development may rely on ./datasets or
+    src/datasets. If none exist, returns None.
     """
-    DATASETS_PATH = os.path.join('.', 'datasets')
-    os.makedirs(DATASETS_PATH, exist_ok=True)
-    pattern = os.path.join(DATASETS_PATH, 'country_data_*.csv')
-    files = glob.glob(pattern)
+    dataset_roots = [
+        os.path.join("/var/app", "data", "datasets"),
+        os.path.join(".", "datasets"),
+        os.path.join(".", "src", "datasets"),
+    ]
     latest = None
     latest_date = datetime.date.min
-    for f in files:
-        m = re.search(r'country_data_(\d{4}-\d{2}-\d{2})\.csv$', f)
-        if not m:
+    seen_files = set()
+
+    for dataset_path in dataset_roots:
+        if not os.path.isdir(dataset_path):
             continue
-        try:
-            d = datetime.datetime.strptime(m.group(1), '%Y-%m-%d').date()
-        except ValueError:
-            continue
-        if d > latest_date:
-            latest_date = d
-            latest = f
+        pattern = os.path.join(dataset_path, "country_data_*.csv")
+        for f in glob.glob(pattern):
+            if f in seen_files:
+                continue
+            seen_files.add(f)
+            m = re.search(r"country_data_(\d{4}-\d{2}-\d{2})\.csv$", f)
+            if not m:
+                continue
+            try:
+                d = datetime.datetime.strptime(m.group(1), "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if d > latest_date:
+                latest_date = d
+                latest = f
     return latest
 
 

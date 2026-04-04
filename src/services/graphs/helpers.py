@@ -1,4 +1,5 @@
 import altair as alt
+from altair.utils.data import MaxRowsError
 import logging
 from src.services.exceptions.AxisExceptions import AxisException
 from src.services.exceptions.NotFoundOnList import NotFoundOnList
@@ -530,6 +531,12 @@ def replace_value(value):
     return value, value
 
 def convert_chart(chart):
+    if chart is None:
+        return {}
+    if isinstance(chart, dict):
+        return chart
+    if isinstance(chart, list):
+        return chart
     try:
         # Get the currently active data transformer
         current_transformer = alt.data_transformers.get()
@@ -541,3 +548,9 @@ def convert_chart(chart):
     except ValueError as e:
         logger.debug("Falling back to default Altair chart serialization: %s", e)
         return chart.to_dict()
+    except MaxRowsError:
+        logger.debug(
+            "Temporarily disabling Altair max_rows during chart serialization."
+        )
+        with alt.data_transformers.enable("default", max_rows=None):
+            return chart.to_dict()

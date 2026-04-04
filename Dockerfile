@@ -131,9 +131,11 @@ RUN cp -R /var/app/vendor/optional_tm_tools/. /opt/metamp-optional-tools/
 
 RUN GEMMI_VERSION=0.7.0 && \
     cd /tmp && \
-    curl -L -O https://github.com/project-gemmi/gemmi/archive/refs/tags/v${GEMMI_VERSION}.tar.gz && \
-    tar -xzf v${GEMMI_VERSION}.tar.gz && \
-    rm v${GEMMI_VERSION}.tar.gz && \
+    curl --fail --retry 5 --retry-all-errors --retry-delay 2 -L \
+      -o gemmi-v${GEMMI_VERSION}.tar.gz \
+      https://codeload.github.com/project-gemmi/gemmi/tar.gz/refs/tags/v${GEMMI_VERSION} && \
+    tar -xzf gemmi-v${GEMMI_VERSION}.tar.gz && \
+    rm gemmi-v${GEMMI_VERSION}.tar.gz && \
     cd gemmi-${GEMMI_VERSION} && \
     cmake -B build && \
     make -j"$(nproc)" -C build && \
@@ -144,9 +146,11 @@ RUN PUGIXML_VERSION=1.14 && \
     cd /tmp && \
     mkdir -p contrib && \
     cd contrib && \
-    curl -L -O https://github.com/zeux/pugixml/archive/refs/tags/v${PUGIXML_VERSION}.tar.gz && \
-    tar -xzf v${PUGIXML_VERSION}.tar.gz && \
-    rm v${PUGIXML_VERSION}.tar.gz && \
+    curl --fail --retry 5 --retry-all-errors --retry-delay 2 -L \
+      -o pugixml-v${PUGIXML_VERSION}.tar.gz \
+      https://codeload.github.com/zeux/pugixml/tar.gz/refs/tags/v${PUGIXML_VERSION} && \
+    tar -xzf pugixml-v${PUGIXML_VERSION}.tar.gz && \
+    rm pugixml-v${PUGIXML_VERSION}.tar.gz && \
     ln -sfn pugixml-${PUGIXML_VERSION} pugixml
 
 COPY serverConfig/patch_tmdet_compat.py ./serverConfig/patch_tmdet_compat.py

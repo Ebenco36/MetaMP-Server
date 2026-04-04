@@ -39,6 +39,8 @@ def configure_socketio(app):
     socketio.init_app(
         app,
         async_mode="gevent",
+        allow_upgrades=False,
+        transports=["polling"],
         cors_allowed_origins=_parse_cors_origins(
             app.config.get("SOCKETIO_CORS_ALLOWED_ORIGINS", "*")
         ),

@@ -90,6 +90,39 @@ def _copy_tree_if_exists(source_root: Path, relative_path: str, output_root: Pat
     shutil.copytree(source_path, destination_path)
 
 
+def _copy_latest_country_dataset(source_root: Path, output_root: Path):
+    candidate_roots = [
+        source_root / "data" / "datasets",
+        source_root / "datasets",
+        source_root / "src" / "datasets",
+    ]
+    latest_path = None
+    latest_date = None
+
+    for dataset_root in candidate_roots:
+        if not dataset_root.exists() or not dataset_root.is_dir():
+            continue
+        for candidate in dataset_root.glob("country_data_*.csv"):
+            match = re.search(r"country_data_(\d{4}-\d{2}-\d{2})\.csv$", candidate.name)
+            if not match:
+                continue
+            try:
+                candidate_date = match.group(1)
+            except ValueError:
+                continue
+            if latest_date is None or candidate_date > latest_date:
+                latest_date = candidate_date
+                latest_path = candidate
+
+    if latest_path is None:
+        return None
+
+    destination_path = output_root / "datasets" / latest_path.name
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(latest_path, destination_path)
+    return str(destination_path.relative_to(output_root))
+
+
 def _truthy(value) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y"}
 
@@ -289,6 +322,8 @@ def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int
     for relative_path in CURRENT_DATASET_FILES:
         _copy_file_if_exists(source_root, relative_path, output_dir)
 
+    copied_country_dataset = _copy_latest_country_dataset(source_root, output_dir)
+
     for relative_path in MODEL_SUPPORT_FILES:
         _copy_file_if_exists(source_root, relative_path, output_dir)
 
@@ -331,11 +366,14 @@ def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int
         "includes_database_dump": False,
         "notes": [
             "Runtime-required dataset CSVs were exported from the active application dataset locations.",
+            "The latest country reference dataset was retained when available so dashboard geography views render in snapshot/reviewer builds.",
             "Reviewer-facing ML figures, dimensionality-reduction artifacts, and metric tables were retained.",
             "Only a trimmed set of inference model binaries was retained to reduce snapshot size.",
             "Use the shell snapshot workflow to add the PostgreSQL dump and restore it on another machine.",
         ],
     }
+    if copied_country_dataset:
+        snapshot_manifest["country_reference_dataset"] = copied_country_dataset
     (output_dir / "snapshot_manifest.json").write_text(json.dumps(snapshot_manifest, indent=2))
 
 
