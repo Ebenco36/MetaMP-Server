@@ -6,7 +6,7 @@ DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
-TOP_MODELS=5
+TOP_MODELS=1
 NO_CACHE=0
 SKIP_FRONTEND=0
 
@@ -29,7 +29,7 @@ Commands:
 
 Options:
   --snapshot-dir PATH    Optional export target for the runtime snapshot.
-  --top-models N         Keep the top N production ML bundles in the snapshot. Default: 5
+  --top-models N         Keep the top N production ML bundles in the snapshot. Default: 1
   --env-file PATH        Use a different env file. Default: .env.docker.deployment
   --no-cache             Build images without cache before pushing.
   --skip-frontend        Skip frontend image build/push.

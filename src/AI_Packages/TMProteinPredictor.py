@@ -653,21 +653,31 @@ def extract_tm_regions_from_gff_text(gff_text: str) -> dict[str, list[dict]]:
     regions: dict[str, list[dict]] = {}
     for line in gff_text.splitlines():
         parts = line.split("\t")
-        if len(parts) < 5 or parts[2] != "TMhelix":
+        if len(parts) >= 5 and parts[2] == "TMhelix":
+            sequence_id = parts[0]
+            start = parts[3]
+            end = parts[4]
+            attributes = {}
+            if len(parts) > 8:
+                for item in parts[8].split(";"):
+                    if "=" not in item:
+                        continue
+                    key, value = item.split("=", 1)
+                    attributes[key] = value
+        elif len(parts) >= 4 and parts[1] == "TMhelix":
+            # DeepTMHMM's TMRs.gff3 uses a simplified 4-column layout:
+            # <sequence_id>\t<TMhelix>\t<start>\t<end>
+            sequence_id = parts[0]
+            start = parts[2]
+            end = parts[3]
+            attributes = {}
+        else:
             continue
-        sequence_id = parts[0]
-        attributes = {}
-        if len(parts) > 8:
-            for item in parts[8].split(";"):
-                if "=" not in item:
-                    continue
-                key, value = item.split("=", 1)
-                attributes[key] = value
         regions.setdefault(sequence_id, []).append(
             {
-                "start": parts[3],
-                "end": parts[4],
-                "label": parts[2],
+                "start": start,
+                "end": end,
+                "label": "TMhelix",
                 "attributes": attributes or None,
             }
         )
@@ -1087,12 +1097,37 @@ class DeepTMHMMPredictor(BasePredictor):
 
         print(f"[DeepTMHMM] Running job {job.id}, waiting for output...")
 
-        # This blocks until the file is ready or the job fails internally
-        fh = job.get_output_file('/deeptmhmm_results.md').get_file_handle()
-        fh.seek(0)
-        txt = fh.read().decode()
+        output_paths = [
+            "/TMRs.gff3",
+            "/deeptmhmm_results.md",
+        ]
+        txt = None
+        selected_path = None
+        for output_path in output_paths:
+            try:
+                fh = job.get_output_file(output_path).get_file_handle()
+                fh.seek(0)
+                txt = fh.read().decode()
+                selected_path = output_path
+                break
+            except Exception:
+                continue
+        # print(txt[:500] if txt else "[DeepTMHMM] No parsable output found in expected files.")
+        if txt is None:
+            available_files = []
+            try:
+                available_files = [str(item) for item in job.list_output_files()]
+            except Exception:
+                available_files = []
+            raise RuntimeError(
+                "DeepTMHMM completed, but no parsable output file was found. "
+                f"Tried: {', '.join(output_paths)}. "
+                + (f"Available files: {available_files}" if available_files else "")
+            )
 
-        print(f"[DeepTMHMM] Job {job.id} completed successfully.")
+        print(
+            f"[DeepTMHMM] Job {job.id} completed successfully using {selected_path}."
+        )
 
         return extract_tm_prediction_from_text(txt)
 

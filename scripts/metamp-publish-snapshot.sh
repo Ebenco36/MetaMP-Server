@@ -7,7 +7,7 @@ DEFAULT_SNAPSHOT_ROOT="$ROOT_DIR/release-snapshots"
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
-TOP_MODELS=5
+TOP_MODELS=1
 SKIP_FRONTEND=0
 NO_CACHE=0
 
@@ -32,7 +32,7 @@ Commands:
 
 Options:
   --snapshot-dir PATH   Reuse or write a snapshot directory. Default: ./release-snapshots/metamp-snapshot-<timestamp>
-  --top-models N        Keep only the top N production ML bundles in the exported snapshot. Default: 5
+  --top-models N        Keep only the top N production ML bundles in the exported snapshot. Default: 1
   --env-file PATH       Use a different Docker env file. Default: .env.docker.deployment
   --skip-frontend       Skip frontend image build/push
   --no-cache            Build images without Docker cache

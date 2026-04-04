@@ -10,7 +10,7 @@ DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
 COMPOSE_RUNNER_MODE=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
-TOP_MODELS=5
+TOP_MODELS=1
 WITH_FRONTEND=0
 WITH_LOCAL_FRONTEND=0
 WITH_BACKGROUND_JOBS=0
@@ -84,7 +84,7 @@ Commands:
 
 Options:
   --snapshot-dir PATH       Snapshot directory. Default export target: ./release-snapshots/metamp-snapshot-<timestamp>
-  --top-models N            Keep only the top N production ML bundles. Default: 5
+  --top-models N            Keep only the top N production ML bundles. Default: 1
   --env-file PATH           Use a different Docker env file. Default: .env.docker.deployment
   --with-frontend           Start the frontend service when loading.
   --with-local-frontend     Start the frontend via docker-compose.local-frontend.yml when loading.

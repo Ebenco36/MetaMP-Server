@@ -23,7 +23,7 @@ COMPOSE_RUNNER_MODE=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 SNAPSHOT_DIR=""
 SNAPSHOT_ARCHIVE=""
-TOP_MODELS=5
+TOP_MODELS=1
 NO_CACHE=0
 FORCE_BOOTSTRAP=1
 PUSH_BACKEND_IMAGES=1
@@ -67,7 +67,7 @@ Options:
   --env-file PATH           Use a different env file. Default: .env.docker.deployment
   --snapshot-dir PATH       Export snapshot directory. Default: release-snapshots/metamp-hpc-<timestamp>
   --snapshot-archive PATH   Zip archive path. Default: <snapshot-dir>.zip
-  --top-models N            Retain top N ML bundles in snapshot. Default: 5
+  --top-models N            Retain top N ML bundles in snapshot. Default: 1
   --image-tag TAG           Override IMAGE_TAG for the release images.
   --registry-namespace NS   Override REGISTRY_NAMESPACE for the release images.
   --no-cache                Build without Docker cache.

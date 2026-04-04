@@ -1,6 +1,7 @@
 import argparse
 import csv
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -37,6 +38,35 @@ MODEL_SUPPORT_FILES = [
 PRODUCTION_SMALL_DIRS = [
     "data/models/production_ml/figures",
     "data/models/production_ml/specs",
+    "data/models/production_ml/tables",
+]
+
+LEGACY_SEMI_SUPERVISED_DIR = "data/models/semi-supervised"
+
+LEGACY_SEMI_SUPERVISED_REQUIRED_FILES = {
+    "without_reduction_data.csv",
+    "PCA_data.csv",
+    "TSNE_data.csv",
+    "UMAP_data.csv",
+}
+
+LEGACY_REVIEWER_ARTIFACT_SUFFIXES = {
+    ".csv",
+    ".json",
+    ".png",
+    ".pdf",
+    ".svg",
+    ".txt",
+    ".tsv",
+}
+
+LEGACY_MODEL_NAME_PREFERENCE = [
+    "Random Forest",
+    "Gradient Boosting",
+    "Logistic Regression",
+    "SVM",
+    "K-Nearest Neighbors",
+    "Decision Tree",
 ]
 
 
@@ -50,8 +80,8 @@ def _copy_file_if_exists(source_root: Path, relative_path: str, output_root: Pat
 
 
 def _copy_tree_if_exists(source_root: Path, relative_path: str, output_root: Path) -> None:
-    source_path = source_root / relative_path
-    if not source_path.exists() or not source_path.is_dir():
+    source_path = _resolve_source_path(source_root, relative_path)
+    if source_path is None or not source_path.exists() or not source_path.is_dir():
         return
     destination_path = output_root / relative_path
     if destination_path.exists():
@@ -201,6 +231,56 @@ def _rewrite_manifest(output_root: Path, manifest: dict, selected_ids):
     output_path.write_text(json.dumps(filtered_manifest, indent=2))
 
 
+def _legacy_model_sort_key(path: Path):
+    stem = path.stem
+    reduction_match = re.search(r"__semi_supervised_([A-Za-z0-9\-]+)_\d+$", stem)
+    reduction = str(reduction_match.group(1)).lower() if reduction_match else "unknown"
+    model_name = stem.split("__semi_supervised_", 1)[0]
+    try:
+        preference_index = LEGACY_MODEL_NAME_PREFERENCE.index(model_name)
+    except ValueError:
+        preference_index = len(LEGACY_MODEL_NAME_PREFERENCE)
+    return (reduction, preference_index, model_name.lower(), path.name.lower())
+
+
+def _select_legacy_joblibs(source_dir: Path):
+    grouped = {}
+    for path in sorted(source_dir.glob("*.joblib"), key=_legacy_model_sort_key):
+        match = re.search(r"__semi_supervised_([A-Za-z0-9\-]+)_\d+$", path.stem)
+        if not match:
+            continue
+        reduction = str(match.group(1)).lower()
+        grouped.setdefault(reduction, path)
+    return list(grouped.values())
+
+
+def _copy_legacy_semi_supervised_artifacts(source_root: Path, output_root: Path):
+    source_dir = _resolve_source_path(source_root, LEGACY_SEMI_SUPERVISED_DIR)
+    if source_dir is None or not source_dir.exists() or not source_dir.is_dir():
+        return {"reviewer_artifacts": [], "retained_model_files": []}
+
+    destination_dir = output_root / LEGACY_SEMI_SUPERVISED_DIR
+    destination_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_reviewer_artifacts = []
+    for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower()):
+        if not path.is_file():
+            continue
+        if path.name in LEGACY_SEMI_SUPERVISED_REQUIRED_FILES or path.suffix.lower() in LEGACY_REVIEWER_ARTIFACT_SUFFIXES:
+            shutil.copy2(path, destination_dir / path.name)
+            copied_reviewer_artifacts.append(path.name)
+
+    retained_model_files = []
+    for joblib_path in _select_legacy_joblibs(source_dir):
+        shutil.copy2(joblib_path, destination_dir / joblib_path.name)
+        retained_model_files.append(joblib_path.name)
+
+    return {
+        "reviewer_artifacts": copied_reviewer_artifacts,
+        "retained_model_files": retained_model_files,
+    }
+
+
 def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int):
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -214,6 +294,11 @@ def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int
 
     for relative_path in PRODUCTION_SMALL_DIRS:
         _copy_tree_if_exists(source_root, relative_path, output_dir)
+
+    legacy_semi_supervised_summary = _copy_legacy_semi_supervised_artifacts(
+        source_root,
+        output_dir,
+    )
 
     registry_path = source_root / "data/models/production_ml/tables/model_bundle_registry.csv"
     manifest_path = source_root / "data/models/production_ml/specs/manifest.json"
@@ -236,10 +321,18 @@ def export_runtime_snapshot(source_root: Path, output_dir: Path, top_models: int
         "retained_artifact_ids": copied_ids,
         "retained_artifact_count": len(copied_ids),
         "registry_row_count": len(filtered_rows),
+        "legacy_semi_supervised_reviewer_artifact_count": len(
+            legacy_semi_supervised_summary.get("reviewer_artifacts", [])
+        ),
+        "legacy_semi_supervised_retained_model_files": legacy_semi_supervised_summary.get(
+            "retained_model_files",
+            [],
+        ),
         "includes_database_dump": False,
         "notes": [
             "Runtime-required dataset CSVs were exported from the active application dataset locations.",
-            "Only the top production ML bundles were retained to reduce snapshot size.",
+            "Reviewer-facing ML figures, dimensionality-reduction artifacts, and metric tables were retained.",
+            "Only a trimmed set of inference model binaries was retained to reduce snapshot size.",
             "Use the shell snapshot workflow to add the PostgreSQL dump and restore it on another machine.",
         ],
     }
@@ -253,7 +346,7 @@ def main():
     export_parser = subparsers.add_parser("export", help="Export datasets and trimmed ML assets.")
     export_parser.add_argument("--source-root", type=Path, default=Path("/var/app"))
     export_parser.add_argument("--output-dir", type=Path, required=True)
-    export_parser.add_argument("--top-models", type=int, default=5)
+    export_parser.add_argument("--top-models", type=int, default=1)
 
     args = parser.parse_args()
     if args.command == "export":
