@@ -4,14 +4,16 @@ MetaMP is a membrane-protein reconciliation and benchmarking platform. It brings
 
 ## Quick Start
 
-Run the full published app locally:
+Clone and run the full published app locally with one command:
 
 ```bash
-./scripts/metamp-reviewer-start.sh
+git clone https://github.com/Ebenco36/MetaMP-Server.git && cd MetaMP-Server && ./scripts/metamp-reviewer-start.sh
 ```
 
-This command:
+This one command:
+- clones the repository
 - pulls the latest published backend, frontend, and snapshot PostgreSQL images
+- pulls the published runtime snapshot assets
 - restores the published database state
 - starts the full app at `http://localhost/`
 - keeps background jobs off by default
@@ -22,6 +24,12 @@ This command:
 - Backend health: [http://localhost:5400/api/v1/health/ready](http://localhost:5400/api/v1/health/ready)
 
 ## Maintainer Commands
+
+Run the reviewer stack after the repository is already cloned:
+
+```bash
+./scripts/metamp-reviewer-start.sh
+```
 
 Build and run the full stack from source:
 
@@ -48,7 +56,7 @@ Publish the current application images and snapshot distribution:
 - Docker
 - Docker Compose
 
-That is enough for the reviewer workflow above.
+That is enough for the one-command reviewer workflow above.
 
 ## More Commands
 
