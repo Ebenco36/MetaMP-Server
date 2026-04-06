@@ -11,6 +11,8 @@ DOCKER_BIN="${DOCKER_BIN:-}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
 COMPOSE_RUNNER_MODE=""
 KEEP_DATA=0
+PULL_RETRIES="${PULL_RETRIES:-3}"
+PULL_RETRY_DELAY_SECONDS="${PULL_RETRY_DELAY_SECONDS:-5}"
 
 log() {
   printf '[MetaMP Reviewer] %s\n' "$*"
@@ -31,6 +33,33 @@ Options:
   --keep-data       Reuse the existing reviewer-stack volumes instead of resetting them
   -h, --help        Show this help
 EOF
+}
+
+image_exists_locally() {
+  local image_ref="$1"
+  resolve_docker_bin
+  "$DOCKER_BIN" image inspect "$image_ref" >/dev/null 2>&1
+}
+
+pull_service_image() {
+  local service_name="$1"
+  local image_ref="$2"
+  local attempt=1
+  while [[ "$attempt" -le "$PULL_RETRIES" ]]; do
+    if run_compose pull "$service_name"; then
+      return 0
+    fi
+    if image_exists_locally "$image_ref"; then
+      log "Pull failed for $service_name on attempt $attempt, but local image is already available: $image_ref"
+      return 0
+    fi
+    if [[ "$attempt" -lt "$PULL_RETRIES" ]]; then
+      log "Pull attempt $attempt/$PULL_RETRIES failed for $service_name ($image_ref). Retrying in ${PULL_RETRY_DELAY_SECONDS}s..."
+      sleep "$PULL_RETRY_DELAY_SECONDS"
+    fi
+    attempt=$((attempt + 1))
+  done
+  die "Unable to pull required image for $service_name: $image_ref"
 }
 
 resolve_docker_bin() {
@@ -136,7 +165,11 @@ load_env_file
 log "Using snapshot PostgreSQL image: $POSTGRES_IMAGE"
 log "Using snapshot runtime image: $SNAPSHOT_ASSETS_IMAGE"
 log "Pulling latest reviewer images..."
-run_compose pull postgres redis snapshot-assets flask-app frontend
+pull_service_image postgres "$POSTGRES_IMAGE"
+pull_service_image redis "redis:latest"
+pull_service_image snapshot-assets "$SNAPSHOT_ASSETS_IMAGE"
+pull_service_image flask-app "${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}"
+pull_service_image frontend "${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:${FRONTEND_IMAGE_TAG:-latest}"
 
 if [[ "$KEEP_DATA" -ne 1 ]]; then
   log "Resetting reviewer stack volumes so the exact published snapshot is restored..."
