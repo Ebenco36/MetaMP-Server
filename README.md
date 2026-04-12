@@ -23,6 +23,12 @@ This one command:
 - Frontend: [http://localhost/](http://localhost/)
 - Backend health: [http://localhost:5400/api/v1/health/ready](http://localhost:5400/api/v1/health/ready)
 
+
+## Repositories
+
+- **Backend (this repo):** [https://github.com/Ebenco36/MetaMP-Server](https://github.com/Ebenco36/MetaMP-Server)
+- **Frontend:** [https://github.com/Ebenco36/MPVisualization](https://github.com/Ebenco36/MPVisualization)
+
 ## Maintainer Commands
 
 Run the reviewer stack after the repository is already cloned:
@@ -31,7 +37,7 @@ Run the reviewer stack after the repository is already cloned:
 ./scripts/metamp-reviewer-start.sh
 ```
 
-Build and run the full stack from source:
+<!-- Build and run the full stack from source:
 
 ```bash
 ./scripts/metamp-production-bootstrap.sh run --with-frontend
@@ -41,7 +47,7 @@ Publish the current application images and snapshot distribution:
 
 ```bash
 ./scripts/metamp-publish-snapshot.sh push
-```
+``` -->
 
 ## What MetaMP Includes
 
@@ -60,8 +66,8 @@ That is enough for the one-command reviewer workflow above.
 
 ## More Commands
 
-For operator commands, snapshot workflows, fallback prediction runs, image publishing, and maintenance utilities, see [COMMANDS.md](/Users/awotoroebenezer/Desktop/MetaMP-Server/COMMANDS.md).
+For operator commands, snapshot workflows, fallback prediction runs, image publishing, and maintenance utilities, see [COMMANDS.md](./MetaMP-Server/COMMANDS.md).
 
 ## License
 
-Licensed under the GNU General Public License, Version 3.0. See [LICENSE.md](/Users/awotoroebenezer/Desktop/MetaMP-Server/LICENSE.md).
+Licensed under the GNU General Public License, Version 3.0. See [LICENSE.md](./MetaMP-Server/LICENSE.md).
