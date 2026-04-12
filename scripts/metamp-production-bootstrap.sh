@@ -4,11 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
 STATE_FILE="$ROOT_DIR/.metamp-production-bootstrap.state"
+LOCK_DIR="$ROOT_DIR/.metamp-production-bootstrap.lock"
+LOCK_INFO_FILE="$LOCK_DIR/owner.env"
 BOOTSTRAP_MARKER_PATH="/var/app/data/bootstrap/production-bootstrap-state.json"
 RUNTIME_DATASET_DIR=""
 DOCKER_BIN="${DOCKER_BIN:-}"
 DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
 COMPOSE_RUNNER_MODE=""
+BOOTSTRAP_LOCK_HELD=0
 
 ENV_FILE="$DEFAULT_ENV_FILE"
 WITH_FRONTEND=0
@@ -17,6 +20,8 @@ SKIP_BUILD=0
 NO_CACHE=0
 FORCE_BOOTSTRAP=0
 WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-10800}"
+BOOTSTRAP_STAGES=""
+REFRESH_STAGE_ARTIFACTS=""
 
 log() {
   printf '[MetaMP Bootstrap] %s\n' "$*"
@@ -29,6 +34,63 @@ warn() {
 die() {
   printf '[MetaMP Bootstrap][error] %s\n' "$*" >&2
   exit 1
+}
+
+write_lock_info() {
+  cat >"$LOCK_INFO_FILE" <<EOF
+PID=$$
+STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMAND=$COMMAND
+ENV_FILE=$ENV_FILE
+EOF
+}
+
+release_run_lock() {
+  local owner_pid=""
+
+  if [[ "$BOOTSTRAP_LOCK_HELD" -ne 1 || ! -d "$LOCK_DIR" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$LOCK_INFO_FILE" ]]; then
+    owner_pid="$(awk -F= '$1=="PID" {print $2}' "$LOCK_INFO_FILE")"
+  fi
+
+  if [[ -z "$owner_pid" || "$owner_pid" == "$$" ]]; then
+    rm -rf "$LOCK_DIR"
+  fi
+
+  BOOTSTRAP_LOCK_HELD=0
+}
+
+acquire_run_lock() {
+  local owner_pid=""
+  local started_at=""
+  local owner_command=""
+
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    write_lock_info
+    BOOTSTRAP_LOCK_HELD=1
+    trap release_run_lock EXIT INT TERM HUP
+    return 0
+  fi
+
+  if [[ -f "$LOCK_INFO_FILE" ]]; then
+    owner_pid="$(awk -F= '$1=="PID" {print $2}' "$LOCK_INFO_FILE")"
+    started_at="$(awk -F= '$1=="STARTED_AT" {print $2}' "$LOCK_INFO_FILE")"
+    owner_command="$(awk -F= '$1=="COMMAND" {print $2}' "$LOCK_INFO_FILE")"
+  fi
+
+  if [[ -n "$owner_pid" ]] && kill -0 "$owner_pid" >/dev/null 2>&1; then
+    die "Another production bootstrap is already running (pid ${owner_pid}${started_at:+, started_at ${started_at}}${owner_command:+, command ${owner_command}}). Wait for it to finish before starting a new one."
+  fi
+
+  warn "Removing stale bootstrap lock at $LOCK_DIR"
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+  write_lock_info
+  BOOTSTRAP_LOCK_HELD=1
+  trap release_run_lock EXIT INT TERM HUP
 }
 
 usage() {
@@ -52,9 +114,156 @@ Options:
   --skip-build               Skip docker compose build.
   --no-cache                 Build images without cache.
   --force-bootstrap          Ignore any existing bootstrap marker and rerun the full process.
+  --stages CSV               Restrict ingestion to a comma-separated stage list passed to flask sync-protein-database.
+  --refresh-stages CSV       Delete local generated artifacts for the listed ingestion stages before bootstrapping.
   --wait-timeout SECONDS     Max wait time for long ML/TM tasks. Default: 10800
   -h, --help                 Show this help.
 EOF
+}
+
+normalize_csv_list() {
+  local raw="${1:-}"
+  python - "$raw" <<'PY'
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else ""
+parts = []
+seen = set()
+for item in raw.split(","):
+    normalized = item.strip().lower()
+    if not normalized or normalized in seen:
+        continue
+    seen.add(normalized)
+    parts.append(normalized)
+print(",".join(parts))
+PY
+}
+
+delete_matching_artifacts() {
+  local pattern=""
+  shopt -s nullglob
+  for pattern in "$@"; do
+    local matches=($pattern)
+    if [[ ${#matches[@]} -eq 0 ]]; then
+      continue
+    fi
+    rm -f "${matches[@]}"
+  done
+  shopt -u nullglob
+}
+
+refresh_stage_artifacts() {
+  local normalized
+  normalized="$(normalize_csv_list "$REFRESH_STAGE_ARTIFACTS")"
+  [[ -n "$normalized" ]] || return 0
+
+  local dataset_dir="$ROOT_DIR/datasets"
+  local stage=""
+  IFS=',' read -r -a stages <<<"$normalized"
+  for stage in "${stages[@]}"; do
+    case "$stage" in
+      mpstruc)
+        log "Refreshing local MPStruc stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/mpstrucTblXml_"*.xml \
+          "$dataset_dir/Mpstruct_dataset_"*.csv
+        ;;
+      pdb)
+        log "Refreshing local PDB stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/PDB_data_"*.csv \
+          "$dataset_dir/PDB_data_transformed_"*.csv \
+          "$dataset_dir/PDB/PDB_data_"*_batch*.csv
+        ;;
+      quantitative)
+        log "Refreshing local quantitative stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/Quantitative_data_"*.csv
+        ;;
+      opm)
+        log "Refreshing local OPM stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/NEWOPM_"*.csv \
+          "$dataset_dir/OPM/NEWOPM_"*_batch*.csv
+        ;;
+      uniprot)
+        log "Refreshing local UniProt stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/Uniprot_functions_"*.csv \
+          "$dataset_dir/UniProt/Uniprot_functions_"*_batch*.csv
+        ;;
+      clean_valid)
+        log "Refreshing local clean_valid outputs before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/valid/Mpstruct_dataset.csv" \
+          "$dataset_dir/valid/PDB_data_transformed.csv" \
+          "$dataset_dir/valid/Quantitative_data.csv" \
+          "$dataset_dir/valid/NEWOPM.csv" \
+          "$dataset_dir/valid/Uniprot_functions.csv"
+        ;;
+      validate_release)
+        log "Refreshing local validation report artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/validation_report_"*.json
+        ;;
+      *)
+        warn "Ignoring unknown refresh stage '$stage'"
+        ;;
+    esac
+  done
+}
+
+refresh_runtime_stage_artifacts() {
+  local normalized
+  normalized="$(normalize_csv_list "$REFRESH_STAGE_ARTIFACTS")"
+  [[ -n "$normalized" ]] || return 0
+
+  log "Refreshing runtime dataset artifacts under ${RUNTIME_DATASET_DIR} before bootstrap..."
+
+  local runtime_script='
+set -eu
+runtime_dir="$1"
+stages_csv="$2"
+IFS="," read -r -a stages <<EOF
+$stages_csv
+EOF
+
+for stage in "${stages[@]}"; do
+  case "$stage" in
+    mpstruc)
+      rm -f "$runtime_dir"/mpstrucTblXml_*.xml "$runtime_dir"/Mpstruct_dataset_*.csv
+      ;;
+    pdb)
+      rm -f "$runtime_dir"/PDB_data_*.csv "$runtime_dir"/PDB_data_transformed_*.csv
+      rm -f "$runtime_dir"/PDB/PDB_data_*_batch*.csv
+      ;;
+    quantitative)
+      rm -f "$runtime_dir"/Quantitative_data_*.csv
+      ;;
+    opm)
+      rm -f "$runtime_dir"/NEWOPM_*.csv
+      rm -f "$runtime_dir"/OPM/NEWOPM_*_batch*.csv
+      ;;
+    uniprot)
+      rm -f "$runtime_dir"/Uniprot_functions_*.csv
+      rm -f "$runtime_dir"/UniProt/Uniprot_functions_*_batch*.csv
+      ;;
+    clean_valid)
+      rm -f \
+        "$runtime_dir"/valid/Mpstruct_dataset.csv \
+        "$runtime_dir"/valid/PDB_data_transformed.csv \
+        "$runtime_dir"/valid/Quantitative_data.csv \
+        "$runtime_dir"/valid/NEWOPM.csv \
+        "$runtime_dir"/valid/Uniprot_functions.csv
+      ;;
+    validate_release)
+      rm -f "$runtime_dir"/validation_report_*.json
+      ;;
+  esac
+done
+'
+
+  run_compose exec -T flask-app sh -lc "$runtime_script" -- "$RUNTIME_DATASET_DIR" "$normalized"
 }
 
 refresh_frontend_image() {
@@ -358,13 +567,19 @@ run_bootstrap() {
     return 0
   fi
 
+  refresh_stage_artifacts
   seed_runtime_datasets
+  refresh_runtime_stage_artifacts
 
   log "Stopping application services to avoid database locks during schema sync..."
   run_compose stop flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat >/dev/null
 
   log "Running full production bootstrap..."
-  flask_run_once sync-protein-database
+  local sync_args=(sync-protein-database)
+  if [[ -n "$BOOTSTRAP_STAGES" ]]; then
+    sync_args+=(--stages "$BOOTSTRAP_STAGES")
+  fi
+  flask_run_once "${sync_args[@]}"
 
   restart_runtime_services
 
@@ -470,6 +685,16 @@ while [[ $# -gt 0 ]]; do
       FORCE_BOOTSTRAP=1
       shift
       ;;
+    --stages)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      BOOTSTRAP_STAGES="$2"
+      shift 2
+      ;;
+    --refresh-stages)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      REFRESH_STAGE_ARTIFACTS="$2"
+      shift 2
+      ;;
     --wait-timeout)
       [[ $# -ge 2 ]] || die "Missing value for $1"
       WAIT_TIMEOUT_SECONDS="$2"
@@ -493,6 +718,7 @@ done
 
 case "$COMMAND" in
   run)
+    acquire_run_lock
     run_bootstrap
     ;;
   status)

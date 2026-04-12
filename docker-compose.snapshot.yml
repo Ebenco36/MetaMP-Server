@@ -15,7 +15,7 @@ services:
       - app-networks
 
   flask-app:
-    image: ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}
+    image: ${REGISTRY_NAMESPACE:-ebenco36}/${SNAPSHOT_APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest}
     container_name: testmpvis_app
     restart: unless-stopped
     init: true
@@ -45,7 +45,7 @@ services:
 
   postgres:
     container_name: testmetaMPDB
-    image: ${POSTGRES_IMAGE:-postgres:latest}
+    image: ${POSTGRES_IMAGE:-postgres:17}
     restart: unless-stopped
     env_file:
       - .env.docker.deployment

@@ -714,6 +714,7 @@ for database in order:
 ax.set_ylabel("Proportional Representation of Database Entries (%)")
 ax.set_xlabel("Year")
 ax.set_ylim(0, 100)
+ax.set_yticks(np.arange(0, 101, 10))
 ax.set_xlim(-bar_width / 2 - 0.03, len(years) - 1 + bar_width / 2 + 0.03)
 ax.set_xticks(positions)
 ax.set_xticklabels(years)

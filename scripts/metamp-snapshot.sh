@@ -142,6 +142,13 @@ run_compose() {
   fi
 }
 
+is_compose_service_running() {
+  local service_name="$1"
+  local running_services
+  running_services="$(run_compose ps --status running --services 2>/dev/null || true)"
+  [[ " ${running_services} " == *" ${service_name} "* ]]
+}
+
 run_runtime_compose() {
   resolve_compose_runner
   local args=()
@@ -210,6 +217,21 @@ export_snapshot() {
   timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
   local target_dir="${SNAPSHOT_DIR:-$DEFAULT_SNAPSHOT_ROOT/metamp-snapshot-$timestamp}"
   mkdir -p "$target_dir"
+
+  local required_services=(postgres redis flask-app)
+  local services_to_start=()
+  local service
+  for service in "${required_services[@]}"; do
+    if ! is_compose_service_running "$service"; then
+      services_to_start+=("$service")
+    fi
+  done
+
+  if [[ "${#services_to_start[@]}" -gt 0 ]]; then
+    log "Starting source stack services required for snapshot export: ${services_to_start[*]}"
+    run_compose up -d "${services_to_start[@]}"
+    wait_for_backend
+  fi
 
   log "Preparing trimmed runtime snapshot assets inside flask-app..."
   run_compose exec -T flask-app python -m src.Commands.runtime_snapshot export \

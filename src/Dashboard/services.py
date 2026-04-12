@@ -36,6 +36,7 @@ from src.Dashboard.group_standardization import (
     parse_tm_count,
     standardize_group_label,
 )
+from src.MP.replacement_resolution import resolve_canonical_pdb_code
 from src.AI_Packages.TMAlphaFoldPredictorClient import TMALPHAFOLD_MEMBRANE_LABELS
 from src.core.audit_log import MetaMPAuditLogService
 from src.Jobs.TMAlphaFoldSync import (
@@ -579,6 +580,44 @@ class DashboardAnnotationDatasetService:
         if cached is not None:
             return cached
 
+        payload = cls._load_record_payload(normalized_code)
+        if payload is None:
+            canonical_code = resolve_canonical_pdb_code(normalized_code)
+            if canonical_code and canonical_code != normalized_code and cls._has_direct_record_for_code(canonical_code):
+                canonical_payload = cls._load_record_payload(canonical_code)
+                if canonical_payload is not None:
+                    payload = cls._decorate_replacement_resolution(
+                        requested_code=normalized_code,
+                        requested_payload=None,
+                        resolved_payload=canonical_payload,
+                    )
+                    cls._remember_record_payload(normalized_code, payload)
+                    return payload
+            return None
+
+        replacement_target = cls._normalize_lookup_value(
+            payload.get("canonical_pdb_code") or payload.get("replacement_pdb_code")
+        )
+        if replacement_target and replacement_target != normalized_code:
+            canonical_payload = (
+                cls._load_record_payload(replacement_target)
+                if cls._has_direct_record_for_code(replacement_target)
+                else None
+            )
+            payload = cls._decorate_replacement_resolution(
+                requested_code=normalized_code,
+                requested_payload=payload,
+                resolved_payload=canonical_payload,
+            )
+
+        cls._remember_record_payload(normalized_code, payload)
+        return payload
+
+    @classmethod
+    def _load_record_payload(cls, normalized_code):
+        if not normalized_code:
+            return None
+
         try:
             dataset = cls._load_enriched_dataset()
             annotation_record = cls._find_annotation_record(dataset, normalized_code)
@@ -662,11 +701,76 @@ class DashboardAnnotationDatasetService:
         record["benchmark_reason"] = (record.get("benchmark_decision") or {}).get("benchmark_reason")
         record["ui_sections"] = cls._build_ui_sections(record)
         record["field_glossary_keys"] = DashboardFieldMetadataService.record_field_glossary_keys()
-        payload = DiscrepancyReviewService._inject_frontend_compatibility_aliases(
+        return DiscrepancyReviewService._inject_frontend_compatibility_aliases(
             cls._to_json_safe(record)
         )
-        cls._remember_record_payload(normalized_code, payload)
-        return payload
+
+    @classmethod
+    def _decorate_replacement_resolution(cls, requested_code, requested_payload, resolved_payload):
+        normalized_requested = cls._normalize_lookup_value(requested_code)
+        requested_payload = dict(requested_payload or {}) if requested_payload is not None else None
+        resolved_payload = dict(resolved_payload or {}) if resolved_payload is not None else None
+
+        requested_legacy_code = cls._normalize_lookup_value(
+            (requested_payload or {}).get("legacy_pdb_code")
+            or (requested_payload or {}).get("pdb_code")
+            or normalized_requested
+        ) or normalized_requested
+        requested_replacement_code = cls._normalize_lookup_value(
+            (requested_payload or {}).get("replacement_pdb_code")
+            or (requested_payload or {}).get("canonical_pdb_code")
+            or resolve_canonical_pdb_code(normalized_requested)
+        )
+
+        redirect_available = bool(
+            resolved_payload
+            and requested_replacement_code
+            and requested_replacement_code != requested_legacy_code
+        )
+        resolved_code = cls._normalize_lookup_value(
+            (resolved_payload or {}).get("canonical_pdb_code")
+            or (resolved_payload or {}).get("pdb_code")
+            or requested_replacement_code
+            or requested_legacy_code
+        ) or requested_legacy_code
+
+        active_payload = dict(resolved_payload or requested_payload or {})
+        active_payload["requested_pdb_code"] = normalized_requested
+        active_payload["record_access"] = {
+            "requested_pdb_code": normalized_requested,
+            "legacy_pdb_code": requested_legacy_code or None,
+            "replacement_pdb_code": requested_replacement_code or None,
+            "resolved_pdb_code": resolved_code or None,
+            "redirected": bool(redirect_available),
+            "redirect_target_available": bool(redirect_available),
+            "status": (
+                "resolved_to_replacement"
+                if redirect_available
+                else (
+                    "replacement_target_missing"
+                    if requested_replacement_code and requested_replacement_code != requested_legacy_code
+                    else "current_record"
+                )
+            ),
+            "message": (
+                f"Entry {normalized_requested} has been replaced by {requested_replacement_code}. "
+                f"Returning the canonical replacement record {resolved_code}."
+                if redirect_available
+                else (
+                    f"Entry {normalized_requested} has been replaced by {requested_replacement_code}, "
+                    "but MetaMP does not have the replacement record loaded yet."
+                    if requested_replacement_code and requested_replacement_code != requested_legacy_code
+                    else None
+                )
+            ),
+        }
+        if requested_payload is not None:
+            active_payload["requested_record_resolution"] = {
+                "legacy_pdb_code": requested_legacy_code or None,
+                "replacement_pdb_code": requested_replacement_code or None,
+                "is_replaced": bool(_normalize_replacement_flag((requested_payload or {}).get("is_replaced"))),
+            }
+        return active_payload
 
     @classmethod
     def _attach_normalized_tm_prediction_payloads(cls, records):
@@ -1492,7 +1596,7 @@ class DashboardAnnotationDatasetService:
         return record.to_dict(orient="records")[0]
 
     @staticmethod
-    def _find_merged_database_record(normalized_code):
+    def _find_merged_database_record_exact(normalized_code):
         dataset = all_merged_databases()
         if dataset.empty:
             return None
@@ -1524,6 +1628,14 @@ class DashboardAnnotationDatasetService:
             matches = dataset[mask]
             if not matches.empty:
                 return matches.iloc[0].replace({np.nan: None}).to_dict()
+
+        return None
+
+    @classmethod
+    def _find_merged_database_record(cls, normalized_code):
+        direct_match = cls._find_merged_database_record_exact(normalized_code)
+        if direct_match is not None:
+            return direct_match
 
         records = search_merged_databases(normalized_code, limit=1)
         if not records:
@@ -1566,6 +1678,37 @@ class DashboardAnnotationDatasetService:
                 value = getattr(row, column.key, None)
             payload[column.name] = value
         return payload
+
+    @classmethod
+    def _has_direct_record_for_code(cls, normalized_code):
+        if not normalized_code:
+            return False
+        try:
+            dataset = cls._load_enriched_dataset()
+            if cls._find_annotation_record(dataset, normalized_code) is not None:
+                return True
+        except Exception:
+            logger.debug("Direct annotation record check failed for %s.", normalized_code, exc_info=True)
+
+        try:
+            if cls._find_merged_database_record_exact(normalized_code) is not None:
+                return True
+        except Exception:
+            logger.debug("Direct merged record check failed for %s.", normalized_code, exc_info=True)
+
+        try:
+            if cls._find_live_membrane_record(normalized_code) is not None:
+                return True
+        except Exception:
+            logger.debug("Direct live record check failed for %s.", normalized_code, exc_info=True)
+
+        try:
+            dataset_record = cls._find_local_dataset_record(normalized_code)
+            if dataset_record is not None and cls._normalize_lookup_value(dataset_record.get("pdb_code")) == normalized_code:
+                return True
+        except Exception:
+            logger.debug("Direct local dataset record check failed for %s.", normalized_code, exc_info=True)
+        return False
 
     @classmethod
     def _load_local_merged_dataset(cls):
@@ -3198,18 +3341,26 @@ class DiscrepancyReviewService:
         if len(comparable_signatures) < 2:
             return False
 
-        comparable_source_names = {normalized_source for normalized_source, _, _ in comparable_signatures}
-        if not comparable_source_names.intersection(cls.TM_BOUNDARY_REFERENCE_SOURCES):
+        reference_signatures = [
+            (normalized_source, display_name, signature)
+            for normalized_source, display_name, signature in comparable_signatures
+            if normalized_source in cls.TM_BOUNDARY_REFERENCE_SOURCES
+        ]
+        predictor_signatures = [
+            (normalized_source, display_name, signature)
+            for normalized_source, display_name, signature in comparable_signatures
+            if normalized_source in cls.TM_BOUNDARY_PREDICTOR_SOURCES
+        ]
+
+        if not reference_signatures:
             return False
-        if not comparable_source_names.intersection(cls.TM_BOUNDARY_PREDICTOR_SOURCES):
+        if not predictor_signatures:
             return False
 
-        signature_lengths = {len(signature) for _, _, signature in comparable_signatures}
-        if len(signature_lengths) > 1:
-            return False
-
-        for index, (_, _, reference_signature) in enumerate(comparable_signatures):
-            for _, _, candidate_signature in comparable_signatures[index + 1:]:
+        for _, _, reference_signature in reference_signatures:
+            for _, _, candidate_signature in predictor_signatures:
+                if len(reference_signature) != len(candidate_signature):
+                    continue
                 if cls._signature_boundary_shift_exceeds_tolerance(
                     reference_signature,
                     candidate_signature,

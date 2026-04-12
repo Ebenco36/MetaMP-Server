@@ -21,6 +21,7 @@ from src.AI_Packages.TMProteinPredictor import (  # noqa: E402
     DeepTMHMMPredictor,
     MultiModelAnalyzer,
     TMbedPredictor,
+    get_tmbed_runtime_status,
     parse_tm_regions_value,
     serialize_tm_regions,
 )
@@ -32,6 +33,10 @@ from src.AI_Packages.TMAlphaFoldPredictorClient import (  # noqa: E402
 from src.Dashboard.services import get_table_as_dataframe, get_tables_as_dataframe  # noqa: E402
 from src.MP.model_tmalphafold import TMAlphaFoldPrediction  # noqa: E402
 from src.MP.model_uniprot import Uniprot  # noqa: E402
+from src.MP.replacement_resolution import (  # noqa: E402
+    canonicalize_pdb_codes,
+    canonicalize_pdb_frame,
+)
 
 
 DEFAULT_TM_PREDICTION_OUTPUT_CSV = "/var/app/data/tm_predictions/tm_summary.csv"
@@ -175,7 +180,10 @@ def _load_normalized_tm_prediction_frame(
             item[region_col] = str(preferred_row.tm_regions_json or "")
         records.append(item)
 
-    return pd.DataFrame(records)
+    frame = pd.DataFrame(records)
+    if not frame.empty:
+        frame = canonicalize_pdb_frame(frame, pdb_column="pdb_code")
+    return frame
 
 
 def normalize_optional_tm_predictor_name(predictor_name):
@@ -721,11 +729,7 @@ def _selected_tm_predictor_completion_columns(include_tmbed=True, include_deeptm
 def _normalize_pdb_code_selection(pdb_codes=None):
     if not pdb_codes:
         return []
-    normalized = []
-    for value in pdb_codes:
-        text = str(value or "").strip().upper()
-        if text:
-            normalized.append(text)
+    normalized = canonicalize_pdb_codes(pdb_codes)
     # Preserve order while removing duplicates
     return list(dict.fromkeys(normalized))
 
@@ -1385,6 +1389,33 @@ def _fallback_completion_statuses(retry_errors=False):
     return ("success",) if retry_errors else ("success", "error")
 
 
+def _describe_optional_tm_runtime_error(predictor_name, row, fallback_message):
+    normalized_name = normalize_optional_tm_predictor_name(predictor_name)
+    message = str(fallback_message or "").strip()
+    sequence = str((row or {}).get("sequence_sequence") or "").strip()
+    sequence_length = len(sequence)
+
+    if not message:
+        if normalized_name == "TMbed" and sequence_length:
+            return (
+                f"TMbed finished without emitting a usable prediction for {sequence_length}-residue "
+                "input on this runtime."
+            )
+        return "Local MetaMP fallback predictor finished without emitting a usable prediction."
+
+    lowered = message.lower()
+    if normalized_name == "TMbed":
+        if "returncode=-9" in lowered or "killed" in lowered:
+            return (
+                f"TMbed embedding/prediction was killed while processing a {sequence_length}-residue "
+                f"sequence (likely memory pressure on this runtime). Original error: {message}"
+            )
+        if "pathological full-length topology" in lowered:
+            return f"TMbed produced a pathological full-length topology and the result was rejected. {message}"
+
+    return message
+
+
 def _persist_optional_tm_error_rows(
     predictor_name,
     error_rows,
@@ -2012,6 +2043,7 @@ def load_verified_tm_fallback_target_codes(
         on="pdb_code",
         how="outer",
     )
+    all_data = canonicalize_pdb_frame(all_data, pdb_column="pdb_code")
     if "pdb_code" in all_data.columns:
         all_data = all_data.drop_duplicates(subset="pdb_code", keep="first").copy()
 
@@ -2312,11 +2344,13 @@ def load_optional_tm_prediction_frame(
         on="pdb_code",
         how="outer",
     )
+    all_data = canonicalize_pdb_frame(all_data, pdb_column="pdb_code")
     normalized_prediction_df = _load_normalized_tm_prediction_frame(
         predictor_names=[normalized_name],
         provider=normalize_optional_tm_completion_provider(completion_provider),
         pdb_codes=pdb_codes,
     )
+    normalized_prediction_df = canonicalize_pdb_frame(normalized_prediction_df, pdb_column="pdb_code")
     if not normalized_prediction_df.empty:
         all_data = all_data.merge(
             normalized_prediction_df,
@@ -2986,6 +3020,26 @@ def get_tm_prediction_runtime_options(app_config=None):
     }
 
 
+def _resolve_requested_builtin_predictors(
+    include_tmbed,
+    include_deeptmhmm,
+    use_gpu,
+    progress_callback=None,
+):
+    resolved_include_tmbed = bool(include_tmbed)
+    if resolved_include_tmbed:
+        status = get_tmbed_runtime_status(use_gpu=bool(use_gpu))
+        if not status.get("available"):
+            _emit_progress(
+                progress_callback,
+                "Skipping TMbed because the runtime is not healthy: "
+                + str(status.get("reason") or "unknown reason")
+                + ".",
+            )
+            resolved_include_tmbed = False
+    return resolved_include_tmbed, include_deeptmhmm
+
+
 def persist_sequences_to_db(
     dataframe: pd.DataFrame,
     pdb_col: str = "pdb_code",
@@ -3096,6 +3150,7 @@ def load_pending_tm_prediction_frame(
         on="pdb_code",
         how="outer",
     )
+    all_data = canonicalize_pdb_frame(all_data, pdb_column="pdb_code")
     normalized_prediction_df = _load_normalized_tm_prediction_frame(
         predictor_names=(
             (["TMbed"] if include_tmbed else [])
@@ -3104,6 +3159,7 @@ def load_pending_tm_prediction_frame(
         provider="MetaMP",
         pdb_codes=pdb_codes,
     )
+    normalized_prediction_df = canonicalize_pdb_frame(normalized_prediction_df, pdb_column="pdb_code")
     if not normalized_prediction_df.empty:
         all_data = all_data.merge(
             normalized_prediction_df,
@@ -3282,8 +3338,6 @@ def run_tm_prediction_for_sequences(
 ):
     dataframe = pd.DataFrame(dataframe).copy()
     runtime_options = get_tm_prediction_runtime_options()
-    if not include_tmbed and include_deeptmhmm is False:
-        raise ValueError("At least one TM predictor must be selected.")
     include_deeptmhmm = (
         runtime_options["include_deeptmhmm"]
         if include_deeptmhmm is None
@@ -3293,6 +3347,19 @@ def run_tm_prediction_for_sequences(
     max_workers = (
         runtime_options["max_workers"] if max_workers is None else max_workers
     )
+    include_tmbed, include_deeptmhmm = _resolve_requested_builtin_predictors(
+        include_tmbed=include_tmbed,
+        include_deeptmhmm=include_deeptmhmm,
+        use_gpu=use_gpu,
+        progress_callback=progress_callback,
+    )
+    if not include_tmbed and include_deeptmhmm is False:
+        return {
+            "predictors": [],
+            "processed_records": 0,
+            "records": [],
+            "message": "No runnable built-in TM predictors are available on this runtime.",
+        }
 
     analyzer = MultiModelAnalyzer(
         db_params={},
@@ -3348,8 +3415,6 @@ def run_tm_prediction_backfill(
     progress_callback=None,
 ):
     runtime_options = get_tm_prediction_runtime_options()
-    if not include_tmbed and include_deeptmhmm is False:
-        raise ValueError("At least one TM predictor must be selected.")
     include_deeptmhmm = (
         runtime_options["include_deeptmhmm"]
         if include_deeptmhmm is None
@@ -3360,6 +3425,24 @@ def run_tm_prediction_backfill(
     max_workers = (
         runtime_options["max_workers"] if max_workers is None else max_workers
     )
+    include_tmbed, include_deeptmhmm = _resolve_requested_builtin_predictors(
+        include_tmbed=include_tmbed,
+        include_deeptmhmm=include_deeptmhmm,
+        use_gpu=use_gpu,
+        progress_callback=progress_callback,
+    )
+    if not include_tmbed and include_deeptmhmm is False:
+        summary = {
+            "queued_records": 0,
+            "processed_records": 0,
+            "predictors": [],
+            "message": "No runnable built-in TM predictors are available on this runtime.",
+            "include_completed": bool(include_completed),
+        }
+        if csv_out:
+            summary["csv_path"] = str(csv_out)
+        _emit_progress(progress_callback, summary["message"])
+        return summary
 
     csv_out_path = Path(csv_out) if csv_out else None
     if csv_out_path is not None:
@@ -3475,6 +3558,7 @@ def run_tm_prediction_backfill(
         predictor_name: {"stored_rows": 0, "provider": "MetaMP", "method": predictor_name}
         for predictor_name in predictor_names
     }
+    runtime_error_summaries = {}
 
     def _persist_batch_to_normalized_store(batch_df, start=None, end=None, total=None):
         if batch_df is None or batch_df.empty:
@@ -3486,16 +3570,84 @@ def run_tm_prediction_backfill(
         ]
         batch_records = batch_df[preview_columns].to_dict(orient="records")
         for predictor_name in predictor_names:
-            store_summary = mirror_local_tm_prediction_rows(
-                method=predictor_name,
-                records=batch_records,
-                provider="MetaMP",
-                prediction_kind="sequence_topology",
-                progress_callback=progress_callback,
-            )
-            normalized_store[predictor_name]["stored_rows"] += int(
-                store_summary.get("stored_rows") or 0
-            )
+            try:
+                store_summary = mirror_local_tm_prediction_rows(
+                    method=predictor_name,
+                    records=batch_records,
+                    provider="MetaMP",
+                    prediction_kind="sequence_topology",
+                    progress_callback=progress_callback,
+                )
+                normalized_store[predictor_name]["stored_rows"] += int(
+                    store_summary.get("stored_rows") or 0
+                )
+            except Exception as exc:
+                _emit_progress(
+                    progress_callback,
+                    f"Normalized-store persistence failed for {predictor_name} batch {start}-{end}: {exc}",
+                )
+
+            count_col, region_col = tm_predictor_column_names(predictor_name)
+            error_col = f"{predictor_name}_error_message"
+            unresolved_codes = []
+            unresolved_error_rows = []
+            for _, row in batch_df.iterrows():
+                pdb_code = str(row.get("pdb_code") or "").strip().upper()
+                if not pdb_code:
+                    continue
+                count_value = row.get(count_col) if count_col in batch_df.columns else None
+                region_value = row.get(region_col) if region_col in batch_df.columns else None
+                error_message = (
+                    str(row.get(error_col) or "").strip()
+                    if error_col in batch_df.columns
+                    else ""
+                )
+                count_missing = pd.isna(count_value)
+                region_missing = False
+                if region_col in batch_df.columns:
+                    if pd.isna(region_value):
+                        region_missing = True
+                    else:
+                        region_missing = str(region_value).strip() == ""
+                if count_missing and region_missing:
+                    unresolved_codes.append(pdb_code)
+                    unresolved_error_rows.append(
+                        {
+                            "pdb_code": pdb_code,
+                            "error_message": _describe_optional_tm_runtime_error(
+                                predictor_name,
+                                row,
+                                error_message
+                                or "Local MetaMP fallback predictor finished without emitting a usable prediction.",
+                            ),
+                        }
+                    )
+            unresolved_codes = list(dict.fromkeys(unresolved_codes))
+            if unresolved_codes and not include_completed:
+                try:
+                    error_summary = _persist_optional_tm_error_rows(
+                        predictor_name=predictor_name,
+                        error_rows=unresolved_error_rows,
+                        provider="MetaMP",
+                        progress_callback=progress_callback,
+                    )
+                    aggregate = runtime_error_summaries.setdefault(
+                        predictor_name,
+                        {
+                            "predictor": predictor_name,
+                            "processed_records": 0,
+                            "stored_rows": 0,
+                            "inserted_rows": 0,
+                            "updated_rows": 0,
+                        },
+                    )
+                    for key in ("processed_records", "stored_rows", "inserted_rows", "updated_rows"):
+                        aggregate[key] += int(error_summary.get(key) or 0)
+                except Exception as exc:
+                    _emit_progress(
+                        progress_callback,
+                        f"Runtime-error persistence failed for {predictor_name} batch {start}-{end}: {exc}",
+                    )
         if start is not None and end is not None and total is not None:
             _emit_progress(
                 progress_callback,
@@ -3538,49 +3690,6 @@ def run_tm_prediction_backfill(
             if column in current_run_records.columns
         ]
         current_run_records = current_run_records[preview_columns]
-
-    runtime_error_summaries = {}
-    for predictor_name in predictor_names:
-        count_col, region_col = tm_predictor_column_names(predictor_name)
-        if count_col not in result_df.columns and region_col not in result_df.columns:
-            continue
-        unresolved_codes = []
-        for _, row in current_run_records.iterrows():
-            pdb_code = str(row.get("pdb_code") or "").strip().upper()
-            if not pdb_code:
-                continue
-            count_value = row.get(count_col) if count_col in current_run_records.columns else None
-            region_value = row.get(region_col) if region_col in current_run_records.columns else None
-            count_missing = pd.isna(count_value)
-            region_missing = False
-            if region_col in current_run_records.columns:
-                if pd.isna(region_value):
-                    region_missing = True
-                else:
-                    region_text = str(region_value).strip()
-                    region_missing = region_text == ""
-            if count_missing and region_missing:
-                unresolved_codes.append(pdb_code)
-        unresolved_codes = list(dict.fromkeys(unresolved_codes))
-        if unresolved_codes and not include_completed:
-            runtime_error_summaries[predictor_name] = _persist_optional_tm_error_rows(
-                predictor_name=predictor_name,
-                error_rows=[
-                    {
-                        "pdb_code": pdb_code,
-                        "error_message": (
-                            "Local MetaMP fallback predictor finished without emitting a usable prediction."
-                        ),
-                    }
-                    for pdb_code in unresolved_codes
-                ],
-                provider="MetaMP",
-                progress_callback=progress_callback,
-            )
-            _emit_progress(
-                progress_callback,
-                f"Recorded {len(unresolved_codes)} runtime fallback error row(s) for {predictor_name}.",
-            )
 
     summary = {
         "queued_records": int(len(all_data)),

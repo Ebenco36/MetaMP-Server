@@ -467,7 +467,11 @@ class RecordAnnotated(Resource):
                 status_code=404
             )
 
-        return ApiResponse.success(data=record)
+        access_message = ((record.get("record_access") or {}).get("message") or "").strip()
+        return ApiResponse.success(
+            data=record,
+            message=access_message or "Fetched record successfully",
+        )
 
 
 class RecordLineageResource(Resource):

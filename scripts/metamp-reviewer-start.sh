@@ -168,7 +168,10 @@ log "Pulling latest reviewer images..."
 pull_service_image postgres "$POSTGRES_IMAGE"
 pull_service_image redis "redis:latest"
 pull_service_image snapshot-assets "$SNAPSHOT_ASSETS_IMAGE"
-pull_service_image flask-app "${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}"
+# Snapshot reviewer mode serves the published artefacts without background jobs,
+# so it can use the lean Flask image while the full ML image remains available
+# for the main stack and background workers.
+pull_service_image flask-app "${REGISTRY_NAMESPACE:-ebenco36}/${SNAPSHOT_APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest}"
 pull_service_image frontend "${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:${FRONTEND_IMAGE_TAG:-latest}"
 
 if [[ "$KEEP_DATA" -ne 1 ]]; then

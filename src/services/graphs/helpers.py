@@ -1,6 +1,7 @@
 import altair as alt
 from altair.utils.data import MaxRowsError
 import logging
+import re
 from src.services.exceptions.AxisExceptions import AxisException
 from src.services.exceptions.NotFoundOnList import NotFoundOnList
 from src.services.exceptions.TagDoesnotExist import TagDoesnotExist
@@ -18,6 +19,108 @@ def format_string_caps(input_string):
     formatted_string = formatted_string.capitalize()
 
     return formatted_string
+
+
+def _humanize_summary_title_token(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    for prefix in ("rcsentinfo_", "rcsb_entry_info_", "symmetry_", "symspagroup_"):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+
+    replacements = {
+        "selected_polymer_entity_types": "Polymer entity type",
+        "software_programs_combined": "Software program",
+        "molecular_weight": "Molecular weight",
+        "deposited_atom_count": "Deposited atom count",
+        "experimental_method": "Experimental method",
+        "space_group_name_hm": "Space group",
+        "bibliography_year": "Year",
+    }
+    if text in replacements:
+        return replacements[text]
+
+    text = text.replace("*", " ")
+    text = text.replace("_", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:1].upper() + text[1:] if text else ""
+
+
+def _format_summary_category_phrase(value):
+    text = _humanize_summary_title_token(value)
+    replacements = {
+        "Polymer entity type": "polymer entity type",
+        "Selected Polymer Entity Types": "polymer entity type",
+        "Selected polymer entity types": "polymer entity type",
+        "Software program": "software program",
+        "Software Programs Combined": "software program",
+        "Software programs combined": "software program",
+        "Molecular weight": "molecular weight",
+        "Deposited atom count": "deposited atom count",
+        "Experimental method": "experimental method",
+        "Space group": "space group",
+        "Year": "year",
+    }
+    if text in replacements:
+        return replacements[text]
+    if not text:
+        return ""
+    return text[:1].lower() + text[1:]
+
+
+def _format_summary_value_phrase(value):
+    text = _humanize_summary_title_token(value)
+    normalized = re.sub(r"\s+", " ", text).strip()
+    normalized = normalized.replace("(only)", "only")
+    return normalized
+
+
+def _normalize_chart_title(title):
+    if isinstance(title, list):
+        normalized = []
+        for part in title:
+            piece = re.sub(r"\s+", " ", str(part or "")).strip()
+            piece = re.sub(r"\s+([,.;:])", r"\1", piece)
+            if piece:
+                normalized.append(piece)
+        return normalized
+
+    piece = re.sub(r"\s+", " ", str(title or "")).strip()
+    return re.sub(r"\s+([,.;:])", r"\1", piece)
+
+
+def _build_summary_chart_title(selected_content, x_axis="", x_axis_label="", append_for_title=""):
+    x_axis_name = _format_summary_category_phrase(x_axis_label or x_axis)
+    append_suffix = f" {append_for_title.strip()}" if append_for_title else ""
+
+    if x_axis == "bibliography_year":
+        return _normalize_chart_title(
+            [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "Over time",
+            ]
+        )
+
+    if "*" in str(selected_content):
+        selected_key, selected_value = str(selected_content).split("*", 1)
+        category_label = _format_summary_category_phrase(x_axis_name or selected_key)
+        value_label = _format_summary_value_phrase(selected_value)
+        return _normalize_chart_title(
+            [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                f"By {category_label}: {value_label}{append_suffix}",
+            ]
+        )
+
+    category_label = _format_summary_category_phrase(x_axis_name or selected_content)
+    return _normalize_chart_title(
+        [
+            "Cumulative Resolved Membrane Protein (MP) Structures",
+            f"By {category_label}{append_suffix}",
+        ]
+    )
 
 
 class Graph:
@@ -406,10 +509,15 @@ class Graph:
                 Y = alt.Y('Cumulative MP Structures:Q')
             else:
                 X = alt.X(f'{x_axis}:O', axis=alt.Axis(labelFontSize=9), sort=alt.EncodingSortField(field='Cumulative MP Structures', order='descending'), title=x_axis_acronym)
-        title = getTitle(selected_content)
-        
+        title = _normalize_chart_title(getTitle(selected_content))
+
         if title == "" or title == selected_content:
-            title = ["Cumulative sum of resolved Membrane Protein ", "(MP) Structures categorized by " + (selected_content.split("*")[0] + " (" + selected_content.split("*")[1].upper() + ") " + append_for_title if len(selected_content.split("*")) > 1 else selected_content.split("*")[0]).replace("_", " ")]
+            title = _build_summary_chart_title(
+                selected_content=selected_content,
+                x_axis=x_axis,
+                x_axis_label=x_axis_acronym,
+                append_for_title=append_for_title,
+            )
       
         """
         if((x_axis != "bibliography_year") and not sortRangeAxis(x_axis)):
@@ -500,29 +608,47 @@ def replace_value(value):
              otherwise returns the original value.
     """
     replacement_dicts = [
-        { "symspagroup_name_hm": "Space Group", "title": ["Cumulative sum of resolved Membrane Protein (MP) ", "Structures categorized by Space Group."]},
+        {
+            "symspagroup_name_hm": "Space Group",
+            "title": [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By space group",
+            ],
+        },
         { 
             "expressed_in_species*e._coli": "Expressed in Species", 
-            "title": ["Cumulative sum of resolved Membrane Protein (MP) Structures ", "categorized by their expression in the species (E. coli.)"]
+            "title": [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By expression host: E. coli",
+            ],
         },
         { 
             "expressed_in_species*s._frugiperda": "Expressed in Species", 
-            "title": ["Cumulative sum of resolved Membrane Protein (MP) Structures ", "categorized by their expression in the species (S. frugiperda)"]
+            "title": [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By expression host: S. frugiperda",
+            ],
         },
         { 
             "expressed_in_species*hek293_cells": "Expressed in Species", 
-            "title": ["Cumulative sum of resolved Membrane Protein (MP) Structures ", "categorized by their expression in the species ((HEK) 293)"]
+            "title": [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By expression host: HEK293 cells",
+            ],
         },
         {
             "processed_resolution": "Resolution (Angstroms (Å))",
-            "title": ["Cumulative range distribution of resolved Membrane Protein", " (MP) Structures categorized by resolution."]
+            "title": [
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By resolution",
+            ],
         },
         {
             "exptl_crystal_grow_method1": "Crystal Growth Method",
             "title": [
-                "Cumulative sum of resolved Membrane Protein (MP) Structures", 
-                " categorized by crystal growth method."
-            ]
+                "Cumulative Resolved Membrane Protein (MP) Structures",
+                "By crystal growth method",
+            ],
         }
     ]
     for replacement_dict in replacement_dicts:

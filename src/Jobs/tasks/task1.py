@@ -38,8 +38,8 @@ DATASET_REFRESH_TASK_RETRY_OPTIONS = {
     name="shared-task-machine-learning-job",
     bind=True,
     queue="ml",
-    soft_time_limit=60 * 60,
-    time_limit=65 * 60,
+    soft_time_limit=None, #60 * 60,
+    time_limit=None, #65 * 60,
     **TASK_RETRY_OPTIONS,
 )
 def machine_learning_job(self):
@@ -74,15 +74,15 @@ def machine_learning_job(self):
     name="shared-task-sync-tmalphafold-predictions",
     bind=True,
     queue="tm",
-    soft_time_limit=12 * 60 * 60,
-    time_limit=12 * 60 * 60 + 300,
+    soft_time_limit=None, #12 * 60 * 60,
+    time_limit=None, #12 * 60 * 60 + 300,
     **TASK_RETRY_OPTIONS,
 )
 def sync_tmalphafold_predictions_task(
     self,
     methods=None,
     with_tmdet=True,
-    refresh=True,
+    refresh=False,
     retry_errors=False,
     max_workers=8,
     timeout=30,
@@ -118,66 +118,70 @@ def sync_tmalphafold_predictions_task(
         },
     )
 
-    summary = {
-        "tmalphafold": sync_tmalphafold_predictions(
-            methods=methods,
-            with_tmdet=with_tmdet,
-            pdb_codes=None,
-            limit=None,
-            refresh=refresh,
-            retry_errors=retry_errors,
-            max_workers=max_workers,
-            timeout=timeout,
-            backfill_sequences=backfill_sequences,
-            progress_callback=progress,
-        ),
-        "tmbed": None,
-    }
+    try:
+        summary = {
+            "tmalphafold": sync_tmalphafold_predictions(
+                methods=methods,
+                with_tmdet=with_tmdet,
+                pdb_codes=None,
+                limit=None,
+                refresh=refresh,
+                retry_errors=retry_errors,
+                max_workers=max_workers,
+                timeout=timeout,
+                backfill_sequences=backfill_sequences,
+                progress_callback=progress,
+            ),
+            "tmbed": None,
+        }
 
-    if with_tmbed:
-        progress("Starting appended TMbed refresh...")
-        summary["tmbed"] = run_tm_prediction_backfill(
-            include_tmbed=True,
-            include_deeptmhmm=False,
-            use_gpu=tmbed_use_gpu,
-            batch_size=tmbed_batch_size,
-            max_workers=tmbed_max_workers,
-            include_completed=tmbed_refresh,
-            progress_callback=progress,
-        )
-        tmbed_records = (summary["tmbed"] or {}).get("records") or []
-        if tmbed_records:
-            summary["tmbed"]["normalized_store_verification"] = mirror_local_tm_prediction_rows(
-                method="TMbed",
-                records=tmbed_records,
-                provider="MetaMP",
-                prediction_kind="sequence_topology",
+        if with_tmbed:
+            progress("Starting appended TMbed refresh...")
+            summary["tmbed"] = run_tm_prediction_backfill(
+                include_tmbed=True,
+                include_deeptmhmm=False,
+                use_gpu=tmbed_use_gpu,
+                batch_size=tmbed_batch_size,
+                max_workers=tmbed_max_workers,
+                include_completed=tmbed_refresh,
                 progress_callback=progress,
             )
-        else:
-            progress(
-                "Appended TMbed refresh completed without record previews; no extra TMbed normalized-store verification rows were written."
-            )
+            tmbed_records = (summary["tmbed"] or {}).get("records") or []
+            if tmbed_records:
+                summary["tmbed"]["normalized_store_verification"] = mirror_local_tm_prediction_rows(
+                    method="TMbed",
+                    records=tmbed_records,
+                    provider="MetaMP",
+                    prediction_kind="sequence_topology",
+                    progress_callback=progress,
+                )
+            else:
+                progress(
+                    "Appended TMbed refresh completed without record previews; no extra TMbed normalized-store verification rows were written."
+                )
 
-    recorder.record_succeeded(self.name, self.request.id, extra=summary)
-    MetaMPAuditLogService.record_event(
-        "tmalphafold_sync_completed",
-        {
-            "task_id": self.request.id,
-            "task_name": self.name,
-            "summary": summary,
-        },
-    )
-    logger.info("TMAlphaFold sync completed successfully.")
-    return summary
+        recorder.record_succeeded(self.name, self.request.id, extra=summary)
+        MetaMPAuditLogService.record_event(
+            "tmalphafold_sync_completed",
+            {
+                "task_id": self.request.id,
+                "task_name": self.name,
+                "summary": summary,
+            },
+        )
+        logger.info("TMAlphaFold sync completed successfully.")
+        return summary
+    except Exception as exc:
+        recorder.record_failed(self.name, self.request.id, str(exc))
+        raise
 
 
 @shared_task(
     name="shared-task-sync-tmbed-predictions",
     bind=True,
     queue="tm",
-    soft_time_limit=12 * 60 * 60,
-    time_limit=12 * 60 * 60 + 300,
+    soft_time_limit=None, #12 * 60 * 60,
+    time_limit=None, #12 * 60 * 60 + 300,
     **TASK_RETRY_OPTIONS,
 )
 def sync_tmbed_predictions_task(
@@ -208,46 +212,50 @@ def sync_tmbed_predictions_task(
         },
     )
 
-    summary = run_tm_prediction_backfill(
-        include_tmbed=True,
-        include_deeptmhmm=False,
-        use_gpu=use_gpu,
-        batch_size=batch_size,
-        max_workers=max_workers,
-        include_completed=refresh,
-        pdb_codes=pdb_codes,
-        limit=limit,
-        progress_callback=progress,
-    )
-    tmbed_records = (summary or {}).get("records") or []
-    if tmbed_records:
-        summary["normalized_store_verification"] = mirror_local_tm_prediction_rows(
-            method="TMbed",
-            records=tmbed_records,
-            provider="MetaMP",
-            prediction_kind="sequence_topology",
+    try:
+        summary = run_tm_prediction_backfill(
+            include_tmbed=True,
+            include_deeptmhmm=False,
+            use_gpu=use_gpu,
+            batch_size=batch_size,
+            max_workers=max_workers,
+            include_completed=refresh,
+            pdb_codes=pdb_codes,
+            limit=limit,
             progress_callback=progress,
         )
+        tmbed_records = (summary or {}).get("records") or []
+        if tmbed_records:
+            summary["normalized_store_verification"] = mirror_local_tm_prediction_rows(
+                method="TMbed",
+                records=tmbed_records,
+                provider="MetaMP",
+                prediction_kind="sequence_topology",
+                progress_callback=progress,
+            )
 
-    recorder.record_succeeded(self.name, self.request.id, extra=summary)
-    MetaMPAuditLogService.record_event(
-        "tmbed_sync_completed",
-        {
-            "task_id": self.request.id,
-            "task_name": self.name,
-            "summary": summary,
-        },
-    )
-    logger.info("TMbed-only sync completed successfully.")
-    return summary
+        recorder.record_succeeded(self.name, self.request.id, extra=summary)
+        MetaMPAuditLogService.record_event(
+            "tmbed_sync_completed",
+            {
+                "task_id": self.request.id,
+                "task_name": self.name,
+                "summary": summary,
+            },
+        )
+        logger.info("TMbed-only sync completed successfully.")
+        return summary
+    except Exception as exc:
+        recorder.record_failed(self.name, self.request.id, str(exc))
+        raise
 
 
 @shared_task(
     name="shared-task-predict-tm-sequences",
     bind=True,
     queue="ml",
-    soft_time_limit=30 * 60,
-    time_limit=35 * 60,
+    soft_time_limit=None, #30 * 60,
+    time_limit=None, #35 * 60,
     **TASK_RETRY_OPTIONS,
 )
 def predict_tm_sequences(
@@ -274,8 +282,8 @@ def predict_tm_sequences(
 @shared_task(
     name="background-refresh-protein-datasets",
     bind=True,
-    soft_time_limit=2 * 60 * 60,
-    time_limit=2 * 60 * 60 + 300,
+    soft_time_limit=None, #2 * 60 * 60,
+    time_limit=None, #2 * 60 * 60 + 300,
     **DATASET_REFRESH_TASK_RETRY_OPTIONS,
 )
 def refresh_protein_datasets(self):
@@ -293,8 +301,8 @@ def refresh_protein_datasets(self):
 @shared_task(
     name="shared-task-sync-protein-database",
     bind=True,
-    soft_time_limit=2 * 60 * 60,
-    time_limit=2 * 60 * 60 + 300,
+    soft_time_limit=None, #2 * 60 * 60,
+    time_limit=None, #2 * 60 * 60 + 300,
     **DATASET_REFRESH_TASK_RETRY_OPTIONS,
 )
 def scheduled_sync_command(self):
@@ -330,8 +338,8 @@ def question_feedback_scheduled_sync_command(self):
 @shared_task(
     name="shared-task-monthly-production-maintenance",
     bind=True,
-    soft_time_limit=3 * 60 * 60,
-    time_limit=3 * 60 * 60 + 300,
+    soft_time_limit=None, #3 * 60 * 60,
+    time_limit=None, #3 * 60 * 60 + 300,
     **DATASET_REFRESH_TASK_RETRY_OPTIONS,
 )
 def monthly_production_maintenance(

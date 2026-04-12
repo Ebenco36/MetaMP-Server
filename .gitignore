@@ -158,3 +158,8 @@ vendor/wheels/
 
 release-snapshots
 test.txt
+
+.pycache-check/
+.pycache_check/
+.pycache/
+.pytest_cache/

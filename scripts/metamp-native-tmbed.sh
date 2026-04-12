@@ -17,6 +17,7 @@ CSV_OUT=""
 RUN_ALL=0
 INCLUDE_COMPLETED=0
 RETRY_ERRORS=0
+EXPERT_BENCHMARK=0
 COMMAND_NAME="${1:-}"
 shift || true
 PDB_CODES=()
@@ -61,6 +62,7 @@ Options:
   --limit N            Restrict the run to the first N targets.
   --pdb-code CODE      Restrict the run to one or more PDB codes. Repeat as needed.
   --pdb-code-file PATH Read one or more PDB codes from a file.
+  --expert-benchmark   Restrict the run to the 121 PDB codes in datasets/expert_annotation_predicted.csv.
   --batch-size N       Optional TMbed batch size override.
   --max-workers N      Optional TMbed worker-count override.
   --csv-out PATH       Optional resumable/output CSV path for sync mode.
@@ -72,6 +74,7 @@ Examples:
   bash scripts/metamp-native-tmbed.sh doctor
   bash scripts/metamp-native-tmbed.sh sync --all --device auto
   bash scripts/metamp-native-tmbed.sh fallback --all --device gpu --batch-size 10
+  bash scripts/metamp-native-tmbed.sh sync --expert-benchmark --device auto
   bash scripts/metamp-native-tmbed.sh sync --pdb-code 6N7G --device cpu --include-completed
 EOF
 }
@@ -84,18 +87,77 @@ normalize_pdb_code() {
   printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
+append_unique_pdb_code() {
+  local normalized
+  normalized="$(normalize_pdb_code "$1")"
+  [[ -n "$normalized" ]] || return 0
+
+  local existing
+  for existing in "${PDB_CODES[@]}"; do
+    [[ "$existing" == "$normalized" ]] && return 0
+  done
+  PDB_CODES+=("$normalized")
+}
+
 load_pdb_codes_from_file() {
   [[ -n "$PDB_CODE_FILE" ]] || return 0
   require_file "$PDB_CODE_FILE"
   while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
     local token
     for token in ${raw_line//,/ }; do
-      token="$(normalize_pdb_code "$token")"
-      if [[ -n "$token" ]]; then
-        PDB_CODES+=("$token")
-      fi
+      append_unique_pdb_code "$token"
     done
   done < "$PDB_CODE_FILE"
+}
+
+load_expert_benchmark_pdb_codes() {
+  [[ "$EXPERT_BENCHMARK" -eq 1 ]] || return 0
+
+  local dataset_path="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
+  require_file "$dataset_path"
+
+  local exported_codes
+  if ! exported_codes="$("$PYTHON_BIN" - "$dataset_path" <<'PY'
+import csv
+import sys
+
+path = sys.argv[1]
+with open(path, newline="") as handle:
+    reader = csv.DictReader(handle)
+    fieldnames = reader.fieldnames or []
+    code_key = next(
+        (
+            name
+            for name in fieldnames
+            if name.strip().lower() in {"pdb code", "pdb_code", "pdb"}
+        ),
+        None,
+    )
+    if code_key is None:
+        raise SystemExit(
+            f"Unable to locate a PDB code column in expert benchmark dataset: {path}"
+        )
+
+    seen = set()
+    for row in reader:
+        code = (row.get(code_key) or "").strip().upper()
+        if code and code not in seen:
+            seen.add(code)
+            print(code)
+PY
+)"; then
+    die "Unable to load expert benchmark PDB codes from $dataset_path"
+  fi
+
+  local count=0
+  local pdb_code=""
+  while IFS= read -r pdb_code || [[ -n "$pdb_code" ]]; do
+    [[ -n "$pdb_code" ]] || continue
+    append_unique_pdb_code "$pdb_code"
+    count=$((count + 1))
+  done <<< "$exported_codes"
+
+  log "Loaded $count expert-benchmark PDB code(s) from $dataset_path."
 }
 
 load_env_file() {
@@ -315,8 +377,8 @@ append_device_args() {
 }
 
 require_explicit_scope() {
-  if [[ "$RUN_ALL" -eq 0 && -z "$LIMIT" && "${#PDB_CODES[@]}" -eq 0 ]]; then
-    die "Provide --all, --limit, or at least one --pdb-code so the TMbed scope is explicit."
+  if [[ "$RUN_ALL" -eq 0 && -z "$LIMIT" && "${#PDB_CODES[@]}" -eq 0 && "$EXPERT_BENCHMARK" -eq 0 ]]; then
+    die "Provide --all, --limit, --expert-benchmark, or at least one --pdb-code so the TMbed scope is explicit."
   fi
 }
 
@@ -432,6 +494,10 @@ while [[ $# -gt 0 ]]; do
       PDB_CODE_FILE="$2"
       shift 2
       ;;
+    --expert-benchmark)
+      EXPERT_BENCHMARK=1
+      shift
+      ;;
     --batch-size)
       BATCH_SIZE="$2"
       shift 2
@@ -478,6 +544,7 @@ cd "$ROOT_DIR"
 require_project_inputs
 load_pdb_codes_from_file
 resolve_python_runtime
+load_expert_benchmark_pdb_codes
 prepare_native_env
 
 log "Python runtime: $PYTHON_BIN"

@@ -183,37 +183,6 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
     return list(dict.fromkeys(v for v in values if v))
 
 
-def _derive_disagreement_signal(record: dict[str, Any]) -> tuple[bool, str | None]:
-    """Infer additional caution from disagreement-oriented record fields.
-
-    This remains deliberately conservative so production behavior is stable even
-    when some records do not include these fields.
-    """
-    explicit_score = record.get("topology_disagreement_score")
-    try:
-        if explicit_score is not None and float(explicit_score) >= 2.0:
-            return True, "High topology disagreement score suggests unstable or context-dependent interpretation."
-    except (TypeError, ValueError):
-        pass
-
-    fields = [
-        record.get("disagreement_count"),
-        record.get("predictor_disagreement_count"),
-        record.get("tm_count_spread"),
-    ]
-    numeric_values: list[float] = []
-    for value in fields:
-        try:
-            if value is not None and str(value).strip() != "":
-                numeric_values.append(float(value))
-        except (TypeError, ValueError):
-            continue
-    if any(value >= 2 for value in numeric_values):
-        return True, "Predictor/source disagreement indicates the entry may need expert review before strict benchmarking."
-
-    return False, None
-
-
 def build_scientific_assessment(record: dict | None) -> dict:
     record = record or {}
     pdb_code = str(
@@ -239,6 +208,7 @@ def build_scientific_assessment(record: dict | None) -> dict:
         "soft_review_reasons": [],
     }
     benchmark_recommended_override: bool | None = None
+    explicit_benchmark_override = False
     notes: list[str] = []
 
     override = ENTRY_FLAG_OVERRIDES.get(pdb_code)
@@ -251,10 +221,8 @@ def build_scientific_assessment(record: dict | None) -> dict:
             elif key == "confidence":
                 _append_confidence(raw_flags["confidence_scores"], value)
             elif key == "sequence_only_topology_benchmark_suitable":
-                benchmark_recommended_override = _set_benchmark_override(
-                    benchmark_recommended_override,
-                    _normalize_bool_like(value),
-                )
+                benchmark_recommended_override = _normalize_bool_like(value)
+                explicit_benchmark_override = benchmark_recommended_override is not None
             else:
                 raw_flags[key] = value
 
@@ -268,10 +236,11 @@ def build_scientific_assessment(record: dict | None) -> dict:
             notes.append(str(reason))
 
         _append_confidence(raw_flags["confidence_scores"], rule.get("confidence"))
-        benchmark_recommended_override = _set_benchmark_override(
-            benchmark_recommended_override,
-            _normalize_bool_like(rule.get("benchmark_override")),
-        )
+        if not explicit_benchmark_override:
+            benchmark_recommended_override = _set_benchmark_override(
+                benchmark_recommended_override,
+                _normalize_bool_like(rule.get("benchmark_override")),
+            )
 
         for key, value in (rule.get("flags") or {}).items():
             if isinstance(value, bool):
@@ -281,13 +250,6 @@ def build_scientific_assessment(record: dict | None) -> dict:
 
         if rule.get("benchmark_override") is None and reason:
             raw_flags["soft_review_reasons"].append(str(reason))
-
-    disagreement_signal, disagreement_reason = _derive_disagreement_signal(record)
-    if disagreement_signal:
-        raw_flags["matched_rule_ids"].append("derived:disagreement_signal")
-        raw_flags["soft_review_reasons"].append(disagreement_reason or "Predictor/source disagreement detected.")
-        _append_confidence(raw_flags["confidence_scores"], "medium")
-        notes.append(disagreement_reason or "Predictor/source disagreement detected.")
 
     if raw_flags["obsolete_or_replaced"]:
         notes.append(

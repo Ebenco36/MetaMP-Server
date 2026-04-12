@@ -10,6 +10,7 @@ import logging
 import shutil
 import site
 import platform
+import importlib.metadata
 from functools import lru_cache
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -18,6 +19,7 @@ import pandas as pd
 import psycopg2
 from psycopg2 import sql
 from tempfile import NamedTemporaryFile
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 try:
     import torch
@@ -38,6 +40,10 @@ if not logging.getLogger().handlers:
     )
 
 _TMBED_UTILS_PATCH_ATTEMPTED = False
+_TMBED_SMOKE_TEST_SEQUENCE_ID = "SMOKE_3LDC"
+_TMBED_SMOKE_TEST_SEQUENCE = (
+    "VPATRILLLVLAVIIYGTAGFHFIEGESWTVSLYWTFVTIATVGYGDYSPHTPLGMYFTCTLIVLGIGTFAVAVERLLEFLI"
+)
 
 
 def _is_missing_value(value):
@@ -132,6 +138,40 @@ def _find_tmbed_utils_path() -> Optional[Path]:
         if candidate.exists():
             return candidate
     return None
+
+
+def _find_tmbed_models_dir() -> Optional[Path]:
+    candidates = []
+    try:
+        candidates.extend(site.getsitepackages())
+    except Exception:
+        pass
+    try:
+        candidates.append(site.getusersitepackages())
+    except Exception:
+        pass
+    try:
+        import tmbed
+
+        candidates.append(str(Path(tmbed.__file__).parent.parent))
+    except Exception:
+        pass
+
+    for site_path in candidates:
+        candidate = Path(site_path) / "tmbed" / "models"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _get_tmbed_cnn_model_files() -> list[Path]:
+    models_dir = _find_tmbed_models_dir()
+    if models_dir is None:
+        return []
+    cnn_dir = models_dir / "cnn"
+    if not cnn_dir.exists():
+        return []
+    return sorted(cnn_dir.glob("cv_*.pt"))
 
 
 def _patch_tmbed_utils() -> None:
@@ -282,6 +322,12 @@ def _tmbed_thread_flags(device: str, threads: Optional[int]) -> list[str]:
     return []
 
 
+def _tmbed_model_dir_flags(subcommand: str, model_dir: Path) -> list[str]:
+    if _tmbed_subcommand_supports_option(subcommand, "--model-dir"):
+        return ["--model-dir", str(model_dir)]
+    return []
+
+
 def _physical_cpu_count() -> int:
     count = None
     if psutil is not None:
@@ -301,6 +347,13 @@ def _system_memory_gb() -> Optional[float]:
         except Exception:
             return None
     return None
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return str(raw_value).strip().lower() in {"1", "true", "yes", "on", "y", "t"}
 
 
 def _fasta_sequence_lengths(fasta_text: str) -> list[int]:
@@ -410,6 +463,139 @@ def _plan_tmbed_runtime(
     }
 
 
+def _tmbed_smoke_test_expected_count(count: int) -> bool:
+    return 2 <= int(count or 0) <= 4
+
+
+@lru_cache(maxsize=4)
+def get_tmbed_runtime_status(use_gpu: bool = False) -> dict:
+    machine = str(platform.machine() or "").strip().lower()
+    if not _env_bool("TMBED_ENABLED", True):
+        return {
+            "available": False,
+            "reason": "TMbed is disabled by TMBED_ENABLED=false.",
+            "machine": machine,
+        }
+
+    allow_arm64 = _env_bool("TMBED_ALLOW_ARM64", False)
+    if machine in {"arm64", "aarch64"} and not allow_arm64:
+        return {
+            "available": False,
+            "reason": (
+                "TMbed is disabled on this runtime because current arm64/aarch64 "
+                "builds are producing pathological predictions. Use DeepTMHMM/TMHMM/TMDET "
+                "instead, or set TMBED_ALLOW_ARM64=true only for controlled debugging."
+            ),
+            "machine": machine,
+        }
+
+    if not _env_bool("TMBED_REQUIRE_HEALTHCHECK", True):
+        return {"available": True, "reason": "TMbed runtime healthcheck disabled.", "machine": machine}
+
+    try:
+        transformers_version = importlib.metadata.version("transformers")
+    except importlib.metadata.PackageNotFoundError:
+        transformers_version = "unknown"
+    try:
+        tmbed_version = importlib.metadata.version("tmbed")
+    except importlib.metadata.PackageNotFoundError:
+        tmbed_version = "unknown"
+    cnn_model_files = _get_tmbed_cnn_model_files()
+    cnn_model_count = len(cnn_model_files)
+    if cnn_model_count < 5:
+        return {
+            "available": False,
+            "reason": (
+                "TMbed predictor weights are incomplete: expected 5 CNN ensemble files "
+                f"under tmbed/models/cnn, found {cnn_model_count}."
+            ),
+            "machine": machine,
+            "transformers_version": transformers_version,
+            "tmbed_version": tmbed_version,
+            "cnn_model_count": cnn_model_count,
+        }
+
+    temp_dir = None
+    try:
+        _patch_tmbed_utils()
+        model_dir = _get_tmbed_model_dir()
+        device = detect_tmbed_device(use_gpu=use_gpu)
+        _ensure_tmbed_model_downloaded(model_dir, device)
+        smoke_root = model_dir / "smoke-tests"
+        smoke_root.mkdir(parents=True, exist_ok=True)
+        temp_dir = Path(
+            tempfile.mkdtemp(prefix="tmbed_smoke_", dir=str(smoke_root))
+        )
+        fasta_path = temp_dir / "smoke.fasta"
+        fasta_path.write_text(
+            f">{_TMBED_SMOKE_TEST_SEQUENCE_ID}\n{_TMBED_SMOKE_TEST_SEQUENCE}\n"
+        )
+        embeddings_path = temp_dir / "smoke_embeddings.h5"
+        pred_path = str(temp_dir / "smoke.pred")
+        _run_tmbed_embed(
+            fasta_path=str(fasta_path),
+            embeddings_path=embeddings_path,
+            device=device,
+            batch_size=1,
+            threads=1,
+            model_dir=model_dir,
+        )
+        _run_tmbed_predict(
+            fasta_path=str(fasta_path),
+            pred_path=pred_path,
+            embeddings_path=embeddings_path,
+            out_format=0,
+            device=device,
+            batch_size=1,
+            threads=1,
+            model_dir=model_dir,
+        )
+        parsed = parse_tmbed_output(pred_path, out_format=0)
+        payload = parsed.get(_TMBED_SMOKE_TEST_SEQUENCE_ID) or {}
+        tm_count = int(payload.get("count") or 0)
+        if not _tmbed_smoke_test_expected_count(tm_count):
+            return {
+                "available": False,
+                "reason": (
+                    "TMbed failed the smoke test: expected a small multi-pass topology "
+                    f"for {_TMBED_SMOKE_TEST_SEQUENCE_ID}, received tm_count={tm_count}."
+                ),
+                "machine": machine,
+                "device": device,
+                "transformers_version": transformers_version,
+                "tmbed_version": tmbed_version,
+                "cnn_model_count": cnn_model_count,
+            }
+        return {
+            "available": True,
+            "reason": "TMbed smoke test passed.",
+            "machine": machine,
+            "device": device,
+            "transformers_version": transformers_version,
+            "tmbed_version": tmbed_version,
+            "cnn_model_count": cnn_model_count,
+            "smoke_test_tm_count": tm_count,
+        }
+    except Exception as exc:
+        return {
+            "available": False,
+            "reason": f"TMbed failed the runtime smoke test: {exc}",
+            "machine": machine,
+            "transformers_version": transformers_version,
+            "tmbed_version": tmbed_version,
+            "cnn_model_count": cnn_model_count,
+        }
+    finally:
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def _tmbed_runtime_guard(use_gpu: bool = False) -> None:
+    status = get_tmbed_runtime_status(use_gpu=use_gpu)
+    if not status.get("available"):
+        raise RuntimeError(str(status.get("reason") or "TMbed runtime unavailable."))
+
+
 @lru_cache(maxsize=8)
 def _tmbed_subcommand_supports_option(subcommand: str, option_name: str) -> bool:
     try:
@@ -452,7 +638,13 @@ def _ensure_tmbed_model_downloaded(model_dir: Path, device: str) -> None:
     if marker_path.exists():
         return
     logger.info("[TMbed] Downloading ProtT5 model (~2.25 GB)...")
-    cmd = [sys.executable, "-m", "tmbed", "download"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "tmbed",
+        "download",
+        *_tmbed_model_dir_flags("download", model_dir),
+    ]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -490,6 +682,7 @@ def _run_tmbed_embed(
             str(embeddings_path),
             "--batch-size",
             str(attempt_batch_size),
+            *_tmbed_model_dir_flags("embed", model_dir),
             *_tmbed_gpu_flags(device, cpu_fallback),
             *_tmbed_thread_flags(device, threads),
         ]
@@ -555,6 +748,7 @@ def _run_tmbed_predict(
             str(out_format),
             "--batch-size",
             str(attempt_batch_size),
+            *_tmbed_model_dir_flags("predict", model_dir),
             *_tmbed_gpu_flags(device, cpu_fallback),
             *_tmbed_thread_flags(device, threads),
         ]
@@ -726,6 +920,39 @@ def _extract_tmbed_tm_segments(segments: list[dict]) -> list[dict]:
     return [segment for segment in segments if segment["type"] in {"TM_helix", "TM_barrel"}]
 
 
+def _is_pathological_tmbed_prediction(
+    sequence: str,
+    topology: str,
+    normalized_regions: list[dict],
+) -> bool:
+    sequence = (sequence or "").strip()
+    topology = (topology or "").strip()
+    if not sequence or not topology:
+        return False
+
+    sequence_length = len(sequence)
+    if sequence_length < 30:
+        return False
+
+    unique_labels = {label for label in topology if label.strip()}
+    if len(unique_labels) == 1 and unique_labels.issubset({"B", "b"}):
+        return True
+
+    if len(normalized_regions) != 1:
+        return False
+
+    region = normalized_regions[0] or {}
+    region_length = int(region.get("length") or 0)
+    label = str(region.get("label") or "").strip()
+    coverage = region_length / max(1, sequence_length)
+
+    if label in {"B", "b"} and coverage >= 0.90:
+        return True
+    if label in {"H", "h"} and coverage >= 0.95:
+        return True
+    return False
+
+
 def parse_tmbed_output(pred_path: str, out_format: int = 4) -> dict[str, dict]:
     if out_format not in {0, 1, 4}:
         raise ValueError(f"Unsupported TMbed output format for MetaMP parsing: {out_format}")
@@ -757,6 +984,12 @@ def parse_tmbed_output(pred_path: str, out_format: int = 4) -> dict[str, dict]:
                 for segment in tm_segments
             ]
         )
+        if _is_pathological_tmbed_prediction(sequence, topology, normalized_regions):
+            raise ValueError(
+                "TMbed produced a pathological full-length topology for "
+                f"{sequence_id}: topology={topology[:80]}"
+                f"{'...' if len(topology) > 80 else ''}"
+            )
         details[sequence_id] = {
             "sequence": sequence,
             "topology": topology,
@@ -879,14 +1112,30 @@ def normalize_tm_regions_json_string(value):
     return serialize_tm_regions(normalized_regions) if normalized_regions else "[]"
 
 
-def build_tm_prediction_payload(counts, regions):
-    sequence_ids = set((counts or {}).keys()) | set((regions or {}).keys())
+def _normalize_prediction_errors(errors):
+    normalized = {}
+    for sequence_id, message in (errors or {}).items():
+        sid = str(sequence_id or "").strip()
+        text = str(message or "").strip()
+        if sid and text:
+            normalized[sid] = text
+    return normalized
+
+
+def build_tm_prediction_payload(counts, regions, errors=None):
+    normalized_errors = _normalize_prediction_errors(errors)
+    sequence_ids = (
+        set((counts or {}).keys())
+        | set((regions or {}).keys())
+        | set(normalized_errors.keys())
+    )
     return {
         "counts": counts,
         "regions": {
             sequence_id: _normalize_tm_regions((regions or {}).get(sequence_id) or [])
             for sequence_id in sequence_ids
         },
+        "errors": normalized_errors,
     }
 
 
@@ -933,6 +1182,7 @@ class TMbedPredictor(BasePredictor):
         return self.predict_with_details(fasta_path)["counts"]
 
     def predict_with_details(self, fasta_path: str) -> dict[str, dict]:
+        _tmbed_runtime_guard(use_gpu=self.use_gpu)
         _patch_tmbed_utils()
         model_dir = _get_tmbed_model_dir()
         device = detect_tmbed_device(use_gpu=self.use_gpu)
@@ -964,6 +1214,7 @@ class TMbedPredictor(BasePredictor):
         cache_dir.mkdir(parents=True, exist_ok=True)
         embeddings_path = cache_dir / f"{_fasta_hash(fasta_text)}.h5"
         pred_path = fasta_path + ".pred"
+        batch_failure_message = ""
 
         try:
             if not _cache_is_valid(fasta_text, embeddings_path):
@@ -1003,19 +1254,25 @@ class TMbedPredictor(BasePredictor):
             )
         except Exception as exc:
             print(f"[TMbed] Batch prediction failed: {exc}")
+            batch_failure_message = f"{type(exc).__name__}: {exc}"
         finally:
             if os.path.exists(pred_path):
                 os.remove(pred_path)
 
         records = _read_fasta_records(fasta_path)
         if len(records) <= 1:
-            return build_tm_prediction_payload({}, {})
+            single_errors = {}
+            if records:
+                sequence_id, _ = records[0]
+                if batch_failure_message:
+                    single_errors[sequence_id] = batch_failure_message
+            return build_tm_prediction_payload({}, {}, errors=single_errors)
 
         print(
             f"[TMbed] Falling back to per-sequence recovery for {len(records)} sequences."
         )
         recovered_details: dict[str, dict] = {}
-        failed_ids: list[str] = []
+        failed_errors: dict[str, str] = {}
 
         for sequence_id, sequence in records:
             try:
@@ -1064,19 +1321,20 @@ class TMbedPredictor(BasePredictor):
                         os.remove(single_pred_path)
             except Exception:
                 traceback.print_exc()
-                failed_ids.append(sequence_id)
+                failed_errors[sequence_id] = traceback.format_exc().strip().splitlines()[-1]
 
-        if failed_ids:
+        if failed_errors:
             print(
-                f"[TMbed] Unable to recover predictions for {len(failed_ids)} sequence(s): "
-                + ", ".join(failed_ids[:10])
-                + (" ..." if len(failed_ids) > 10 else "")
+                f"[TMbed] Unable to recover predictions for {len(failed_errors)} sequence(s): "
+                + ", ".join(list(failed_errors.keys())[:10])
+                + (" ..." if len(failed_errors) > 10 else "")
             )
 
         details = recovered_details
         return build_tm_prediction_payload(
             {sequence_id: payload["count"] for sequence_id, payload in details.items()},
             {sequence_id: payload["regions"] for sequence_id, payload in details.items()},
+            errors=failed_errors,
         )
 
 
@@ -1252,8 +1510,10 @@ class MultiModelAnalyzer:
 
         for start in range(0, total, self.batch_size):
             end = min(start + self.batch_size, total)
-            batch = df.iloc[start:end]
-            print(f"\n🔄 Batch {start}-{end}...")
+            display_start = start + 1
+            display_end = end
+            batch = df.iloc[start:end].copy()
+            print(f"\n🔄 Batch {display_start}-{display_end} of {total}...")
 
             try:
                 # 1. Store sequences
@@ -1322,12 +1582,21 @@ class MultiModelAnalyzer:
                     for name, prediction_result in results_map:
                         counts = prediction_result.get("counts", {})
                         regions = prediction_result.get("regions", {})
+                        errors = prediction_result.get("errors", {})
                         count_col = f"{name}_tm_count"
                         region_col = f"{name}_tm_regions"
+                        error_col = f"{name}_error_message"
+                        if error_col not in batch.columns:
+                            batch[error_col] = ""
                         for sid, ct in counts.items():
                             batch.loc[batch[id_col] == sid, count_col] = int(ct)
+                            batch.loc[batch[id_col] == sid, error_col] = ""
                         for sid, tm_regions in regions.items():
                             batch.loc[batch[id_col] == sid, region_col] = serialize_tm_regions(tm_regions)
+                            if sid not in errors:
+                                batch.loc[batch[id_col] == sid, error_col] = ""
+                        for sid, error_message in errors.items():
+                            batch.loc[batch[id_col] == sid, error_col] = str(error_message or "").strip()
 
                 # 3. Store predictions
                 if self.use_db:
@@ -1362,7 +1631,7 @@ class MultiModelAnalyzer:
                 combined = pd.concat([done_df] + results, ignore_index=True)
                 if self.write_csv and csv_out:
                     combined.to_csv(csv_out, index=False)
-                    print(f"💾 Batch {start}-{end} progress saved to {csv_out}")
+                    print(f"💾 Batch {display_start}-{display_end} progress saved to {csv_out}")
                 if on_batch_completed is not None:
                     on_batch_completed(
                         batch.copy(),
@@ -1373,7 +1642,7 @@ class MultiModelAnalyzer:
 
             except Exception as e:
                 traceback.print_exc()
-                print(f"❌ Batch {start}-{end} failed: {e}")
+                print(f"❌ Batch {display_start}-{display_end} of {total} failed: {e}")
                 continue
 
         if self.use_db:

@@ -558,7 +558,12 @@ class Pages:
         # Create the 100% stacked bar chart using Altair
         chart = alt.Chart(d_melted).mark_bar().encode(
             x=alt.X('bibliography_year:O', title='Year', scale=alt.Scale(paddingInner=0.2, paddingOuter=0.2)),
-            y=alt.Y('percentage:Q', title='Proportional Representation of Databases Entries (%)', scale=alt.Scale(domain=[0, 100])),
+            y=alt.Y(
+                'percentage:Q',
+                title='Proportional Representation of Databases Entries (%)',
+                scale=alt.Scale(domain=[0, 100]),
+                axis=alt.Axis(values=list(range(0, 101, 10)))
+            ),
             color=alt.Color(
                 'database:N',
                 scale=alt.Scale(domain=list(custom_colors.keys()), range=list(custom_colors.values())),
@@ -595,7 +600,7 @@ class Pages:
         
         chart = chart.properties(
             width=800,
-            height=400,
+            height=460,
             title="Comparative Annual Representation of Membrane Protein Entries from the MPstruc, PDB, OPM, and UniProt Databases."
         )
         

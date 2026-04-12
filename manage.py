@@ -57,6 +57,7 @@ from src.Jobs.TMAlphaFoldSync import (
     mirror_local_tm_prediction_rows,
     sync_tmalphafold_predictions,
 )
+from src.AI_Packages.TMProteinPredictor import get_tmbed_runtime_status
 
 migrate = Migrate(app, db)
 cli = FlaskGroup(create_app=create_app)
@@ -96,6 +97,13 @@ def _normalize_cli_pdb_codes(pdb_codes):
         if text:
             normalized.append(text)
     return list(dict.fromkeys(normalized))
+
+
+def _ensure_tmbed_runtime_healthy(use_gpu=False):
+    status = get_tmbed_runtime_status(use_gpu=use_gpu)
+    if status.get("available"):
+        return status
+    raise click.ClickException(str(status.get("reason") or "TMbed runtime unavailable."))
 
 
 @app.cli.command("refresh-protein-datasets")
@@ -443,28 +451,41 @@ def run_tmalphafold_now(
     }
     if with_tmbed:
         _ensure_ml_runtime("sync-tmalphafold-predictions --with-tmbed", "tmbed")
-        click.echo("Running appended TMbed backfill after TMAlphaFold sync...")
-        summary["tmbed"] = run_tm_prediction_backfill(
-            include_tmbed=True,
-            include_deeptmhmm=False,
-            use_gpu=tmbed_use_gpu,
-            batch_size=tmbed_batch_size,
-            max_workers=tmbed_max_workers,
-            csv_out=tmbed_csv_out,
-            include_completed=tmbed_refresh,
-            pdb_codes=selected_codes,
-            limit=limit,
-            progress_callback=click.echo,
-        )
-        tmbed_records = (summary["tmbed"] or {}).get("records") or []
-        if tmbed_records:
-            summary["tmbed"]["normalized_store_verification"] = mirror_local_tm_prediction_rows(
-                method="TMbed",
-                records=tmbed_records,
-                provider="MetaMP",
-                prediction_kind="sequence_topology",
+        status = get_tmbed_runtime_status(use_gpu=tmbed_use_gpu)
+        if not status.get("available"):
+            click.echo(
+                "Skipping appended TMbed backfill because the runtime is not healthy: "
+                + str(status.get("reason") or "unknown reason")
+            )
+            summary["tmbed"] = {
+                "queued_records": 0,
+                "processed_records": 0,
+                "predictors": [],
+                "message": str(status.get("reason") or "TMbed runtime unavailable."),
+            }
+        else:
+            click.echo("Running appended TMbed backfill after TMAlphaFold sync...")
+            summary["tmbed"] = run_tm_prediction_backfill(
+                include_tmbed=True,
+                include_deeptmhmm=False,
+                use_gpu=tmbed_use_gpu,
+                batch_size=tmbed_batch_size,
+                max_workers=tmbed_max_workers,
+                csv_out=tmbed_csv_out,
+                include_completed=tmbed_refresh,
+                pdb_codes=selected_codes,
+                limit=limit,
                 progress_callback=click.echo,
             )
+            tmbed_records = (summary["tmbed"] or {}).get("records") or []
+            if tmbed_records:
+                summary["tmbed"]["normalized_store_verification"] = mirror_local_tm_prediction_rows(
+                    method="TMbed",
+                    records=tmbed_records,
+                    provider="MetaMP",
+                    prediction_kind="sequence_topology",
+                    progress_callback=click.echo,
+                )
     DashboardAnnotationDatasetService._record_payload_cache.clear()
     click.echo(json.dumps(summary, indent=2))
 
@@ -544,6 +565,7 @@ def sync_tmbed_predictions_cli(
         )
 
     _ensure_ml_runtime("sync-tmbed-predictions", "tmbed")
+    _ensure_tmbed_runtime_healthy(use_gpu=use_gpu)
     summary = run_tm_prediction_backfill(
         include_tmbed=True,
         include_deeptmhmm=False,

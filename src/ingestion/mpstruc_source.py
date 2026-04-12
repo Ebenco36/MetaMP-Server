@@ -25,6 +25,14 @@ class MPStrucDatasetSource(DatasetSource):
         context.layout.ensure_directories()
         xml_path = context.layout.mpstruc_xml(context.run_date)
 
+        existing_xml_dataset = self._reuse_existing_run_date_xml(context, xml_path)
+        if existing_xml_dataset is not None:
+            return existing_xml_dataset
+
+        existing_csv_dataset = self._reuse_existing_run_date_dataset(context)
+        if existing_csv_dataset is not None:
+            return existing_csv_dataset
+
         if os.getenv("MPSTRUC_REPARSE_CURRENT_XML", "false").lower() == "true":
             reparsed = self._reparse_current_xml_snapshot(context, xml_path)
             if reparsed is not None:
@@ -63,6 +71,76 @@ class MPStrucDatasetSource(DatasetSource):
         ids.to_csv(context.layout.mpstruc_ids_current, index=False)
         context.report(
             f"[mpstruc] Wrote {len(dataset)} row(s) and {len(ids)} identifier(s)"
+        )
+        return dataset
+
+    def _reuse_existing_run_date_xml(self, context: IngestionContext, xml_path: Path):
+        if not xml_path.exists() or not xml_path.is_file():
+            return None
+
+        try:
+            if xml_path.stat().st_size == 0:
+                context.report(
+                    f"[mpstruc] Existing XML snapshot {xml_path.name} is empty; falling back to source fetch"
+                )
+                return None
+        except OSError:
+            return None
+
+        context.report(
+            f"[mpstruc] Found existing XML snapshot {xml_path.name}; reparsing local file without downloading"
+        )
+        dataset, ids = self._parse_xml(xml_path)
+        self._try_write_bytes(
+            context.layout.mpstruc_xml_current,
+            xml_path.read_bytes(),
+            context,
+            "[mpstruc] Unable to refresh current XML snapshot from existing local file",
+        )
+        dataset.to_csv(context.layout.mpstruc_dataset(context.run_date), index=False)
+        dataset.to_csv(context.layout.mpstruc_dataset_current, index=False)
+        ids.to_csv(context.layout.mpstruc_ids_current, index=False)
+        context.report(
+            f"[mpstruc] Rebuilt {len(dataset)} row(s) and {len(ids)} identifier(s) from existing XML snapshot"
+        )
+        return dataset
+
+    def _reuse_existing_run_date_dataset(self, context: IngestionContext):
+        dataset_path = context.layout.mpstruc_dataset(context.run_date)
+        if not dataset_path.exists() or not dataset_path.is_file():
+            return None
+
+        try:
+            if dataset_path.stat().st_size == 0:
+                context.report(
+                    f"[mpstruc] Existing dataset snapshot {dataset_path.name} is empty; falling back to XML/source fetch"
+                )
+                return None
+        except OSError:
+            return None
+
+        try:
+            dataset = pd.read_csv(dataset_path, low_memory=False)
+        except Exception as error:
+            context.report(
+                f"[mpstruc] Existing dataset snapshot {dataset_path.name} could not be read ({error}); falling back to XML/source fetch"
+            )
+            return None
+
+        ids = self._build_ids_from_dataset(dataset)
+        if ids is None:
+            context.report(
+                f"[mpstruc] Existing dataset snapshot {dataset_path.name} is missing a PDB code column; falling back to XML/source fetch"
+            )
+            return None
+
+        dataset.to_csv(context.layout.mpstruc_dataset_current, index=False)
+        ids.to_csv(context.layout.mpstruc_ids_current, index=False)
+        context.report(
+            f"[mpstruc] Found existing dataset snapshot {dataset_path.name}; reusing local CSV without XML download"
+        )
+        context.report(
+            f"[mpstruc] Reused {len(dataset)} row(s) and {len(ids)} identifier(s) from existing dataset snapshot"
         )
         return dataset
 
@@ -115,15 +193,22 @@ class MPStrucDatasetSource(DatasetSource):
         current_ids_path = context.layout.mpstruc_ids_current
         current_xml_path = context.layout.mpstruc_xml_current
 
-        if latest_xml is None or latest_dataset is None or current_ids_path.exists() is False:
+        if latest_dataset is None:
             return None
 
-        latest_run_date, latest_xml_path = latest_xml
         latest_dataset_run_date, latest_dataset_path = latest_dataset
-        if latest_run_date != latest_dataset_run_date:
-            return None
+        latest_run_date = latest_dataset_run_date
+        latest_xml_path = None
+        if latest_xml is not None:
+            latest_xml_run_date, latest_xml_candidate = latest_xml
+            if latest_xml_run_date == latest_dataset_run_date:
+                latest_xml_path = latest_xml_candidate
+            else:
+                context.report(
+                    f"[mpstruc] Latest reusable dataset {latest_dataset_path.name} has no matching dated XML snapshot; continuing with CSV-only reuse"
+                )
 
-        if not xml_path.exists():
+        if latest_xml_path is not None and not xml_path.exists():
             self._try_copyfile(
                 latest_xml_path,
                 xml_path,
@@ -144,19 +229,28 @@ class MPStrucDatasetSource(DatasetSource):
             context,
             "[mpstruc] Unable to refresh current dataset snapshot from the latest reusable artifact",
         )
-        self._try_copyfile(
-            latest_xml_path,
-            current_xml_path,
-            context,
-            "[mpstruc] Unable to refresh current XML snapshot from the latest reusable artifact",
-        )
+        if latest_xml_path is not None:
+            self._try_copyfile(
+                latest_xml_path,
+                current_xml_path,
+                context,
+                "[mpstruc] Unable to refresh current XML snapshot from the latest reusable artifact",
+            )
 
         dataset = pd.read_csv(current_dataset_path, low_memory=False)
-        dataset["Pdb Code"].to_csv(current_ids_path, index=False)
+        ids = self._build_ids_from_dataset(dataset)
+        if ids is None:
+            return None
+        ids.to_csv(current_ids_path, index=False)
         context.report(
             f"[mpstruc] Reusing artifact set from {latest_run_date}; skipping source fetch. "
-            f"Adjust INGESTION_ARTIFACT_FRESHNESS_DAYS or delete {latest_xml_path.name} "
-            f"and {latest_dataset_path.name} to rerun this stage."
+            f"Adjust INGESTION_ARTIFACT_FRESHNESS_DAYS or delete "
+            + (
+                f"{latest_xml_path.name} and {latest_dataset_path.name}"
+                if latest_xml_path is not None
+                else f"{latest_dataset_path.name}"
+            )
+            + " to rerun this stage."
         )
         return dataset
 
@@ -251,6 +345,13 @@ class MPStrucDatasetSource(DatasetSource):
             reverse=True,
         )
         return candidates[0] if candidates else None
+
+    @staticmethod
+    def _build_ids_from_dataset(dataset: pd.DataFrame):
+        for column_name in ("Pdb Code", "pdb_code", "PDB Code"):
+            if column_name in dataset.columns:
+                return dataset[column_name].to_frame(name="Pdb Code")
+        return None
 
     def _parse_xml(self, xml_path):
         tree = element_tree.parse(xml_path)

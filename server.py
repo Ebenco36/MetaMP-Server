@@ -3,6 +3,7 @@ from app import app
 import logging
 from logging.handlers import RotatingFileHandler
 from src.core.extensions import socketio
+from src.MP.startup_sync import maybe_queue_startup_tmalphafold_catchup
 
 port = os.getenv("FLASK_RUN_PORT")
 host = os.getenv("FLASK_RUN_HOST")
@@ -23,6 +24,9 @@ if not app.debug:
     file_handler.setFormatter(formatter)
     # Add the file handler to the app's logger
     app.logger.addHandler(file_handler)
+
+with app.app_context():
+    maybe_queue_startup_tmalphafold_catchup()
     
 if __name__ == '__main__':
     socketio.run(app, host=host, port=port)

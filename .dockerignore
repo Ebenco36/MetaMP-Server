@@ -24,7 +24,6 @@ logs/
 vendor/wheels/
 vendor/wheels.zip
 
-tmbed/
 tests/
 jupyter_test/
 *.ipynb

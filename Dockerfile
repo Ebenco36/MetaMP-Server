@@ -28,12 +28,19 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 WORKDIR /tmp/build
 
 COPY requirements.txt requirements-ml.txt ./
+COPY tmbed ./tmbed
 
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir Babel==2.13.1 && \
     pip install --no-cache-dir -r requirements.txt && \
     if [ "$INCLUDE_ML" = "true" ]; then \
         pip install --no-cache-dir -r requirements-ml.txt && \
+        TMBED_SITE_PACKAGES="$(python -c 'import site; paths = [path for path in site.getsitepackages() if path.endswith("site-packages")]; print(paths[0] if paths else "")')" && \
+        if [ -n "$TMBED_SITE_PACKAGES" ] && [ -d "/tmp/build/tmbed/tmbed/models/cnn" ]; then \
+            mkdir -p "$TMBED_SITE_PACKAGES/tmbed/models/cnn" && \
+            cp -R /tmp/build/tmbed/tmbed/models/cnn/. "$TMBED_SITE_PACKAGES/tmbed/models/cnn/"; \
+        fi && \
+        python -c 'from pathlib import Path; import site, sys; paths = [Path(p) for p in site.getsitepackages() if p.endswith("site-packages")]; cnn = paths[0] / "tmbed" / "models" / "cnn" if paths else None; count = len(list(cnn.glob("cv_*.pt"))) if cnn and cnn.exists() else 0; print(f"TMbed CNN weights found: {count}"); sys.exit(0 if count == 5 else 1)' && \
         pip install --no-cache-dir Cython && \
         pip install --no-cache-dir --no-build-isolation pyTMHMM==1.3.6; \
     fi
@@ -121,6 +128,7 @@ COPY migrations ./migrations
 COPY public ./public
 COPY src ./src
 COPY utils ./utils
+COPY scripts ./scripts
 COPY vendor/optional_tm_tools ./vendor/optional_tm_tools
 COPY serverConfig/fix_vegafusion_issues.py ./serverConfig/fix_vegafusion_issues.py
 COPY serverConfig/fix_tmbed_issues.py ./serverConfig/fix_tmbed_issues.py
@@ -241,8 +249,7 @@ RUN if [ "$INCLUDE_ML" = "true" ]; then python /var/app/serverConfig/fix_tmbed_i
 
 RUN TMBED_SITE_PACKAGES="$(python -c 'import site; paths = [path for path in site.getsitepackages() if path.endswith("site-packages")]; print(paths[0] if paths else "")')" && \
     if [ "$INCLUDE_ML" = "true" ] && [ -n "$TMBED_SITE_PACKAGES" ] && [ -d "$TMBED_SITE_PACKAGES/tmbed" ]; then \
-        rm -rf "$TMBED_SITE_PACKAGES/tmbed/models" && \
-        ln -sfn /var/app/data/tmbed-models "$TMBED_SITE_PACKAGES/tmbed/models"; \
+        mkdir -p /var/app/data/tmbed-models /var/app/data/tmbed-models/hf-home /var/app/data/tmbed-models/embedding-cache /var/app/data/tmbed-models/smoke-tests; \
     fi && \
     find /var/app/vendor/optional_tm_tools /opt/metamp-optional-tools -type f \( -name "*.sh" -o -name "metamp-*" -o -name "metamp-run-*" \) -exec chmod +x {} + || true && \
     chown -R appuser:appuser /var/app/data/tmbed-models /var/app/vendor/optional_tm_tools /opt/metamp-optional-tools

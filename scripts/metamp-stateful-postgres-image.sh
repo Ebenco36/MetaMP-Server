@@ -100,7 +100,7 @@ build_context() {
   tmp_dir="$(mktemp -d)"
 
   cat >"$tmp_dir/Dockerfile" <<EOF
-FROM ${POSTGRES_BASE_IMAGE:-postgres:latest}
+FROM ${POSTGRES_BASE_IMAGE:-postgres:17}
 COPY all_tables.dump /docker-entrypoint-initdb.d/010-metamp.dump
 COPY restore_dump.sh /docker-entrypoint-initdb.d/020-restore_dump.sh
 RUN chmod 0644 /docker-entrypoint-initdb.d/010-metamp.dump && \\

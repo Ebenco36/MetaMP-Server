@@ -221,6 +221,10 @@ class Migration(ABC):
 
     def insert_or_update_records(df, model_class, db):
         seen_keys = set()
+        # Dataset imports are relatively small, and flushing each row avoids
+        # SQLAlchemy's bulk insertmanyvalues path, which has produced unstable
+        # type coercion during bootstrap imports.
+        flush_each_row = True
         for index, row in df.iterrows():
             row_dict = row.to_dict()
             record_key = Migration.get_record_key(model_class, row_dict)
@@ -250,6 +254,9 @@ class Migration(ABC):
                 # If the record doesn't exist, insert a new record
                 # new_record = model_class(**row.to_dict())
                 db.session.add(new_record)
+
+            if flush_each_row:
+                db.session.flush()
 
         # Commit the changes
         logger.info("Committing %s dataset rows into %s", len(df), model_class.__tablename__)

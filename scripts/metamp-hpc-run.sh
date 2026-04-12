@@ -360,7 +360,7 @@ main() {
     "$ROOT_DIR/scripts/metamp-stack-images.sh" "${image_args[@]}"
   fi
 
-  local postgres_image_ref="postgres:latest"
+  local postgres_image_ref="postgres:17"
   if [[ "$PUSH_STATEFUL_POSTGRES" -eq 1 ]]; then
     postgres_image_ref="${REGISTRY_NAMESPACE}/${POSTGRES_STATE_IMAGE_NAME:-metamp_postgres_state}:${IMAGE_TAG}"
     log "Building and pushing stateful PostgreSQL image $postgres_image_ref ..."

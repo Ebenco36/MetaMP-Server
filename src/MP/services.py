@@ -1491,12 +1491,21 @@ class MPTMBackfillService:
         batch_size=None,
         max_workers=None,
     ):
+        from src.MP.startup_sync import _find_live_tmalphafold_task
         from src.Jobs.tasks.task1 import sync_tmalphafold_predictions_task
+
+        live_task = _find_live_tmalphafold_task()
+        if live_task is not None:
+            return {
+                "task_id": live_task.get("task_id"),
+                "task_name": cls.TASK_NAME,
+                "status": "already-active",
+            }
 
         task = sync_tmalphafold_predictions_task.delay(
             methods=None,
             with_tmdet=True,
-            refresh=True,
+            refresh=False,
             max_workers=_coerce_optional_int(max_workers) or 8,
             timeout=30,
             backfill_sequences=True,
@@ -1504,7 +1513,7 @@ class MPTMBackfillService:
             tmbed_use_gpu=_coerce_optional_bool(use_gpu),
             tmbed_batch_size=_coerce_optional_int(batch_size),
             tmbed_max_workers=_coerce_optional_int(max_workers),
-            tmbed_refresh=True,
+            tmbed_refresh=False,
         )
         return {
             "task_id": task.id,

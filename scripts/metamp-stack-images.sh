@@ -9,6 +9,9 @@ COMPOSE_RUNNER_MODE=""
 ENV_FILE="$DEFAULT_ENV_FILE"
 NO_CACHE=0
 SKIP_FRONTEND=0
+FORCE_PUSH=0
+SCOPE="all"
+PUSH_STATE_FILE="$ROOT_DIR/.metamp-image-push-state"
 
 log() {
   printf '[MetaMP Images] %s\n' "$*"
@@ -98,6 +101,8 @@ Commands:
 Options:
   --env-file PATH    Use a different env file. Default: .env.docker.deployment
   --no-cache         Build images without cache
+  --scope VALUE      Push scope: all, backend, frontend, ml-backend, lean-backend
+  --force-push       Push selected images even when the local tag matches the last pushed image ID
   --skip-frontend    Skip frontend image build/push
   -h, --help         Show this help
 EOF
@@ -122,6 +127,14 @@ while [[ $# -gt 0 ]]; do
       NO_CACHE=1
       shift
       ;;
+    --scope)
+      SCOPE="$2"
+      shift 2
+      ;;
+    --force-push)
+      FORCE_PUSH=1
+      shift
+      ;;
     --skip-frontend)
       SKIP_FRONTEND=1
       shift
@@ -138,41 +151,138 @@ done
 
 load_env_file
 
+case "$SCOPE" in
+  all|backend|frontend|ml-backend|lean-backend)
+    ;;
+  *)
+    die "Unsupported scope: $SCOPE"
+    ;;
+esac
+
+backend_services_for_scope() {
+  case "$SCOPE" in
+    all|backend)
+      printf '%s\n' flask-app celery-worker
+      ;;
+    ml-backend)
+      printf '%s\n' flask-app
+      ;;
+    lean-backend)
+      printf '%s\n' celery-worker
+      ;;
+    frontend)
+      ;;
+  esac
+}
+
+should_build_frontend() {
+  [[ "$SKIP_FRONTEND" -ne 1 ]] && [[ "$SCOPE" == "all" || "$SCOPE" == "frontend" ]]
+}
+
+ensure_push_state_file() {
+  touch "$PUSH_STATE_FILE"
+}
+
+get_local_image_id() {
+  local image_ref="$1"
+  resolve_docker_bin
+  "$DOCKER_BIN" image inspect "$image_ref" --format '{{.Id}}' 2>/dev/null || true
+}
+
+get_recorded_image_id() {
+  local image_ref="$1"
+  [[ -f "$PUSH_STATE_FILE" ]] || return 0
+  awk -F'|' -v ref="$image_ref" '$1 == ref {print $2}' "$PUSH_STATE_FILE" | tail -n 1
+}
+
+record_pushed_image_id() {
+  local image_ref="$1"
+  local image_id="$2"
+  local tmp_file
+  ensure_push_state_file
+  tmp_file="$(mktemp)"
+  awk -F'|' -v ref="$image_ref" '$1 != ref {print $0}' "$PUSH_STATE_FILE" >"$tmp_file" || true
+  printf '%s|%s\n' "$image_ref" "$image_id" >>"$tmp_file"
+  mv "$tmp_file" "$PUSH_STATE_FILE"
+}
+
+push_image_if_needed() {
+  local image_ref="$1"
+  local image_id recorded_id
+  image_id="$(get_local_image_id "$image_ref")"
+  [[ -n "$image_id" ]] || die "Local image tag not found: $image_ref"
+  recorded_id="$(get_recorded_image_id "$image_ref")"
+
+  if [[ "$FORCE_PUSH" -ne 1 && -n "$recorded_id" && "$recorded_id" == "$image_id" ]]; then
+    log "Skipping unchanged image: $image_ref"
+    return 0
+  fi
+
+  resolve_docker_bin
+  log "Pushing $image_ref"
+  "$DOCKER_BIN" push "$image_ref"
+  record_pushed_image_id "$image_ref" "$image_id"
+}
+
 build_backend_images() {
   local build_args=(build)
+  local services=()
+  while IFS= read -r service; do
+    [[ -n "$service" ]] && services+=("$service")
+  done < <(backend_services_for_scope)
+
+  if [[ "${#services[@]}" -eq 0 ]]; then
+    return 0
+  fi
+
   if [[ "$NO_CACHE" -eq 1 ]]; then
     build_args+=(--no-cache)
   fi
-  build_args+=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
-  log "Building MetaMP backend images in namespace ${REGISTRY_NAMESPACE:-ebenco36}"
+  # Only build the distinct image-producing services once.
+  # flask-app -> ${ML_IMAGE_NAME}
+  # celery-worker -> ${APP_IMAGE_NAME}
+  # celery-worker-ml, celery-worker-tm, and celery-beat reuse those tags.
+  build_args+=("${services[@]}")
+  log "Building MetaMP images in namespace ${REGISTRY_NAMESPACE:-ebenco36} for scope '$SCOPE'"
   run_compose "${build_args[@]}"
 }
 
 push_backend_images() {
-  log "Pushing MetaMP backend images"
-  run_compose push flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat
+  case "$SCOPE" in
+    all|backend|ml-backend)
+      if [[ "$SCOPE" != "lean-backend" ]]; then
+        push_image_if_needed "${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}"
+      fi
+      ;;
+  esac
+
+  case "$SCOPE" in
+    all|backend|lean-backend)
+      push_image_if_needed "${REGISTRY_NAMESPACE:-ebenco36}/${APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest}"
+      ;;
+  esac
 }
 
 build_or_push_frontend() {
-  if [[ "$SKIP_FRONTEND" -eq 1 ]]; then
+  if ! should_build_frontend; then
     return 0
   fi
-  local frontend_command="build"
-  local frontend_args=("$frontend_command")
-  if [[ "$COMMAND" == "push" ]]; then
-    frontend_command="push"
-    frontend_args=("$frontend_command")
-  fi
+  local frontend_args=(build)
   if [[ "$NO_CACHE" -eq 1 ]]; then
     frontend_args+=(--no-cache)
   fi
   bash "$ROOT_DIR/scripts/metamp-frontend-image.sh" "${frontend_args[@]}"
+
+  if [[ "$COMMAND" == "push" ]]; then
+    push_image_if_needed "${REGISTRY_NAMESPACE:-ebenco36}/${FRONTEND_IMAGE_NAME:-mpfrontend}:${FRONTEND_IMAGE_TAG:-latest}"
+  fi
 }
 
 case "$COMMAND" in
   build)
     build_backend_images
     build_or_push_frontend
+    log "Image scope '$SCOPE' built successfully."
     log "Backend images use ${REGISTRY_NAMESPACE:-ebenco36}/${APP_IMAGE_NAME:-mpvis_app}:${IMAGE_TAG:-latest} and ${REGISTRY_NAMESPACE:-ebenco36}/${ML_IMAGE_NAME:-mpvis_app_ml}:${IMAGE_TAG:-latest}"
     log "Redis and PostgreSQL remain upstream images by default."
     ;;
@@ -180,7 +290,7 @@ case "$COMMAND" in
     build_backend_images
     push_backend_images
     build_or_push_frontend
-    log "Pushed MetaMP custom images to ${REGISTRY_NAMESPACE:-ebenco36}"
+    log "Pushed MetaMP image scope '$SCOPE' to ${REGISTRY_NAMESPACE:-ebenco36}"
     log "Redis and PostgreSQL remain upstream images unless you intentionally mirror them yourself."
     ;;
   *)

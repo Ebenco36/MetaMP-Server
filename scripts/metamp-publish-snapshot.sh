@@ -10,6 +10,9 @@ SNAPSHOT_DIR=""
 TOP_MODELS=1
 SKIP_FRONTEND=0
 NO_CACHE=0
+DOCKER_BIN="${DOCKER_BIN:-}"
+DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
+COMPOSE_RUNNER_MODE=""
 
 log() {
   printf '[MetaMP Snapshot Publish] %s\n' "$*"
@@ -18,6 +21,69 @@ log() {
 die() {
   printf '[MetaMP Snapshot Publish][error] %s\n' "$*" >&2
   exit 1
+}
+
+resolve_docker_bin() {
+  if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
+    return 0
+  fi
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  for candidate in \
+    /Applications/Docker.app/Contents/Resources/bin/docker \
+    /usr/local/bin/docker \
+    /opt/homebrew/bin/docker
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKER_BIN="$candidate"
+      return 0
+    fi
+  done
+  die "Docker was not found on PATH. Set DOCKER_BIN explicitly if needed."
+}
+
+resolve_compose_runner() {
+  if [[ -n "$DOCKER_COMPOSE_BIN" && -x "$DOCKER_COMPOSE_BIN" ]]; then
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  resolve_docker_bin
+  if "$DOCKER_BIN" compose version >/dev/null 2>&1; then
+    COMPOSE_RUNNER_MODE="plugin"
+    return 0
+  fi
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+  die "Docker/Podman was found, but no Compose runner is available."
+}
+
+run_reviewer_compose() {
+  resolve_compose_runner
+  local args=(
+    --project-name "${COMPOSE_PROJECT_NAME:-metamp-reviewer}"
+    --env-file "$ENV_FILE"
+    -f "$ROOT_DIR/docker-compose.snapshot.yml"
+  )
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
+}
+
+ensure_reviewer_stack_is_not_running() {
+  local running_services
+  running_services="$(run_reviewer_compose ps --status running --services 2>/dev/null || true)"
+  if [[ -n "$running_services" ]]; then
+    die "The reviewer stack is currently running and occupies the published container names/ports. Stop it first with: docker compose --project-name ${COMPOSE_PROJECT_NAME:-metamp-reviewer} --env-file $ENV_FILE -f $ROOT_DIR/docker-compose.snapshot.yml down"
+  fi
 }
 
 usage() {
@@ -100,6 +166,8 @@ if [[ "$NO_CACHE" -eq 1 ]]; then
   postgres_args+=(--no-cache)
   runtime_args+=(--no-cache)
 fi
+
+ensure_reviewer_stack_is_not_running
 
 log "Exporting runtime snapshot to $SNAPSHOT_DIR"
 bash "$ROOT_DIR/scripts/metamp-snapshot.sh" "${snapshot_args[@]}"

@@ -1,6 +1,8 @@
 pybiolib==1.2.814
 shap==0.45.1
 torch==2.7.0
-transformers>=4.11.3,<5
+# TMbed 1.0.1 is unstable with the newest transformers releases in our
+# worker image; keep it aligned with the version already pinned in requirements1.txt.
+transformers==4.51.3
 umap-learn==0.5.5
-tmbed @ git+https://github.com/BernhoferM/TMbed.git@30a26036621837d537f13b45703b9d892194217c
+./tmbed

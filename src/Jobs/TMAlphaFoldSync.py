@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from flask import current_app, has_app_context
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from database.db import db
 from src.AI_Packages.TMAlphaFoldPredictorClient import (
@@ -21,6 +22,13 @@ from src.AI_Packages.TMAlphaFoldPredictorClient import (
 from src.AI_Packages.TMProteinPredictor import normalize_tm_regions_json_string
 from src.MP.model_tmalphafold import TMAlphaFoldPrediction
 from src.MP.model_uniprot import Uniprot
+from src.MP.replacement_resolution import (
+    canonicalize_pdb_codes,
+    resolve_canonical_pdb_code,
+    resolve_replacement_aliases,
+)
+
+_TMALPHAFOLD_STORAGE_READY = False
 
 
 def _emit_progress(progress_callback, message):
@@ -43,9 +51,24 @@ def _resolve_tmalphafold_persist_batch_size(default=25):
 
 
 def _ensure_tmalphafold_storage(progress_callback=None):
-    TMAlphaFoldPrediction.__table__.create(bind=db.engine, checkfirst=True)
-    current_app.logger.info("TMAlphaFold table ensured (created if not existed).") 
-    _emit_progress(progress_callback, "Ensured TMAlphaFold prediction storage is available.")
+    global _TMALPHAFOLD_STORAGE_READY
+    if _TMALPHAFOLD_STORAGE_READY:
+        return
+
+    for attempt in range(2):
+        try:
+            TMAlphaFoldPrediction.__table__.create(bind=db.engine, checkfirst=True)
+            current_app.logger.info("TMAlphaFold table ensured (created if not existed).")
+            _emit_progress(progress_callback, "Ensured TMAlphaFold prediction storage is available.")
+            _TMALPHAFOLD_STORAGE_READY = True
+            return
+        except OperationalError:
+            db.session.rollback()
+            db.session.remove()
+            db.engine.dispose()
+            _TMALPHAFOLD_STORAGE_READY = False
+            if attempt == 1:
+                raise
 
 
 def _normalize_selection(pdb_codes=None):
@@ -115,11 +138,12 @@ def normalize_tmalphafold_methods(methods=None):
 
 
 def load_tmalphafold_targets(pdb_codes=None, limit=None):
+    selected = _normalize_selection(pdb_codes)
+    selected_canonical_codes = set(canonicalize_pdb_codes(selected)) if selected else set()
     query = db.session.query(Uniprot.pdb_code, Uniprot.uniprot_id).filter(
         Uniprot.pdb_code.isnot(None),
         Uniprot.uniprot_id.isnot(None),
     )
-    selected = _normalize_selection(pdb_codes)
     if selected:
         query = query.filter(db.func.upper(db.func.trim(Uniprot.pdb_code)).in_(selected))
 
@@ -128,11 +152,27 @@ def load_tmalphafold_targets(pdb_codes=None, limit=None):
         .order_by(Uniprot.pdb_code.asc(), Uniprot.uniprot_id.asc())
         .all()
     )
-    targets = [
-        {"pdb_code": str(pdb_code).strip().upper(), "uniprot_id": str(uniprot_id).strip().upper()}
-        for pdb_code, uniprot_id in rows
-        if str(pdb_code or "").strip() and str(uniprot_id or "").strip()
-    ]
+    targets = []
+    for pdb_code, uniprot_id in rows:
+        normalized_pdb = str(pdb_code or "").strip().upper()
+        normalized_uniprot = str(uniprot_id or "").strip().upper()
+        if not normalized_pdb or not normalized_uniprot:
+            continue
+        canonical_pdb = resolve_canonical_pdb_code(normalized_pdb) or normalized_pdb
+        if selected:
+            if canonical_pdb not in selected_canonical_codes and normalized_pdb not in selected:
+                continue
+        targets.append({"pdb_code": canonical_pdb, "uniprot_id": normalized_uniprot})
+
+    deduped = []
+    seen = set()
+    for item in targets:
+        key = (item["pdb_code"], item["uniprot_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    targets = deduped
     if limit is not None:
         targets = targets[: int(limit)]
     return targets
@@ -184,71 +224,98 @@ def _upsert_predictions(predictions):
     )
     existing_key_count = sum(1 for _ in existing_query)
 
+    global _TMALPHAFOLD_STORAGE_READY
     bind = db.engine
     if bind.dialect.name == "postgresql":
-        try:
-            stmt = pg_insert(TMAlphaFoldPrediction.__table__).values(payload)
-            stmt = stmt.on_conflict_do_update(
-                constraint="uq_tmalphafold_provider_method_pdb_uniprot",
-                set_={
-                    "prediction_kind": stmt.excluded.prediction_kind,
-                    "tm_count": stmt.excluded.tm_count,
-                    "tm_regions_json": stmt.excluded.tm_regions_json,
-                    "raw_payload_json": stmt.excluded.raw_payload_json,
-                    "source_url": stmt.excluded.source_url,
-                    "status": stmt.excluded.status,
-                    "error_message": stmt.excluded.error_message,
-                    "updated_at": db.func.now(),
-                },
-            )
-            db.session.execute(stmt)
-            db.session.commit()
+        for attempt in range(2):
+            try:
+                stmt = pg_insert(TMAlphaFoldPrediction.__table__).values(payload)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="uq_tmalphafold_provider_method_pdb_uniprot",
+                    set_={
+                        "prediction_kind": stmt.excluded.prediction_kind,
+                        "tm_count": stmt.excluded.tm_count,
+                        "tm_regions_json": stmt.excluded.tm_regions_json,
+                        "raw_payload_json": stmt.excluded.raw_payload_json,
+                        "source_url": stmt.excluded.source_url,
+                        "status": stmt.excluded.status,
+                        "error_message": stmt.excluded.error_message,
+                        "updated_at": db.func.now(),
+                    },
+                )
+                db.session.execute(stmt)
+                db.session.commit()
 
-            inserted_rows = max(0, len(payload) - existing_key_count)
-            updated_rows = min(existing_key_count, len(payload))
-            current_app.logger.info(
-                f"[PG UPSERT] Committed {len(payload)} row(s): "
-                f"~{inserted_rows} inserted, ~{updated_rows} updated."
-            )
+                inserted_rows = max(0, len(payload) - existing_key_count)
+                updated_rows = min(existing_key_count, len(payload))
+                current_app.logger.info(
+                    f"[PG UPSERT] Committed {len(payload)} row(s): "
+                    f"~{inserted_rows} inserted, ~{updated_rows} updated."
+                )
+                break
 
-        except Exception as exc:
-            db.session.rollback()
-            current_app.logger.error(
-                f"[PG UPSERT] Failed and rolled back: {exc}",
-                exc_info=True,
-            )
-            raise
+            except OperationalError as exc:
+                db.session.rollback()
+                db.session.remove()
+                db.engine.dispose()
+                _TMALPHAFOLD_STORAGE_READY = False
+                if attempt == 1:
+                    current_app.logger.error(
+                        f"[PG UPSERT] Failed after retry and rolled back: {exc}",
+                        exc_info=True,
+                    )
+                    raise
+            except Exception as exc:
+                db.session.rollback()
+                current_app.logger.error(
+                    f"[PG UPSERT] Failed and rolled back: {exc}",
+                    exc_info=True,
+                )
+                raise
         return {
             "stored_rows": len(payload),
             "inserted_rows": inserted_rows,
             "updated_rows": updated_rows,
         }
 
-    try:
-        for item in payload:
-            row = TMAlphaFoldPrediction.query.filter_by(
-                provider=item["provider"],
-                method=item["method"],
-                pdb_code=item["pdb_code"],
-                uniprot_id=item["uniprot_id"],
-            ).first()
-            if row is None:
-                row = TMAlphaFoldPrediction(**item)
-                db.session.add(row)
-                current_app.logger.debug(f"[INSERT] New row: {item['pdb_code']} / {item['uniprot_id']} / {item['method']}")
-            else:
-                for key, value in item.items():
-                    setattr(row, key, value)
-                current_app.logger.debug(f"[UPDATE] Existing row: {item['pdb_code']} / {item['uniprot_id']} / {item['method']}")
-        db.session.commit()
-        current_app.logger.info(f"[FALLBACK UPSERT] Committed {len(payload)} row(s).")
-    except Exception as exc:
-        db.session.rollback()
-        current_app.logger.error(
-            f"[FALLBACK UPSERT] Failed and rolled back: {exc}",
-            exc_info=True,
-        )
-        raise
+    for attempt in range(2):
+        try:
+            for item in payload:
+                row = TMAlphaFoldPrediction.query.filter_by(
+                    provider=item["provider"],
+                    method=item["method"],
+                    pdb_code=item["pdb_code"],
+                    uniprot_id=item["uniprot_id"],
+                ).first()
+                if row is None:
+                    row = TMAlphaFoldPrediction(**item)
+                    db.session.add(row)
+                    current_app.logger.debug(f"[INSERT] New row: {item['pdb_code']} / {item['uniprot_id']} / {item['method']}")
+                else:
+                    for key, value in item.items():
+                        setattr(row, key, value)
+                    current_app.logger.debug(f"[UPDATE] Existing row: {item['pdb_code']} / {item['uniprot_id']} / {item['method']}")
+            db.session.commit()
+            current_app.logger.info(f"[FALLBACK UPSERT] Committed {len(payload)} row(s).")
+            break
+        except OperationalError as exc:
+            db.session.rollback()
+            db.session.remove()
+            db.engine.dispose()
+            _TMALPHAFOLD_STORAGE_READY = False
+            if attempt == 1:
+                current_app.logger.error(
+                    f"[FALLBACK UPSERT] Failed after retry and rolled back: {exc}",
+                    exc_info=True,
+                )
+                raise
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.error(
+                f"[FALLBACK UPSERT] Failed and rolled back: {exc}",
+                exc_info=True,
+            )
+            raise
     inserted_rows = max(0, len(payload) - existing_key_count)
     updated_rows = min(existing_key_count, len(payload))
     return {
@@ -267,12 +334,21 @@ def _lookup_uniprot_ids_for_pdb_codes(pdb_codes):
     if not normalized_codes:
         return {}
 
+    alias_map = resolve_replacement_aliases(normalized_codes)
+    expanded_codes = sorted(
+        {
+            alias
+            for code in normalized_codes
+            for alias in alias_map.get(code, [code])
+        }
+    )
+
     rows = (
         db.session.query(Uniprot.pdb_code, Uniprot.uniprot_id)
         .filter(
             Uniprot.pdb_code.isnot(None),
             Uniprot.uniprot_id.isnot(None),
-            db.func.upper(db.func.trim(Uniprot.pdb_code)).in_(normalized_codes),
+            db.func.upper(db.func.trim(Uniprot.pdb_code)).in_(expanded_codes),
         )
         .all()
     )
@@ -281,7 +357,8 @@ def _lookup_uniprot_ids_for_pdb_codes(pdb_codes):
         normalized_pdb = str(pdb_code or "").strip().upper()
         normalized_uniprot = str(uniprot_id or "").strip().upper()
         if normalized_pdb and normalized_uniprot:
-            mapping[normalized_pdb].add(normalized_uniprot)
+            canonical_code = resolve_canonical_pdb_code(normalized_pdb) or normalized_pdb
+            mapping[canonical_code].add(normalized_uniprot)
     return {key: sorted(values) for key, values in mapping.items()}
 
 
