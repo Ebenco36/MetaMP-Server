@@ -24,6 +24,36 @@ This one command:
 - Backend health: [http://localhost:5400/api/v1/health/ready](http://localhost:5400/api/v1/health/ready)
 
 
+## Connecting to the Database
+
+The complete MetaMP dataset—including raw source tables from MPstruc, PDB, OPM, and UniProt, the harmonised `membrane_proteins` tables resides in a PostgreSQL database that is initialised automatically when the Docker container starts. Users who wish to query the data directly or perform custom exports can connect to this database using any standard PostgreSQL client.
+
+### Connection Details
+
+When the container is running (after executing `./scripts/metamp-reviewer-start.sh`), the PostgreSQL instance is exposed on the host machine with the following default parameters:
+
+| Parameter   | Value              |
+|-------------|--------------------|
+| Host        | `localhost`        |
+| Port        | `5432`             |
+| Database    | `mpvis_db`        |
+| Username    | `mpvis_user`      |
+| Password    | `mpvis_user`  |
+
+> **Note:** These credentials are intended for local development and review only. For production deployments, change the password using the environment variables documented in `docker-compose.yml`.
+
+### Connecting with `psql` (Command Line)
+
+If you have the PostgreSQL client installed, you can connect directly from your terminal:
+
+```bash
+psql -h localhost -p 5432 -U mpvis_user -d mpvis_db
+```
+
+### Connecting with `pgAdmin` (GUI)
+
+Download pgAdmin from [https://www.pgadmin.org/download/](https://www.pgadmin.org/download/).
+
 ## Repositories
 
 - **Backend (this repo):** [https://github.com/Ebenco36/MetaMP-Server](https://github.com/Ebenco36/MetaMP-Server)
@@ -36,18 +66,6 @@ Run the reviewer stack after the repository is already cloned:
 ```bash
 ./scripts/metamp-reviewer-start.sh
 ```
-
-<!-- Build and run the full stack from source:
-
-```bash
-./scripts/metamp-production-bootstrap.sh run --with-frontend
-```
-
-Publish the current application images and snapshot distribution:
-
-```bash
-./scripts/metamp-publish-snapshot.sh push
-``` -->
 
 ## What MetaMP Includes
 
