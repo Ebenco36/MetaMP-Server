@@ -66,8 +66,8 @@ That is enough for the one-command reviewer workflow above.
 
 ## More Commands
 
-For operator commands, snapshot workflows, fallback prediction runs, image publishing, and maintenance utilities, see [COMMANDS.md](./MetaMP-Server/COMMANDS.md).
+For operator commands, snapshot workflows, fallback prediction runs, image publishing, and maintenance utilities, see [COMMANDS.md](./COMMANDS.md).
 
 ## License
 
-Licensed under the GNU General Public License, Version 3.0. See [LICENSE.md](./MetaMP-Server/LICENSE.md).
+Licensed under the GNU General Public License, Version 3.0. See [LICENSE.md](./LICENSE.md).
