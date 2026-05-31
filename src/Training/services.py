@@ -685,9 +685,65 @@ def create_visualization(data, chart_width=None):
     Returns:
     - alt.Chart: The combined Altair chart and table.
     """
-    # Define selections
-    brush = alt.selection_interval(encodings=["x", "y"])
-    click = alt.selection_point(fields=['inconsistencies'], name='click')
+    display_data = data.copy()
+
+    group_label_map = {
+        "MONOTOPIC MEMBRANE PROTEINS": "Monotopic",
+        "BITOPIC PROTEINS": "Bitopic",
+        "TRANSMEMBRANE PROTEINS:ALPHA-HELICAL": "TM alpha-helical",
+        "TRANSMEMBRANE PROTEINS:BETA-BARREL": "TM beta-barrel",
+    }
+    method_label_map = {
+        "X-Ray Crystallography": "X-ray",
+        "Cryo-Electron Microscopy (EM)": "Cryo-EM",
+        "Nuclear Magnetic Resonance (NMR)": "NMR",
+        "Multiple methods": "Multiple",
+    }
+
+    def compact_group_label(value):
+        text = "" if pd.isna(value) else str(value).strip()
+        return group_label_map.get(text, text.title() if text else "")
+
+    def compact_method_label(value):
+        text = "" if pd.isna(value) else str(value).strip()
+        if not text:
+            return ""
+        seen = []
+        for part in [item.strip() for item in text.split(",") if item.strip()]:
+            label = method_label_map.get(part, part)
+            if label not in seen:
+                seen.append(label)
+        return ", ".join(seen)
+
+    display_data["group_mpstruc_short"] = display_data["group (MPstruc)"].apply(
+        compact_group_label
+    )
+    display_data["group_opm_short"] = display_data["group (OPM)"].apply(
+        compact_group_label
+    )
+    display_data["experimental_method_short"] = display_data[
+        "experimental_method"
+    ].apply(compact_method_label)
+    display_data["bibliography_year"] = pd.to_numeric(
+        display_data["bibliography_year"], errors="coerce"
+    )
+
+    yearly_series = (
+        display_data[["bibliography_year", "inconsistencies"]]
+        .dropna(subset=["bibliography_year", "inconsistencies"])
+        .drop_duplicates()
+        .sort_values("bibliography_year")
+    )
+    available_years = (
+        yearly_series["bibliography_year"].dropna().astype(int).sort_values().unique()
+    )
+    year_tick_count = max(6, min(12, len(available_years)))
+    y_axis_max = max(1, int(yearly_series["inconsistencies"].max()))
+
+    # Restrict interaction to the x-axis. The previous click selection was keyed on
+    # inconsistency count, which grouped unrelated years that happened to share the
+    # same y value and made the linked table harder to interpret.
+    brush = alt.selection_interval(encodings=["x"], name="year_range")
 
     # Check and set chart width
     if chart_width and isinstance(chart_width,int):
@@ -695,91 +751,166 @@ def create_visualization(data, chart_width=None):
     else:
         chart_width = "container"
 
-    # Create line chart
-    line_chart = alt.Chart(data).mark_line(point=True, interpolate='monotone').encode(
-        x=alt.X('bibliography_year:O', title="Year"),
+    # Create a yearly trend chart with bars and point markers. This is easier to
+    # read than a monotone line over sparse yearly counts and avoids implying
+    # smooth continuity between discrete years.
+    base_chart = alt.Chart(yearly_series)
+    bar_chart = base_chart.mark_bar(
+        color="#4C78A8",
+        opacity=0.85,
+        size=18,
+        cornerRadiusTopLeft=2,
+        cornerRadiusTopRight=2,
+    ).encode(
+        x=alt.X(
+            "bibliography_year:Q",
+            title="Year",
+            axis=alt.Axis(
+                format="d",
+                labelAngle=0,
+                tickCount=year_tick_count,
+                grid=False,
+            ),
+        ),
         y=alt.Y(
-            'inconsistencies:Q', 
+            "inconsistencies:Q",
             title="Inconsistencies",
-            scale=alt.Scale(domain=(0, data['inconsistencies'].max() * 1.1))  # Added a small buffer to y-axis
+            scale=alt.Scale(domain=(0, y_axis_max * 1.1)),
+            axis=alt.Axis(tickMinStep=1),
         ),
         tooltip=[
-            'bibliography_year', 'inconsistencies', 
-            'protein_codes', 'group (OPM)', 
-            'group (MPstruc)'
-        ]
-    ).add_params(
-        brush, click
-    ).properties(
-        width=chart_width,
-        title='Discrepancies in membrane protein structure groups observed over time using the OPM and MPstruc databases.',
+            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
+            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
+            alt.Tooltip("protein_codes:N", title="PDB codes"),
+            alt.Tooltip("group (OPM):N", title="OPM group"),
+            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
+        ],
+        color=alt.condition(brush, alt.value("#005EB8"), alt.value("#9FB9D6")),
     )
-    
-    # Create table
-    table = alt.Chart(data).transform_filter(
-        "datum.inconsistencies > 0"
-    ).mark_text(align='left').encode(
-        y=alt.Y('row_number:O', axis=None),
-    ).transform_filter(
-        brush
-    ).transform_filter(
-        click
-    ).transform_window(
-        row_number='row_number()'
-    ).transform_filter(
-        'datum.row_number < 15'
+    line_overlay = base_chart.mark_line(
+        color="#16324F", strokeWidth=2, opacity=0.9
+    ).encode(
+        x=alt.X("bibliography_year:Q"),
+        y=alt.Y("inconsistencies:Q"),
+        tooltip=[
+            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
+            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
+            alt.Tooltip("protein_codes:N", title="PDB codes"),
+            alt.Tooltip("group (OPM):N", title="OPM group"),
+            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
+        ],
     )
-
-    width_array = [80, 80, 100, 80, 120]
-    
-    # Create individual columns
-    pdb_code = table.encode(
-        text='pdb_code:N'
-    ).properties(
-        width=width_array[0],
-        title=alt.TitleParams(text='PDB Code', align='left')
-    )
-
-    group = table.encode(
-        text='group (MPstruc):N'
-    ).properties(
-        width=width_array[1],
-        title=alt.TitleParams(text='Group (MPstruc)', align='left')
+    point_chart = base_chart.mark_circle(
+        color="#16324F", size=80, stroke="white", strokeWidth=1.2
+    ).encode(
+        x=alt.X("bibliography_year:Q"),
+        y=alt.Y("inconsistencies:Q"),
+        tooltip=[
+            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
+            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
+            alt.Tooltip("protein_codes:N", title="PDB codes"),
+            alt.Tooltip("group (OPM):N", title="OPM group"),
+            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
+        ],
     )
 
-    OPM_group = table.encode(
-        text='group (OPM):N'
+    line_chart = (
+        (bar_chart + line_overlay + point_chart)
+        .add_params(brush)
+        .properties(
+            width=chart_width,
+            height=280,
+            title="Annual OPM-MPstruc group disagreements across MetaMP records",
+        )
+    )
+
+    # Create linked table for the selected year range
+    table = (
+        alt.Chart(display_data)
+        .transform_filter("datum.inconsistencies > 0")
+        .transform_filter(brush)
+        .transform_window(
+            row_number="row_number()",
+            sort=[
+                alt.SortField("inconsistencies", order="descending"),
+                alt.SortField("bibliography_year", order="descending"),
+                alt.SortField("pdb_code", order="ascending"),
+            ],
+        )
+        .transform_filter("datum.row_number <= 12")
+        .mark_text(align="left", baseline="middle")
+        .encode(y=alt.Y("row_number:O", axis=None, title=None))
+    )
+
+    row_index = table.encode(
+        text=alt.Text("row_number:Q")
     ).properties(
-        width=width_array[2],
-        title=alt.TitleParams(text='Group (OPM)', align='left')
+        width=32,
+        title=alt.TitleParams(text="#", align="left"),
     )
 
     year = table.encode(
-        text='bibliography_year:N'
+        text=alt.Text("bibliography_year:Q", format=".0f")
     ).properties(
-        width=width_array[3],
-        title=alt.TitleParams(text='Year', align='left')
+        width=64,
+        title=alt.TitleParams(text="Year", align="left"),
+    )
+
+    pdb_code = table.encode(
+        text=alt.Text("pdb_code:N")
+    ).properties(
+        width=74,
+        title=alt.TitleParams(text="PDB", align="left"),
+    )
+
+    group = table.encode(
+        text=alt.Text("group_mpstruc_short:N")
+    ).properties(
+        width=145,
+        title=alt.TitleParams(text="MPstruc", align="left"),
+    )
+
+    OPM_group = table.encode(
+        text=alt.Text("group_opm_short:N")
+    ).properties(
+        width=145,
+        title=alt.TitleParams(text="OPM", align="left"),
     )
 
     method = table.encode(
-        text='experimental_method:N'
+        text=alt.Text("experimental_method_short:N")
     ).properties(
-        width=width_array[4],
-        title=alt.TitleParams(text='Experimental Method', align='left')
+        width=150,
+        title=alt.TitleParams(text="Method", align="left"),
     )
-    
+
     # Concatenate columns horizontally
     table_layout = alt.hconcat(
-        pdb_code, group, OPM_group, year, method
-    ).resolve_legend(
-        color="independent"
+        row_index,
+        year,
+        pdb_code,
+        group,
+        OPM_group,
+        method,
+        spacing=14,
+    ).properties(
+        title=alt.TitleParams(
+            text="Selected discrepancy records (top 12 within the chosen year range)",
+            anchor="start",
+        )
     )
 
     # Concatenate chart and table vertically
     chart_with_table = alt.vconcat(
-        line_chart, table_layout
+        line_chart, table_layout, spacing=18
     ).configure_view(
         strokeWidth=0
+    ).configure_axis(
+        labelFontSize=13,
+        titleFontSize=14
+    ).configure_title(
+        fontSize=16,
+        anchor="start"
     )
 
     return chart_with_table
