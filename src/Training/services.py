@@ -751,16 +751,21 @@ def create_visualization(data, chart_width=None):
     else:
         chart_width = "container"
 
-    # Create a yearly trend chart with bars and point markers. This is easier to
-    # read than a monotone line over sparse yearly counts and avoids implying
-    # smooth continuity between discrete years.
+    # Restore a line-oriented summary for annual disagreement counts while
+    # preserving the corrected year-range interaction and deduplicated yearly
+    # aggregation.
     base_chart = alt.Chart(yearly_series)
-    bar_chart = base_chart.mark_bar(
-        color="#4C78A8",
-        opacity=0.85,
-        size=18,
-        cornerRadiusTopLeft=2,
-        cornerRadiusTopRight=2,
+    line_chart = base_chart.mark_line(
+        color="#2F78C4",
+        interpolate="monotone",
+        strokeWidth=3,
+        point=alt.OverlayMarkDef(
+            color="#16324F",
+            filled=True,
+            fill="white",
+            size=65,
+            strokeWidth=1.5,
+        ),
     ).encode(
         x=alt.X(
             "bibliography_year:Q",
@@ -785,39 +790,9 @@ def create_visualization(data, chart_width=None):
             alt.Tooltip("group (OPM):N", title="OPM group"),
             alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
         ],
-        color=alt.condition(brush, alt.value("#005EB8"), alt.value("#9FB9D6")),
     )
-    line_overlay = base_chart.mark_line(
-        color="#16324F", strokeWidth=2, opacity=0.9
-    ).encode(
-        x=alt.X("bibliography_year:Q"),
-        y=alt.Y("inconsistencies:Q"),
-        tooltip=[
-            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
-            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
-            alt.Tooltip("protein_codes:N", title="PDB codes"),
-            alt.Tooltip("group (OPM):N", title="OPM group"),
-            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
-        ],
-    )
-    point_chart = base_chart.mark_circle(
-        color="#16324F", size=80, stroke="white", strokeWidth=1.2
-    ).encode(
-        x=alt.X("bibliography_year:Q"),
-        y=alt.Y("inconsistencies:Q"),
-        tooltip=[
-            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
-            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
-            alt.Tooltip("protein_codes:N", title="PDB codes"),
-            alt.Tooltip("group (OPM):N", title="OPM group"),
-            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
-        ],
-    )
-
     line_chart = (
-        (bar_chart + line_overlay + point_chart)
-        .add_params(brush)
-        .properties(
+        line_chart.add_params(brush).properties(
             width=chart_width,
             height=280,
             title="Annual OPM-MPstruc group disagreements across MetaMP records",
