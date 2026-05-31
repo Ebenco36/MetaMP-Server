@@ -724,6 +724,11 @@ def create_visualization(data, chart_width=None):
     display_data["experimental_method_short"] = display_data[
         "experimental_method"
     ].apply(compact_method_label)
+    display_data["disagreement_pair"] = (
+        display_data["group_mpstruc_short"].fillna("")
+        + " -> "
+        + display_data["group_opm_short"].fillna("")
+    ).str.strip()
     display_data["bibliography_year"] = pd.to_numeric(
         display_data["bibliography_year"], errors="coerce"
     )
@@ -751,22 +756,11 @@ def create_visualization(data, chart_width=None):
     else:
         chart_width = "container"
 
-    # Restore a line-oriented summary for annual disagreement counts while
-    # preserving the corrected year-range interaction and deduplicated yearly
-    # aggregation.
+    # Use a simple line chart for the annual counts. Hollow white point markers
+    # create visible gaps in the stroke and make low-count years look broken, so
+    # only non-zero years receive compact filled markers.
     base_chart = alt.Chart(yearly_series)
-    line_chart = base_chart.mark_line(
-        color="#2F78C4",
-        interpolate="monotone",
-        strokeWidth=3,
-        point=alt.OverlayMarkDef(
-            color="#16324F",
-            filled=True,
-            fill="white",
-            size=65,
-            strokeWidth=1.5,
-        ),
-    ).encode(
+    base_encoding = dict(
         x=alt.X(
             "bibliography_year:Q",
             title="Year",
@@ -780,7 +774,7 @@ def create_visualization(data, chart_width=None):
         y=alt.Y(
             "inconsistencies:Q",
             title="Inconsistencies",
-            scale=alt.Scale(domain=(0, y_axis_max * 1.1)),
+            scale=alt.Scale(domain=(0, y_axis_max + 1)),
             axis=alt.Axis(tickMinStep=1),
         ),
         tooltip=[
@@ -791,8 +785,26 @@ def create_visualization(data, chart_width=None):
             alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
         ],
     )
+
+    line_chart = base_chart.mark_line(
+        color="#2F78C4",
+        interpolate="linear",
+        strokeWidth=2.6,
+    ).encode(**base_encoding)
+
+    point_chart = (
+        alt.Chart(yearly_series[yearly_series["inconsistencies"] > 0])
+        .mark_circle(
+            color="#2F78C4",
+            size=52,
+            stroke="white",
+            strokeWidth=1.0,
+        )
+        .encode(**base_encoding)
+    )
+
     line_chart = (
-        line_chart.add_params(brush).properties(
+        (line_chart + point_chart).add_params(brush).properties(
             width=chart_width,
             height=280,
             title="Annual OPM-MPstruc group disagreements across MetaMP records",
@@ -812,8 +824,8 @@ def create_visualization(data, chart_width=None):
                 alt.SortField("pdb_code", order="ascending"),
             ],
         )
-        .transform_filter("datum.row_number <= 12")
-        .mark_text(align="left", baseline="middle")
+        .transform_filter("datum.row_number <= 8")
+        .mark_text(align="left", baseline="middle", fontSize=12)
         .encode(y=alt.Y("row_number:O", axis=None, title=None))
     )
 
@@ -839,23 +851,16 @@ def create_visualization(data, chart_width=None):
     )
 
     group = table.encode(
-        text=alt.Text("group_mpstruc_short:N")
+        text=alt.Text("disagreement_pair:N")
     ).properties(
-        width=145,
-        title=alt.TitleParams(text="MPstruc", align="left"),
-    )
-
-    OPM_group = table.encode(
-        text=alt.Text("group_opm_short:N")
-    ).properties(
-        width=145,
-        title=alt.TitleParams(text="OPM", align="left"),
+        width=300,
+        title=alt.TitleParams(text="MPstruc -> OPM", align="left"),
     )
 
     method = table.encode(
         text=alt.Text("experimental_method_short:N")
     ).properties(
-        width=150,
+        width=110,
         title=alt.TitleParams(text="Method", align="left"),
     )
 
@@ -865,12 +870,11 @@ def create_visualization(data, chart_width=None):
         year,
         pdb_code,
         group,
-        OPM_group,
         method,
         spacing=14,
     ).properties(
         title=alt.TitleParams(
-            text="Selected discrepancy records (top 12 within the chosen year range)",
+            text="Selected discrepancy records (top 8 within the chosen year range)",
             anchor="start",
         )
     )

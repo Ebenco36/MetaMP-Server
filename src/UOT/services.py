@@ -834,7 +834,7 @@ def get_use_cases(data=None):
             + "_width_"
             + str(chart_width)
             + "_logic_"
-            + "v3"
+            + "v4"
             + "_version_"
             + cache_version
         )
