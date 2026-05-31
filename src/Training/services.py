@@ -724,11 +724,6 @@ def create_visualization(data, chart_width=None):
     display_data["experimental_method_short"] = display_data[
         "experimental_method"
     ].apply(compact_method_label)
-    display_data["disagreement_pair"] = (
-        display_data["group_mpstruc_short"].fillna("")
-        + " -> "
-        + display_data["group_opm_short"].fillna("")
-    ).str.strip()
     display_data["bibliography_year"] = pd.to_numeric(
         display_data["bibliography_year"], errors="coerce"
     )
@@ -745,10 +740,11 @@ def create_visualization(data, chart_width=None):
     year_tick_count = max(6, min(12, len(available_years)))
     y_axis_max = max(1, int(yearly_series["inconsistencies"].max()))
 
-    # Restrict interaction to the x-axis. The previous click selection was keyed on
-    # inconsistency count, which grouped unrelated years that happened to share the
-    # same y value and made the linked table harder to interpret.
-    brush = alt.selection_interval(encodings=["x"], name="year_range")
+    # Keep the original line-chart interaction model, but make the point selection
+    # year-specific so one click maps to one year rather than every year sharing
+    # the same inconsistency count.
+    brush = alt.selection_interval(encodings=["x", "y"], name="year_range")
+    click = alt.selection_point(fields=["bibliography_year"], name="selected_year")
 
     # Check and set chart width
     if chart_width and isinstance(chart_width,int):
@@ -756,57 +752,54 @@ def create_visualization(data, chart_width=None):
     else:
         chart_width = "container"
 
-    # Use a simple line chart for the annual counts. Hollow white point markers
-    # create visible gaps in the stroke and make low-count years look broken, so
-    # only non-zero years receive compact filled markers.
-    base_chart = alt.Chart(yearly_series)
-    base_encoding = dict(
-        x=alt.X(
-            "bibliography_year:Q",
-            title="Year",
-            axis=alt.Axis(
-                format="d",
-                labelAngle=0,
-                tickCount=year_tick_count,
-                grid=False,
-            ),
-        ),
-        y=alt.Y(
-            "inconsistencies:Q",
-            title="Inconsistencies",
-            scale=alt.Scale(domain=(0, y_axis_max + 1)),
-            axis=alt.Axis(tickMinStep=1),
-        ),
-        tooltip=[
-            alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
-            alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
-            alt.Tooltip("protein_codes:N", title="PDB codes"),
-            alt.Tooltip("group (OPM):N", title="OPM group"),
-            alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
-        ],
-    )
-
-    line_chart = base_chart.mark_line(
-        color="#2F78C4",
-        interpolate="linear",
-        strokeWidth=2.6,
-    ).encode(**base_encoding)
-
-    point_chart = (
-        alt.Chart(yearly_series[yearly_series["inconsistencies"] > 0])
-        .mark_circle(
-            color="#2F78C4",
-            size=52,
-            stroke="white",
-            strokeWidth=1.0,
-        )
-        .encode(**base_encoding)
-    )
-
     line_chart = (
-        (line_chart + point_chart).add_params(brush).properties(
+        alt.Chart(yearly_series)
+        .mark_line(
+            interpolate="monotone",
+            strokeWidth=3,
+            color="#2F78C4",
+            point=alt.OverlayMarkDef(
+                filled=True,
+                fill="#2F78C4",
+                color="#2F78C4",
+                size=58,
+                stroke="white",
+                strokeWidth=1.0,
+            ),
+        )
+        .encode(
+            x=alt.X(
+                "bibliography_year:O",
+                title="Year",
+                axis=alt.Axis(
+                    labelFontSize=16,
+                    titleFontSize=18,
+                    labelAngle=0,
+                    tickCount=year_tick_count,
+                ),
+            ),
+            y=alt.Y(
+                "inconsistencies:Q",
+                title="Inconsistencies",
+                scale=alt.Scale(domain=(0, max(9.9, y_axis_max * 1.1))),
+                axis=alt.Axis(
+                    labelFontSize=16,
+                    titleFontSize=18,
+                    tickMinStep=1,
+                ),
+            ),
+            tooltip=[
+                alt.Tooltip("bibliography_year:Q", title="Year", format="d"),
+                alt.Tooltip("inconsistencies:Q", title="Inconsistencies"),
+                alt.Tooltip("protein_codes:N", title="PDB codes"),
+                alt.Tooltip("group (OPM):N", title="OPM group"),
+                alt.Tooltip("group (MPstruc):N", title="MPstruc group"),
+            ],
+        )
+        .add_params(brush, click)
+        .properties(
             width=chart_width,
-            height=280,
+            height=300,
             title="Annual OPM-MPstruc group disagreements across MetaMP records",
         )
     )
@@ -816,67 +809,64 @@ def create_visualization(data, chart_width=None):
         alt.Chart(display_data)
         .transform_filter("datum.inconsistencies > 0")
         .transform_filter(brush)
+        .transform_filter(click)
         .transform_window(
             row_number="row_number()",
             sort=[
-                alt.SortField("inconsistencies", order="descending"),
                 alt.SortField("bibliography_year", order="descending"),
                 alt.SortField("pdb_code", order="ascending"),
             ],
         )
-        .transform_filter("datum.row_number <= 8")
-        .mark_text(align="left", baseline="middle", fontSize=12)
+        .transform_filter("datum.row_number < 15")
+        .mark_text(align="left", baseline="middle", fontSize=14)
         .encode(y=alt.Y("row_number:O", axis=None, title=None))
-    )
-
-    row_index = table.encode(
-        text=alt.Text("row_number:Q")
-    ).properties(
-        width=32,
-        title=alt.TitleParams(text="#", align="left"),
-    )
-
-    year = table.encode(
-        text=alt.Text("bibliography_year:Q", format=".0f")
-    ).properties(
-        width=64,
-        title=alt.TitleParams(text="Year", align="left"),
     )
 
     pdb_code = table.encode(
         text=alt.Text("pdb_code:N")
     ).properties(
-        width=74,
-        title=alt.TitleParams(text="PDB", align="left"),
+        width=95,
+        title=alt.TitleParams(text="PDB Code", align="left", fontSize=14),
     )
 
-    group = table.encode(
-        text=alt.Text("disagreement_pair:N")
+    group_mpstruc = table.encode(
+        text=alt.Text("group (MPstruc):N")
     ).properties(
-        width=300,
-        title=alt.TitleParams(text="MPstruc -> OPM", align="left"),
+        width=190,
+        title=alt.TitleParams(text="Group (MPstruc)", align="left", fontSize=14),
+    )
+
+    group_opm = table.encode(
+        text=alt.Text("group (OPM):N")
+    ).properties(
+        width=190,
+        title=alt.TitleParams(text="Group (OPM)", align="left", fontSize=14),
+    )
+
+    year = table.encode(
+        text=alt.Text("bibliography_year:Q", format=".0f")
+    ).properties(
+        width=80,
+        title=alt.TitleParams(text="Year", align="left", fontSize=14),
     )
 
     method = table.encode(
-        text=alt.Text("experimental_method_short:N")
+        text=alt.Text("experimental_method:N")
     ).properties(
-        width=110,
-        title=alt.TitleParams(text="Method", align="left"),
+        width=180,
+        title=alt.TitleParams(text="Experimental Method", align="left", fontSize=14),
     )
 
     # Concatenate columns horizontally
     table_layout = alt.hconcat(
-        row_index,
-        year,
         pdb_code,
-        group,
+        group_mpstruc,
+        group_opm,
+        year,
         method,
-        spacing=14,
-    ).properties(
-        title=alt.TitleParams(
-            text="Selected discrepancy records (top 8 within the chosen year range)",
-            anchor="start",
-        )
+        spacing=18,
+    ).resolve_legend(
+        color="independent"
     )
 
     # Concatenate chart and table vertically
@@ -885,11 +875,11 @@ def create_visualization(data, chart_width=None):
     ).configure_view(
         strokeWidth=0
     ).configure_axis(
-        labelFontSize=13,
-        titleFontSize=14
+        labelFontSize=16,
+        titleFontSize=18
     ).configure_title(
         fontSize=16,
-        anchor="start"
+        anchor="start",
     )
 
     return chart_with_table
