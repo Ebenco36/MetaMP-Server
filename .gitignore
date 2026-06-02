@@ -73,6 +73,10 @@ datasets/pdb/PDB_data_transformed.csv
 ARS.csv
 
 *.png
+*.pdf
+*.svg
+*.jpg
+*.diff
 # Exempt a specific PNG file from being ignored
 !public/MetaMPArchitecture.png
 !public/backend-completion-status.png
@@ -153,6 +157,25 @@ methodology_review_response_2026-03-27.md
 loadDump.txt
 Results_correct.tex
 docs/
+!docs/
+docs/*
+!docs/.nojekyll
+!docs/index.html
+!docs/assets/
+docs/assets/*
+!docs/assets/details-7rsl-hires.png
+!docs/assets/metamp-architecture.png
+!docs/assets/metamp-logo.svg
+!docs/assets/app-welcome.png
+!docs/assets/app-dashboard.png
+!docs/assets/app-about.png
+!docs/assets/app-database.png
+!docs/assets/app-discrepancies.png
+!docs/assets/app-contact.png
+!docs/assets/section-7rsl-3d-protein.png
+!docs/assets/section-7rsl-preferred-membrane-call.png
+!docs/assets/section-7rsl-tm-segment-tracks.png
+!docs/assets/section-7rsl-subunit-boundaries.png
 metamp-sqlite/
 vendor/wheels/
 
@@ -163,3 +186,16 @@ test.txt
 .pycache_check/
 .pycache/
 .pytest_cache/
+inconsistencies_chart.txt
+/md_files/
+.Rhistory
+
+
+old_paper.tex
+package-lock.json
+package.json
+paper_changes.html
+paper_diff.html
+scripts/export_page_capture.mjs
+scripts/export_page_hires.py
+scripts/generate_paper_changes.py

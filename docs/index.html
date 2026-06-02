@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MetaMP</title>
+  <meta name="description" content="A static MetaMP home page showing representative platform pages, architecture, and a 7RSL single-record membrane-protein view.">
+  <style>
+    :root {
+      --ink: #102033;
+      --muted: #586b80;
+      --line: #d7e3ec;
+      --paper: #f4f8fb;
+      --card: #ffffff;
+      --blue: #0069b8;
+      --blue-dark: #0b477d;
+      --navy: #0d2a45;
+      --aqua: #2cb6a6;
+      --gold: #f4b942;
+      --red: #d9564a;
+      --shadow: 0 24px 70px rgba(16, 36, 56, .12);
+      --soft-shadow: 0 16px 48px rgba(16, 36, 56, .08);
+      --radius: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% -5%, rgba(44, 182, 166, .18), transparent 32rem),
+        radial-gradient(circle at 92% 0%, rgba(0, 105, 184, .16), transparent 36rem),
+        linear-gradient(180deg, #fbfdff 0%, #f2f7fb 48%, #eef5f9 100%);
+      font-family: Avenir Next, Nunito Sans, Trebuchet MS, Verdana, sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .shell {
+      width: min(1320px, calc(100% - 36px));
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(18px);
+      background: rgba(255, 255, 255, .88);
+      border-bottom: 1px solid rgba(220, 230, 239, .9);
+    }
+
+    .nav-inner {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      color: var(--navy);
+    }
+
+    .brand-logo {
+      width: 58px;
+      height: 44px;
+      display: block;
+      object-fit: contain;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-links a {
+      color: #24435f;
+    }
+
+    .hero {
+      padding: 84px 0 46px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
+      gap: 44px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px solid rgba(0, 105, 184, .18);
+      border-radius: 999px;
+      color: var(--blue-dark);
+      background: rgba(255, 255, 255, .74);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .pulse {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--aqua);
+      box-shadow: 0 0 0 8px rgba(44, 182, 166, .16);
+    }
+
+    h1 {
+      margin: 22px 0 18px;
+      font-size: clamp(42px, 7vw, 78px);
+      line-height: .96;
+      letter-spacing: -.055em;
+      color: #102235;
+    }
+
+    .lead {
+      max-width: 780px;
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(18px, 2vw, 22px);
+    }
+
+    .hero-proof {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 30px;
+      max-width: 760px;
+    }
+
+    .proof-item {
+      padding: 15px 16px;
+      border: 1px solid rgba(215, 227, 236, .9);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .76);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .proof-item strong {
+      display: block;
+      color: var(--navy);
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .proof-item span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 105, 184, .22);
+      color: var(--blue-dark);
+      background: #fff;
+      font-weight: 800;
+      box-shadow: 0 10px 28px rgba(16, 36, 56, .08);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      text-decoration: none;
+      box-shadow: 0 16px 36px rgba(16, 36, 56, .12);
+    }
+
+    .button.primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+      border-color: transparent;
+    }
+
+    .hero-card {
+      position: relative;
+      padding: 24px;
+      border: 1px solid rgba(220, 230, 239, .96);
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .9), rgba(248, 252, 255, .82));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero-card::before {
+      content: "";
+      position: absolute;
+      inset: auto -18% -24% 24%;
+      height: 210px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(44, 182, 166, .24), transparent 68%);
+    }
+
+    .mini-dashboard {
+      position: relative;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-card-title {
+      margin: 0;
+      color: var(--navy);
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: -.01em;
+    }
+
+    .hero-card-note {
+      margin: -4px 0 2px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .mini-top {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .metric {
+      padding: 18px;
+      border-radius: 20px;
+      background: #f7fbff;
+      border: 1px solid var(--line);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 32px;
+      line-height: 1;
+      color: var(--blue-dark);
+    }
+
+    .metric span {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .trend {
+      height: 170px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(20, 32, 51, .06) 1px, transparent 1px) 0 0 / 100% 34px,
+        linear-gradient(90deg, rgba(20, 32, 51, .04) 1px, transparent 1px) 0 0 / 44px 100%,
+        #fff;
+      overflow: hidden;
+    }
+
+    .trend svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    section {
+      padding: 62px 0;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      margin-bottom: 24px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      max-width: 780px;
+      font-size: clamp(30px, 4vw, 46px);
+      line-height: 1.05;
+      letter-spacing: -.04em;
+    }
+
+    .section-head p {
+      max-width: 460px;
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .card {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, .82);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      counter-reset: workflow;
+    }
+
+    .workflow-step {
+      position: relative;
+      min-height: 220px;
+      padding: 24px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: linear-gradient(180deg, #fff, #f7fbfe);
+      box-shadow: var(--soft-shadow);
+    }
+
+    .workflow-step::before {
+      counter-increment: workflow;
+      content: "0" counter(workflow);
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin-bottom: 24px;
+      border-radius: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--blue), var(--aqua));
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .workflow-step h3 {
+      margin: 0 0 10px;
+      color: var(--navy);
+      font-size: 19px;
+      letter-spacing: -.02em;
+    }
+
+    .workflow-step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .card .icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 20px;
+      border-radius: 16px;
+      color: #fff;
+      background: var(--blue);
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      letter-spacing: -.02em;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .screen-wrap {
+      border-radius: 32px;
+      border: 1px solid rgba(220, 230, 239, .96);
+      background: #fff;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .screen-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbfd;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .dots {
+      display: inline-flex;
+      gap: 7px;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--line);
+    }
+
+    .dot:nth-child(1) { background: var(--red); }
+    .dot:nth-child(2) { background: var(--gold); }
+    .dot:nth-child(3) { background: var(--aqua); }
+
+    .screenshot {
+      display: block;
+      width: 100%;
+      max-height: 980px;
+      object-fit: cover;
+      object-position: top;
+      background: #eef3f7;
+    }
+
+    .figure-board {
+      display: grid;
+      gap: 18px;
+      padding: 18px;
+      background: #eef5fb;
+      border: 1px solid rgba(190, 211, 229, .9);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .figure-panel {
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid rgba(203, 218, 231, .95);
+      border-radius: 18px;
+    }
+
+    .figure-panel img {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #fff;
+    }
+
+    .figure-caption {
+      padding: 10px 12px 12px;
+      color: #182d45;
+      background: rgba(246, 249, 252, .92);
+      border-top: 1px solid var(--line);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .figure-caption strong {
+      color: #102235;
+    }
+
+    .figure-row {
+      display: grid;
+      grid-template-columns: minmax(280px, .92fr) minmax(360px, 1.08fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .figure-stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .app-showcase {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(340px, .65fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    .app-primary,
+    .route-card {
+      overflow: hidden;
+      border: 1px solid rgba(220, 230, 239, .96);
+      background: #fff;
+      box-shadow: 0 18px 52px rgba(16, 36, 56, .1);
+    }
+
+    .app-primary {
+      display: block;
+      border-radius: 28px;
+    }
+
+    .app-primary a {
+      display: block;
+      overflow: hidden;
+      background: linear-gradient(180deg, #f8fbfd, #edf4f9);
+    }
+
+    .app-primary img {
+      display: block;
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      object-position: top center;
+      padding: 12px;
+      background: linear-gradient(180deg, #f8fbfd, #edf4f9);
+    }
+
+    .app-primary figcaption,
+    .route-card figcaption {
+      padding: 16px 18px 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .route-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .route-card {
+      display: grid;
+      grid-template-columns: 155px minmax(0, 1fr);
+      border-radius: 22px;
+      min-height: 154px;
+    }
+
+    .route-card img {
+      width: 100%;
+      height: 100%;
+      min-height: 154px;
+      object-fit: cover;
+      object-position: top left;
+      background: #eef3f7;
+      border-right: 1px solid var(--line);
+    }
+
+    .route-card figcaption {
+      display: grid;
+      align-content: center;
+      border-top: 0;
+    }
+
+    .app-label {
+      display: inline-flex;
+      width: fit-content;
+      margin-bottom: 8px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: var(--blue-dark);
+      background: rgba(0, 105, 184, .1);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .app-primary h3,
+    .route-card h3 {
+      margin: 0 0 6px;
+      color: #102235;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+
+    .app-primary p,
+    .route-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .architecture {
+      width: 100%;
+      display: block;
+      padding: 24px;
+      background: #fff;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+      gap: 22px;
+      align-items: stretch;
+    }
+
+    .callout {
+      padding: 30px;
+      border-radius: 28px;
+      color: #fff;
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, .2), transparent 22rem),
+        linear-gradient(135deg, #0f4c82, #10304f);
+      box-shadow: var(--shadow);
+    }
+
+    .callout h2 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.08;
+      letter-spacing: -.035em;
+    }
+
+    .callout p {
+      margin: 0 0 20px;
+      color: rgba(255, 255, 255, .82);
+    }
+
+    .checklist {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .1);
+      border: 1px solid rgba(255, 255, 255, .16);
+    }
+
+    .quickstart {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(320px, .92fr);
+      gap: 22px;
+      align-items: stretch;
+      padding: 24px;
+      border: 1px solid rgba(215, 227, 236, .95);
+      border-radius: 32px;
+      background:
+        radial-gradient(circle at top right, rgba(44, 182, 166, .12), transparent 22rem),
+        linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(247, 251, 254, .9));
+      box-shadow: var(--shadow);
+    }
+
+    .command-box {
+      display: grid;
+      gap: 14px;
+      padding: 24px;
+      border-radius: 24px;
+      color: #d7f7ff;
+      background: linear-gradient(135deg, #0c263d, #123b5c);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+    }
+
+    .command-label {
+      color: rgba(215, 247, 255, .74);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .command-box code {
+      display: block;
+      color: #fff;
+      font-family: SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace;
+      font-size: clamp(13px, 1.4vw, 16px);
+      line-height: 1.7;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    .quickstart-panel {
+      display: grid;
+      gap: 16px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: #fff;
+    }
+
+    .quickstart-panel h3 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 22px;
+      letter-spacing: -.02em;
+    }
+
+    .quickstart-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .quickstart-list li {
+      position: relative;
+      padding-left: 28px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .quickstart-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: .45em;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--blue), var(--aqua));
+      box-shadow: 0 0 0 4px rgba(44, 182, 166, .12);
+    }
+
+    .url-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .url-card {
+      padding: 14px 15px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #f7fbff;
+    }
+
+    .url-card span {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .url-card a {
+      font-size: 14px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .tag {
+      display: inline-flex;
+      padding: 7px 11px;
+      border-radius: 999px;
+      color: var(--blue-dark);
+      background: rgba(0, 105, 184, .1);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid,
+      .split,
+      .cards,
+      .app-showcase,
+      .workflow,
+      .quickstart,
+      .url-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-proof {
+        grid-template-columns: 1fr;
+      }
+
+      .app-primary img {
+        min-height: auto;
+      }
+
+      .route-card {
+        grid-template-columns: 1fr;
+      }
+
+      .route-card img {
+        aspect-ratio: 18 / 9;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-head {
+        display: block;
+      }
+
+      .section-head p {
+        margin-top: 12px;
+      }
+
+      .nav-inner {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 16px 0;
+      }
+
+      .nav-links {
+        flex-wrap: wrap;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .figure-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="shell nav-inner">
+      <a class="brand" href="#top" aria-label="MetaMP home">
+        <img class="brand-logo" src="assets/metamp-logo.svg" alt="MetaMP logo">
+        <span>MetaMP</span>
+      </a>
+      <div class="nav-links" aria-label="Page sections">
+        <a href="#overview">Overview</a>
+        <a href="#screens">App Screens</a>
+        <a href="#quickstart">Quick Start</a>
+        <a href="#single-record">Single Record</a>
+        <a href="#architecture">Architecture</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="top">
+    <header class="hero shell">
+      <div class="hero-grid">
+        <div>
+          <span class="eyebrow"><span class="pulse"></span> Membrane-protein reconciliation platform</span>
+          <h1>MetaMP brings fragmented membrane-protein evidence into one traceable workspace.</h1>
+          <p class="lead">
+            MetaMP integrates metadata from MPstruc, RCSB PDB, OPM, and UniProt; surfaces cross-source disagreement; and supports topology benchmarking, single-record inspection, and deployment-ready review workflows.
+          </p>
+          <div class="hero-proof" aria-label="MetaMP proof points">
+            <div class="proof-item">
+              <strong>4,089</strong>
+              <span>harmonised structures</span>
+            </div>
+            <div class="proof-item">
+              <strong>121</strong>
+              <span>expert-reviewed conflicts</span>
+            </div>
+            <div class="proof-item">
+              <strong>4</strong>
+              <span>primary source systems</span>
+            </div>
+          </div>
+          <div class="actions">
+            <a class="button primary" href="#screens">View cached app pages</a>
+            <a class="button" href="#single-record">Explore record evidence</a>
+          </div>
+          <div class="tag-row">
+            <span class="tag">MPstruc</span>
+            <span class="tag">RCSB PDB</span>
+            <span class="tag">OPM</span>
+            <span class="tag">UniProt</span>
+            <span class="tag">Discrepancy review</span>
+          </div>
+        </div>
+
+        <aside class="hero-card" aria-label="MetaMP summary metrics">
+          <div class="mini-dashboard">
+            <h2 class="hero-card-title">Evidence at a glance</h2>
+            <p class="hero-card-note">A compact summary of what the current MetaMP build can expose.</p>
+            <div class="mini-top">
+              <div class="metric">
+                <strong>4,089</strong>
+                <span>harmonised membrane-protein structures</span>
+              </div>
+              <div class="metric">
+                <strong>121</strong>
+                <span>expert-reviewed discrepancy benchmark records</span>
+              </div>
+            </div>
+            <div class="trend" role="img" aria-label="Stylised discrepancy trend line">
+              <svg viewBox="0 0 520 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M0 140H520" stroke="#dce6ef"/>
+                <path d="M0 106H520" stroke="#dce6ef"/>
+                <path d="M0 72H520" stroke="#dce6ef"/>
+                <path d="M0 38H520" stroke="#dce6ef"/>
+                <path d="M24 138C60 138 72 138 92 138C116 138 118 96 136 96C158 96 152 138 174 138C198 138 194 58 220 58C240 58 232 112 252 112C274 112 270 74 292 74C316 74 310 94 330 94C352 94 356 28 378 28C404 28 398 72 420 72C440 72 438 54 456 54C484 54 468 28 496 28" stroke="#0069b8" stroke-width="5" stroke-linecap="round"/>
+                <g fill="#2cb6a6">
+                  <circle cx="136" cy="96" r="6"/>
+                  <circle cx="220" cy="58" r="6"/>
+                  <circle cx="378" cy="28" r="6"/>
+                  <circle cx="496" cy="28" r="6"/>
+                </g>
+              </svg>
+            </div>
+            <div class="metric">
+              <strong>88.43%</strong>
+              <span>benchmark-aware concordance for the assistive MetaMP classifier on contested records</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </header>
+
+    <section id="overview" class="shell">
+      <div class="section-head">
+        <h2>A clean workflow for fragmented membrane-protein evidence.</h2>
+        <p>
+          MetaMP is designed around the practical review sequence: bring sources together, expose disagreement, inspect records, and export evidence for review.
+        </p>
+      </div>
+      <div class="workflow">
+        <article class="workflow-step">
+          <h3>Integrate</h3>
+          <p>Cross-link MPstruc, RCSB PDB, OPM, and UniProt records while preserving source-specific provenance.</p>
+        </article>
+        <article class="workflow-step">
+          <h3>Compare</h3>
+          <p>Surface broad-group, topology, boundary, and metadata differences instead of hiding them in a single consensus label.</p>
+        </article>
+        <article class="workflow-step">
+          <h3>Inspect</h3>
+          <p>Review individual membrane-protein entries with structure, topology calls, evidence sources, and subunit-level context.</p>
+        </article>
+        <article class="workflow-step">
+          <h3>Benchmark</h3>
+          <p>Use expert-reviewed contested records and export-ready outputs to support reproducible model and curation assessment.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="capabilities" class="shell">
+      <div class="section-head">
+        <h2>What the current MetaMP implementation demonstrates.</h2>
+        <p>
+          This page summarizes the platform functions that have been implemented, revised, and prepared for stakeholder review.
+        </p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <div class="icon">P</div>
+          <h3>Provenance-aware integration</h3>
+          <p>Cross-links membrane-protein metadata across MPstruc, RCSB PDB, OPM, and UniProt while preserving source-specific context.</p>
+        </article>
+        <article class="card">
+          <div class="icon">D</div>
+          <h3>Discrepancy views</h3>
+          <p>Surfaces cross-source disagreement over time and links chart selection to detailed record-level review tables.</p>
+        </article>
+        <article class="card">
+          <div class="icon">T</div>
+          <h3>Topology comparison</h3>
+          <p>Compares expert, OPM, TMDET, DeepTMHMM, TMbed, and TMAlphaFold-linked predictor signals in one record view.</p>
+        </article>
+        <article class="card">
+          <div class="icon">M</div>
+          <h3>Assistive modelling</h3>
+          <p>Provides broad-group classification and transmembrane-segment benchmarking as reproducible baselines, not as autonomous curation.</p>
+        </article>
+        <article class="card">
+          <div class="icon">Q</div>
+          <h3>Quality-control workflows</h3>
+          <p>Flags accession replacements, unusual resolution values, inconsistent labels, and records requiring contextual interpretation.</p>
+        </article>
+        <article class="card">
+          <div class="icon">E</div>
+          <h3>Export-ready outputs</h3>
+          <p>Supports stakeholder-facing image/PDF/SVG export workflows for figures, manuscript review, and deployment demonstrations.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="screens" class="shell">
+      <div class="section-head">
+        <h2>Application views that demonstrate the working MetaMP platform.</h2>
+        <p>
+          The dashboard is shown as the primary product view; the supporting route cards summarize the other cached screens stakeholders can inspect without running the backend.
+        </p>
+      </div>
+      <div class="app-showcase">
+        <figure class="app-primary">
+          <a href="assets/app-dashboard.png?v=20260602-dashboard-clean">
+            <img src="assets/app-dashboard.png?v=20260602-dashboard-clean" alt="MetaMP dashboard analytics screenshot.">
+          </a>
+          <figcaption>
+            <span class="app-label">Primary view</span>
+            <h3>Dashboard analytics</h3>
+            <p>Integrated metadata summaries, platform-level statistics, and high-level database coverage in the main analytics workspace.</p>
+          </figcaption>
+        </figure>
+        <div class="route-stack" aria-label="Supporting MetaMP route screenshots">
+          <figure class="route-card">
+            <a href="assets/app-welcome.png">
+              <img src="assets/app-welcome.png" alt="MetaMP welcome page screenshot.">
+            </a>
+            <figcaption>
+              <span class="app-label">Entry route</span>
+              <h3>Welcome page</h3>
+              <p>Introduces MetaMP and routes users toward exploration, database review, and use-case workflows.</p>
+            </figcaption>
+          </figure>
+          <figure class="route-card">
+            <a href="assets/app-about.png">
+              <img src="assets/app-about.png" alt="MetaMP about page screenshot.">
+            </a>
+            <figcaption>
+              <span class="app-label">Context route</span>
+              <h3>About MetaMP</h3>
+              <p>Explains resource scope, source databases, and the scientific motivation for reconciliation.</p>
+            </figcaption>
+          </figure>
+          <figure class="route-card">
+            <a href="assets/app-database.png">
+              <img src="assets/app-database.png" alt="MetaMP searchable database screenshot.">
+            </a>
+            <figcaption>
+              <span class="app-label">Data route</span>
+              <h3>Searchable database</h3>
+              <p>Lets users inspect harmonised entries and filter metadata fields across integrated sources.</p>
+            </figcaption>
+          </figure>
+          <figure class="route-card">
+            <a href="assets/app-discrepancies.png">
+              <img src="assets/app-discrepancies.png" alt="MetaMP discrepancies use-case screenshot.">
+            </a>
+            <figcaption>
+              <span class="app-label">Review route</span>
+              <h3>Discrepancy review</h3>
+              <p>Shows cross-source disagreement and links aggregate trends to record-level evidence.</p>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="quickstart" class="shell">
+      <div class="section-head">
+        <h2>Run the published MetaMP stack locally.</h2>
+        <p>
+          Reviewers and collaborators can clone the repository and launch the full published app with one command.
+        </p>
+      </div>
+      <div class="quickstart">
+        <div class="command-box" aria-label="MetaMP local installation command">
+          <span class="command-label">Quick Start</span>
+          <code>git clone https://github.com/Ebenco36/MetaMP-Server.git &amp;&amp; cd MetaMP-Server &amp;&amp; ./scripts/metamp-reviewer-start.sh</code>
+        </div>
+        <aside class="quickstart-panel">
+          <h3>What the command does</h3>
+          <ul class="quickstart-list">
+            <li>Clones the MetaMP repository.</li>
+            <li>Pulls the latest published backend, frontend, and snapshot PostgreSQL images.</li>
+            <li>Pulls the published runtime snapshot assets.</li>
+            <li>Restores the published database state.</li>
+            <li>Starts the full app at <a href="http://localhost/">http://localhost/</a>.</li>
+            <li>Keeps background jobs off by default for reviewer-safe local runs.</li>
+          </ul>
+          <div class="url-grid" aria-label="MetaMP local URLs">
+            <div class="url-card">
+              <span>Frontend</span>
+              <a href="http://localhost/">http://localhost/</a>
+            </div>
+            <div class="url-card">
+              <span>Backend health</span>
+              <a href="http://localhost:5400/api/v1/health/ready">http://localhost:5400/api/v1/health/ready</a>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="single-record" class="shell">
+      <div class="section-head">
+        <h2>Case study: single-record evidence view.</h2>
+        <p>
+          PDB accession 7RSL demonstrates how MetaMP combines 3D structure, preferred membrane call, topology tracks, and subunit boundaries in one reviewable record.
+        </p>
+      </div>
+      <div class="figure-board">
+        <figure class="figure-panel">
+          <a href="assets/section-7rsl-3d-protein.png">
+            <img src="assets/section-7rsl-3d-protein.png" alt="Interactive 3D molecular viewer for PDB entry 7RSL.">
+          </a>
+          <figcaption class="figure-caption">
+            <strong>(a)</strong> Interactive 3D molecular viewer for PDB entry 7RSL (Seipin), showing the multi-subunit assembly with sequence and structure panels. Three-dimensional visualization is powered by Mol*.
+          </figcaption>
+        </figure>
+
+        <div class="figure-row">
+          <figure class="figure-panel">
+            <a href="assets/section-7rsl-preferred-membrane-call.png">
+              <img src="assets/section-7rsl-preferred-membrane-call.png" alt="Preferred membrane call topology panel for 7RSL.">
+            </a>
+            <figcaption class="figure-caption">
+              <strong>(b)</strong> Preferred membrane call summarising the reconciled topology class, orientation, primary evidence source, and inferred TM regions.
+            </figcaption>
+          </figure>
+
+          <div class="figure-stack">
+            <figure class="figure-panel">
+              <a href="assets/section-7rsl-tm-segment-tracks.png">
+                <img src="assets/section-7rsl-tm-segment-tracks.png" alt="TM segment comparison tracks for 7RSL.">
+              </a>
+              <figcaption class="figure-caption">
+                <strong>(c)</strong> TM segment comparison tracks showing agreement and disagreement among reference and predictor-derived topology calls. TM = transmembrane.
+              </figcaption>
+            </figure>
+
+            <figure class="figure-panel">
+              <a href="assets/section-7rsl-subunit-boundaries.png">
+                <img src="assets/section-7rsl-subunit-boundaries.png" alt="Subunit boundaries and TM segments for 7RSL.">
+              </a>
+              <figcaption class="figure-caption">
+                <strong>(d)</strong> OPM-derived subunit boundaries and per-chain TM segment ranges for the 7RSL assembly.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture" class="shell">
+      <div class="section-head">
+        <h2>Deployment-oriented architecture.</h2>
+        <p>
+          The full platform combines backend services, data ingestion, harmonisation, and an interactive frontend. This static page is only the public demonstration layer.
+        </p>
+      </div>
+      <div class="split">
+        <div class="screen-wrap">
+          <div class="screen-toolbar">
+            <span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span>
+            <span>MetaMP architecture</span>
+            <span>Architecture</span>
+          </div>
+          <img class="architecture" src="assets/metamp-architecture.png" alt="MetaMP architecture diagram.">
+        </div>
+        <aside class="callout">
+          <h2>What this static page is for.</h2>
+          <p>
+            It gives reviewers and stakeholders a clean, hostable overview of the platform while the full stack remains separately deployed.
+          </p>
+          <ul class="checklist">
+            <li>Communicates the integration and reconciliation problem clearly.</li>
+            <li>Shows representative application routes without backend access.</li>
+            <li>Preserves high-resolution 7RSL figure panels for manuscript review.</li>
+            <li>Publishes directly through GitHub Pages from the repository `docs/` folder.</li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+</body>
+</html>

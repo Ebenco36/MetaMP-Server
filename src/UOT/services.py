@@ -832,9 +832,9 @@ def get_use_cases(data=None):
             "use_case_"
             + use_case
             + "_width_"
-            + str(chart_width)
-            + "_logic_"
-            + "v4"
+                + str(chart_width)
+                + "_logic_"
+                + "v21_year_click_fit_compact_labels"
             + "_version_"
             + cache_version
         )
