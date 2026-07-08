@@ -1,5 +1,6 @@
 node_modules
 .DS_Store
+.claude/
 context.txt
 .venv_mpvis
 .venv
@@ -199,3 +200,11 @@ paper_diff.html
 scripts/export_page_capture.mjs
 scripts/export_page_hires.py
 scripts/generate_paper_changes.py
+
+
+MetaMP_Boss_Slide.pptx
+MetaMP_Colloquium_Slide.pptx
+create_metamp_boss_slide.js
+create_metamp_slide.js
+outputs/
+production_clean_package/
