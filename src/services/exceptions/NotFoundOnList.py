@@ -1,0 +1,3 @@
+
+class NotFoundOnList(Exception):
+    pass

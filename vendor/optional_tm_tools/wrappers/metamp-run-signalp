@@ -1,0 +1,226 @@
+#!/opt/venv/bin/python
+import argparse
+import csv
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+SIGNALP_VENDORED_BIN = "/opt/metamp-optional-tools/signalp_venv/bin/signalp6"
+
+
+def _resolve_signalp6_executable() -> str:
+    candidates = [
+        os.environ.get("METAMP_SIGNALP_BIN"),
+        SIGNALP_VENDORED_BIN,
+        shutil.which("signalp6"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return str(candidate)
+    raise SystemExit(
+        "SignalP 6 executable was not found. Install the official package into "
+        "vendor/optional_tm_tools/packages/signalp-6-package or set METAMP_SIGNALP_BIN."
+    )
+
+
+def read_fasta(path: Path):
+    sequence_id = None
+    chunks = []
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if sequence_id is not None:
+                yield sequence_id, "".join(chunks)
+            sequence_id = line[1:].split()[0]
+            chunks = []
+        else:
+            chunks.append(line)
+    if sequence_id is not None:
+        yield sequence_id, "".join(chunks)
+
+
+def _parse_attributes(text: str) -> dict:
+    attributes = {}
+    for item in str(text or "").split(";"):
+        item = item.strip()
+        if not item or "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        attributes[key.strip()] = value.strip()
+    return attributes
+
+
+def _normalize_label(feature_type: str, attributes: dict) -> str:
+    feature = str(feature_type or "").strip().lower()
+    name = str(attributes.get("Name") or attributes.get("signal_peptide") or "").strip()
+    if name:
+        return name
+    if feature in {"signal_peptide", "signal-peptide", "signal"}:
+        return "Signal"
+    if feature in {"n-region", "h-region", "c-region"}:
+        return feature.replace("-", " ")
+    if feature:
+        return feature.replace("_", " ").replace("-", " ").title()
+    return "Signal"
+
+
+def _parse_gff_regions(gff_path: Path):
+    grouped = {}
+    if not gff_path.exists():
+        return grouped
+    with gff_path.open() as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < 9:
+                continue
+            sequence_id, _, feature_type, start, end, _, _, _, attributes_text = parts[:9]
+            try:
+                start = int(start)
+                end = int(end)
+            except ValueError:
+                continue
+            attributes = _parse_attributes(attributes_text)
+            grouped.setdefault(sequence_id, []).append(
+                {
+                    "start": start,
+                    "end": end,
+                    "label": _normalize_label(feature_type, attributes),
+                }
+            )
+    return grouped
+
+
+def _merge_region_groups(*groups):
+    merged = {}
+    for group in groups:
+        for sequence_id, items in (group or {}).items():
+            merged.setdefault(sequence_id, []).extend(items)
+    normalized = {}
+    for sequence_id, items in merged.items():
+        items = sorted(items, key=lambda item: (int(item.get("start") or 0), int(item.get("end") or 0), str(item.get("label") or "")))
+        deduped = []
+        seen = set()
+        for index, item in enumerate(items, start=1):
+            key = (int(item.get("start") or 0), int(item.get("end") or 0), str(item.get("label") or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            start = max(1, int(item["start"]))
+            end = max(start, int(item["end"]))
+            deduped.append(
+                {
+                    "index": len(deduped) + 1,
+                    "start": start,
+                    "end": end,
+                    "length": end - start + 1,
+                    "label": str(item.get("label") or "Signal"),
+                }
+            )
+        normalized[sequence_id] = deduped
+    return normalized
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--input")
+    parser.add_argument("--output")
+    parser.add_argument("--reference", required=False)
+    args = parser.parse_args()
+
+    signalp6 = _resolve_signalp6_executable()
+
+    if args.self_test:
+        completed = subprocess.run(
+            [signalp6, "--version"],
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if completed.returncode != 0:
+            raise SystemExit(completed.stderr or completed.stdout or "signalp6 --version failed")
+        print("ok")
+        return
+
+    if not args.input or not args.output:
+        raise SystemExit("--input and --output are required unless --self-test is used.")
+
+    fasta_path = Path(args.input)
+    all_ids = [sequence_id for sequence_id, _ in read_fasta(fasta_path)]
+    output_rows = [{"pdb_code": sequence_id, "tm_count": None, "tm_regions": json.dumps([])} for sequence_id in all_ids]
+
+    if not all_ids:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["pdb_code", "tm_count", "tm_regions"])
+            writer.writeheader()
+        return
+
+    organism = os.environ.get("METAMP_SIGNALP_ORGANISM", "other").strip() or "other"
+    mode = os.environ.get("METAMP_SIGNALP_MODE", "fast").strip() or "fast"
+    model_dir = os.environ.get("METAMP_SIGNALP_MODEL_DIR", "").strip()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        run_output_dir = tmp_path / "signalp_output"
+        command = [
+            signalp6,
+            "--fastafile",
+            str(fasta_path),
+            "--organism",
+            organism,
+            "--output_dir",
+            str(run_output_dir),
+            "--format",
+            "none",
+            "--mode",
+            mode,
+        ]
+        if model_dir:
+            command.extend(["--model_dir", model_dir])
+        completed = subprocess.run(
+            command,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if completed.returncode != 0:
+            raise SystemExit(completed.stderr or completed.stdout or "SignalP execution failed")
+
+        signal_regions = _parse_gff_regions(run_output_dir / "output.gff3")
+        detailed_regions = _parse_gff_regions(run_output_dir / "region_output.gff3")
+        merged_regions = _merge_region_groups(signal_regions, detailed_regions)
+
+        output_rows = []
+        for sequence_id in all_ids:
+            output_rows.append(
+                {
+                    "pdb_code": sequence_id,
+                    "tm_count": None,
+                    "tm_regions": json.dumps(merged_regions.get(sequence_id, [])),
+                }
+            )
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["pdb_code", "tm_count", "tm_regions"])
+        writer.writeheader()
+        for row in output_rows:
+            writer.writerow(row)
+
+
+if __name__ == "__main__":
+    main()

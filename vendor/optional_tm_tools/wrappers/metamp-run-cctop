@@ -1,0 +1,312 @@
+#!/opt/venv/bin/python
+import argparse
+import csv
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+
+DEFAULT_CCTOP_VENDORED_ROOT = Path("/opt/metamp-optional-tools/cctop")
+DEFAULT_CCTOP_BIN = DEFAULT_CCTOP_VENDORED_ROOT / "Standalone" / "bin" / "cctop"
+DEFAULT_CCTOP_PARAM_XML = DEFAULT_CCTOP_VENDORED_ROOT / "Standalone" / "cctop_param.xml"
+
+
+def _resolve_executable(explicit_value, vendored_value, system_name):
+    candidates = [explicit_value, str(vendored_value), shutil.which(system_name)]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate) and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _resolve_file(explicit_value, vendored_value):
+    candidates = [explicit_value, str(vendored_value)]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return str(candidate)
+    return None
+
+
+def _resolve_cctop_executable():
+    return _resolve_executable(
+        os.environ.get("METAMP_CCTOP_BIN"),
+        DEFAULT_CCTOP_BIN,
+        "cctop",
+    )
+
+
+def _resolve_cctop_param_xml():
+    return _resolve_file(
+        os.environ.get("METAMP_CCTOP_PARAM_XML"),
+        DEFAULT_CCTOP_PARAM_XML,
+    )
+
+
+def _cctop_source_is_vendored():
+    return (
+        (DEFAULT_CCTOP_VENDORED_ROOT / "Standalone" / "CMakeLists.txt").exists()
+        and (DEFAULT_CCTOP_VENDORED_ROOT / "Lib" / "CMakeLists.txt").exists()
+    )
+
+
+def _detect_hmmtop_support():
+    candidates = [
+        os.environ.get("METAMP_HMMTOP_BIN"),
+        os.environ.get("METAMP_HMMTOP_HOME"),
+        os.environ.get("METAMP_HMMTOP_LIB"),
+        "/usr/local/lib/libHMMTOP.so",
+        "/usr/local/lib/libhmmtop.so",
+        "/usr/local/bin/hmmtop",
+        "/var/app/vendor/optional_tm_tools/hmmtop",
+    ]
+    return [str(candidate) for candidate in candidates if candidate and os.path.exists(candidate)]
+
+
+def _read_fasta(path: Path):
+    sequence_id = None
+    chunks = []
+    for raw_line in path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith(">"):
+            if sequence_id is not None:
+                yield sequence_id, "".join(chunks)
+            sequence_id = line[1:].split()[0]
+            chunks = []
+        else:
+            chunks.append(line)
+    if sequence_id is not None:
+        yield sequence_id, "".join(chunks)
+
+
+def _label_from_loc(loc):
+    text = str(loc or "").strip()
+    normalized = text.lower().replace("_", " ").replace("-", " ")
+    label_map = {
+        "inside": "Inside",
+        "outside": "Outside",
+        "membrane": "Membrane",
+        "signal": "Signal",
+        "transit": "Transit",
+        "re entrant loop": "Re-entrant loop",
+        "membrane re entrant loop": "Membrane re-entrant loop",
+    }
+    return label_map.get(normalized, text or "Unknown")
+
+
+def _is_membrane_region(loc):
+    normalized = str(loc or "").strip().lower().replace("_", " ").replace("-", " ")
+    return "membrane" in normalized
+
+
+def _parse_cctop_xml(xml_path: Path):
+    root = ET.parse(xml_path).getroot()
+    regions = []
+    for region in root.findall(".//Region"):
+        attributes = region.attrib or {}
+        start_value = attributes.get("from") or attributes.get("start") or attributes.get("beg")
+        end_value = attributes.get("to") or attributes.get("end")
+        loc_value = attributes.get("loc") or attributes.get("type") or region.text or ""
+        try:
+            start = int(start_value)
+            end = int(end_value)
+        except (TypeError, ValueError):
+            continue
+        if end < start:
+            start, end = end, start
+        regions.append(
+            {
+                "start": start,
+                "end": end,
+                "label": _label_from_loc(loc_value),
+                "is_membrane": _is_membrane_region(loc_value),
+            }
+        )
+
+    deduped = []
+    seen = set()
+    for item in sorted(regions, key=lambda value: (value["start"], value["end"], value["label"])):
+        key = (item["start"], item["end"], item["label"])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(
+            {
+                "index": len(deduped) + 1,
+                "start": item["start"],
+                "end": item["end"],
+                "length": item["end"] - item["start"] + 1,
+                "label": item["label"],
+                "is_membrane": item["is_membrane"],
+            }
+        )
+
+    tm_count = sum(1 for item in deduped if item["is_membrane"])
+    normalized_regions = []
+    for item in deduped:
+        normalized_regions.append(
+            {
+                "index": item["index"],
+                "start": item["start"],
+                "end": item["end"],
+                "length": item["length"],
+                "label": item["label"],
+            }
+        )
+    return tm_count, normalized_regions
+
+
+def _build_command(command_template, *, cctop_bin, input_fasta, output_xml, param_xml, work_dir):
+    substitutions = {
+        "cctop_bin": cctop_bin,
+        "input_fasta": str(input_fasta),
+        "output_xml": str(output_xml),
+        "param_xml": param_xml,
+        "work_dir": str(work_dir),
+    }
+    if command_template:
+        return command_template.format(**substitutions)
+    return [
+        cctop_bin,
+        "-i",
+        str(input_fasta),
+        "-o",
+        str(output_xml),
+        "-p",
+        param_xml,
+    ]
+
+
+def _run_command(command, *, cwd):
+    if isinstance(command, str):
+        return subprocess.run(
+            command,
+            shell=True,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=1800,
+        )
+    return subprocess.run(
+        command,
+        shell=False,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
+
+
+def _self_test():
+    cctop_bin = _resolve_cctop_executable()
+    if not cctop_bin:
+        if _cctop_source_is_vendored():
+            hmmtop_support = _detect_hmmtop_support()
+            if not hmmtop_support:
+                raise SystemExit(
+                    "Official CCTOP source is vendored, but the executable was not built because no HMMTOP "
+                    "installation was detected. Provide a licensed HMMTOP build under /usr/local/include/hmmtop "
+                    "and /usr/local/lib/hmmtop_lib, or set METAMP_HMMTOP_BIN/METAMP_HMMTOP_HOME/METAMP_HMMTOP_LIB "
+                    "and rebuild flask-app."
+                )
+            raise SystemExit(
+                "Official CCTOP source is vendored and HMMTOP appears present, but no executable was found. "
+                "Rebuild flask-app so MetaMP can compile CCTOP, or set METAMP_CCTOP_BIN explicitly."
+            )
+        raise SystemExit(
+            "CCTOP executable was not found. Vendor the official CCTOP standalone package under "
+            "vendor/optional_tm_tools/packages/cctop or set METAMP_CCTOP_BIN."
+        )
+    param_xml = _resolve_cctop_param_xml()
+    if not param_xml:
+        raise SystemExit(
+            "CCTOP param.xml was not found. Set METAMP_CCTOP_PARAM_XML or vendor the official "
+            "CCTOP standalone package so MetaMP can resolve Standalone/bin/param.xml."
+        )
+    hmmtop_support = _detect_hmmtop_support()
+    if not hmmtop_support and os.environ.get("METAMP_CCTOP_SKIP_HMMTOP_CHECK", "").strip() != "1":
+        raise SystemExit(
+            "CCTOP tooling was found, but no HMMTOP installation was detected. "
+            "Vendor a licensed HMMTOP build, set METAMP_HMMTOP_BIN/METAMP_HMMTOP_HOME/METAMP_HMMTOP_LIB, "
+            "or set METAMP_CCTOP_SKIP_HMMTOP_CHECK=1 if the site-managed CCTOP environment already handles it."
+        )
+    print("ok")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--self-test", action="store_true")
+    parser.add_argument("--input")
+    parser.add_argument("--output")
+    parser.add_argument("--reference", required=False)
+    args = parser.parse_args()
+
+    if args.self_test:
+        _self_test()
+        return
+
+    if not args.input or not args.output:
+        raise SystemExit("--input and --output are required unless --self-test is used.")
+
+    cctop_bin = _resolve_cctop_executable()
+    if not cctop_bin:
+        raise SystemExit("CCTOP executable was not found. Configure METAMP_CCTOP_BIN.")
+    param_xml = _resolve_cctop_param_xml()
+    if not param_xml:
+        raise SystemExit("CCTOP param.xml was not found. Configure METAMP_CCTOP_PARAM_XML.")
+
+    command_template = os.environ.get("METAMP_CCTOP_COMMAND_TEMPLATE", "").strip()
+    input_path = Path(args.input)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    output_rows = []
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        work_dir = Path(tmp_dir)
+        for pdb_code, sequence in _read_fasta(input_path):
+            sequence_fasta = work_dir / f"{pdb_code}.fasta"
+            sequence_fasta.write_text(f">{pdb_code}\n{sequence}\n", encoding="utf-8")
+            xml_output = work_dir / f"{pdb_code}.xml"
+            command = _build_command(
+                command_template,
+                cctop_bin=cctop_bin,
+                input_fasta=sequence_fasta,
+                output_xml=xml_output,
+                param_xml=param_xml,
+                work_dir=work_dir,
+            )
+            completed = _run_command(command, cwd=work_dir)
+            if completed.returncode != 0:
+                command_text = command if isinstance(command, str) else " ".join(
+                    shlex.quote(str(item)) for item in command
+                )
+                raise SystemExit(
+                    f"CCTOP failed for {pdb_code}.\nCommand: {command_text}\n"
+                    f"STDERR: {completed.stderr or completed.stdout or 'No output received.'}"
+                )
+            if not xml_output.exists():
+                raise SystemExit(f"CCTOP did not produce XML output for {pdb_code} at {xml_output}.")
+            tm_count, tm_regions = _parse_cctop_xml(xml_output)
+            output_rows.append(
+                {
+                    "pdb_code": pdb_code,
+                    "tm_count": tm_count,
+                    "tm_regions": json.dumps(tm_regions),
+                }
+            )
+
+    with output_path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["pdb_code", "tm_count", "tm_regions"])
+        writer.writeheader()
+        for row in output_rows:
+            writer.writerow(row)
+
+
+if __name__ == "__main__":
+    main()

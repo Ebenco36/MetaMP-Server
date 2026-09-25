@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+#SBATCH --job-name=metamp_sqlite_tmbed
+#SBATCH --output=metamp_sqlite_tmbed.out
+#SBATCH --error=metamp_sqlite_tmbed.err
+#SBATCH --time=5-00:00:00
+#SBATCH --partition=main
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --mem=256G
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  ROOT_DIR="$(cd "${SLURM_SUBMIT_DIR}" && pwd)"
+else
+  ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
+DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
+DEFAULT_RUNTIME_ROOT="$ROOT_DIR/release-snapshots/sqlite-tmbed-runtime"
+
+ENV_FILE="$DEFAULT_ENV_FILE"
+RUNTIME_ROOT="$DEFAULT_RUNTIME_ROOT"
+SQLITE_PATH=""
+CSV_EXPORT_PATH=""
+VENV_DIR=""
+PYTHON_BIN=""
+TMBED_SOURCE_DIR="${TMBED_SOURCE_DIR:-}"
+WHEELHOUSE_DIR="${WHEELHOUSE_DIR:-}"
+BOOTSTRAP_PYTHON_BIN="${BOOTSTRAP_PYTHON_BIN:-}"
+PIP_CERT_PATH="${PIP_CERT_PATH:-}"
+PIP_EXTRA_ARGS="${PIP_EXTRA_ARGS:-}"
+REBUILD_DB=0
+INCLUDE_COMPLETED=0
+USE_GPU_MODE="${USE_GPU_MODE:-auto}"
+TMBED_BATCH_SIZE="${TMBED_BATCH_SIZE:-1}"
+TMBED_MAX_WORKERS="${TMBED_MAX_WORKERS:-1}"
+INSTALL_DEPS=1
+RECREATE_VENV=0
+
+log() {
+  printf '[MetaMP SQLite TMbed] %s\n' "$*"
+}
+
+die() {
+  printf '[MetaMP SQLite TMbed][error] %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  sbatch scripts/metamp-hpc-sqlite-tmbed.sh
+  bash scripts/metamp-hpc-sqlite-tmbed.sh [options]
+
+This script creates a SQLite-backed MetaMP runtime, loads the checked-in dataset snapshots,
+runs the TMbed-only fallback pipeline, and exports membrane_protein_tmalphafold_predictions to CSV.
+
+Options:
+  --env-file PATH          Use a different env file for shared defaults. Default: .env.docker.deployment
+  --runtime-root PATH      Runtime working directory. Default: release-snapshots/sqlite-tmbed-runtime
+  --sqlite-path PATH       SQLite database file path. Default: <runtime-root>/metamp_hpc.sqlite
+  --csv-export PATH        CSV export path. Default: <runtime-root>/membrane_protein_tmalphafold_predictions.csv
+  --venv-dir PATH          Virtualenv directory to create/use. Default: <runtime-root>/.venv
+  --python-bin PATH        Explicit Python interpreter to use. Overrides --venv-dir.
+  --tmbed-source-dir PATH  Optional local TMbed source tree to expose on PYTHONPATH.
+  --wheelhouse-dir PATH    Optional offline wheelhouse directory for pip installs.
+  --bootstrap-python PATH  Python executable used to create the virtualenv. Default: python3
+  --pip-cert PATH          CA bundle path for pip/requests SSL verification.
+  --pip-extra-args TEXT    Extra arguments appended to pip install commands.
+  --rebuild-db             Remove the SQLite DB and reload datasets before the TMbed run.
+  --include-completed      Rerun TMbed even if MetaMP already has SQLite rows for a record.
+  --gpu-mode MODE          One of: auto, on, off. Default: auto
+  --tmbed-batch-size N     TMbed batch size. Default: 1
+  --tmbed-max-workers N    TMbed worker count. Default: 1
+  --skip-install-deps      Reuse the virtualenv as-is without running pip install.
+  --recreate-venv          Remove and recreate the virtualenv before installing dependencies.
+  -h, --help               Show this help.
+EOF
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+require_file() {
+  [[ -f "$1" ]] || die "Required file not found: $1"
+}
+
+write_filtered_ml_requirements() {
+  local source_requirements="$ROOT_DIR/requirements-ml.txt"
+  local filtered_requirements="$RUNTIME_ROOT/requirements-ml.local.txt"
+  require_file "$source_requirements"
+  grep -viE '^[[:space:]]*tmbed([[:space:]]|@|=|>|<)' "$source_requirements" > "$filtered_requirements"
+  printf '%s\n' "$filtered_requirements"
+}
+
+configure_wheelhouse() {
+  if [[ -z "$WHEELHOUSE_DIR" && -d "$ROOT_DIR/vendor/wheels" ]]; then
+    WHEELHOUSE_DIR="$ROOT_DIR/vendor/wheels"
+  fi
+  if [[ -n "$WHEELHOUSE_DIR" && ! -d "$WHEELHOUSE_DIR" ]]; then
+    die "Wheelhouse directory not found: $WHEELHOUSE_DIR"
+  fi
+}
+
+has_wheelhouse() {
+  [[ -n "$WHEELHOUSE_DIR" && -d "$WHEELHOUSE_DIR" ]] || return 1
+  find "$WHEELHOUSE_DIR" -maxdepth 1 -type f | grep -q .
+}
+
+configure_tmbed_source() {
+  if [[ -z "$TMBED_SOURCE_DIR" && -d "$ROOT_DIR/tmbed/tmbed" ]]; then
+    TMBED_SOURCE_DIR="$ROOT_DIR/tmbed"
+  fi
+  if [[ -n "$TMBED_SOURCE_DIR" && ! -d "$TMBED_SOURCE_DIR/tmbed" ]]; then
+    die "TMbed source directory does not look valid: $TMBED_SOURCE_DIR"
+  fi
+}
+
+verify_tmbed_runtime() {
+  if "$PYTHON_BIN" -c "import tmbed" >/dev/null 2>&1; then
+    return 0
+  fi
+  die "TMbed is not importable in the HPC runtime. Provide --tmbed-source-dir /path/to/tmbed or --wheelhouse-dir with a Linux-compatible tmbed wheel."
+}
+
+resolve_bootstrap_python() {
+  if [[ -n "$BOOTSTRAP_PYTHON_BIN" && -x "$BOOTSTRAP_PYTHON_BIN" ]]; then
+    return 0
+  fi
+  local candidate
+  for candidate in python3.12 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      BOOTSTRAP_PYTHON_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  die "python3.12 or python3 is required to create the virtualenv. Pass --bootstrap-python if neither is on PATH."
+}
+
+prepare_virtualenv() {
+  if [[ -z "$VENV_DIR" ]]; then
+    VENV_DIR="$RUNTIME_ROOT/.venv"
+  fi
+
+  if [[ "$RECREATE_VENV" -eq 1 && -d "$VENV_DIR" ]]; then
+    log "Removing existing virtualenv at $VENV_DIR"
+    rm -rf "$VENV_DIR"
+  fi
+
+  if [[ ! -x "$VENV_DIR/bin/python" ]]; then
+    resolve_bootstrap_python
+    log "Creating virtualenv at $VENV_DIR using $BOOTSTRAP_PYTHON_BIN"
+    "$BOOTSTRAP_PYTHON_BIN" -m venv "$VENV_DIR"
+  fi
+
+  PYTHON_BIN="$VENV_DIR/bin/python"
+
+  if [[ -z "$PIP_CERT_PATH" ]]; then
+    for candidate in \
+      /etc/ssl/certs/ca-certificates.crt \
+      /etc/pki/tls/certs/ca-bundle.crt \
+      /etc/ssl/cert.pem
+    do
+      if [[ -f "$candidate" ]]; then
+        PIP_CERT_PATH="$candidate"
+        break
+      fi
+    done
+  fi
+  if [[ -n "$PIP_CERT_PATH" ]]; then
+    export SSL_CERT_FILE="$PIP_CERT_PATH"
+    export REQUESTS_CA_BUNDLE="$PIP_CERT_PATH"
+    export PIP_CERT="$PIP_CERT_PATH"
+    log "Using CA bundle for pip: $PIP_CERT_PATH"
+  fi
+
+  if [[ -n "$TMBED_SOURCE_DIR" ]]; then
+    export PYTHONPATH="$TMBED_SOURCE_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  fi
+
+  if [[ "$INSTALL_DEPS" -eq 1 ]]; then
+    log "Installing MetaMP dependencies into $VENV_DIR"
+    local pip_args=()
+    local filtered_ml_requirements
+    local pip_install_args=()
+    if [[ -n "$PIP_EXTRA_ARGS" ]]; then
+      # shellcheck disable=SC2206
+      pip_args=($PIP_EXTRA_ARGS)
+    fi
+    filtered_ml_requirements="$(write_filtered_ml_requirements)"
+    if has_wheelhouse; then
+      log "Using offline wheelhouse: $WHEELHOUSE_DIR"
+      pip_install_args+=(--no-index --find-links "$WHEELHOUSE_DIR")
+    fi
+    "$PYTHON_BIN" -m ensurepip --upgrade
+    "$PYTHON_BIN" -m pip install "${pip_args[@]}" "${pip_install_args[@]}" -r "$ROOT_DIR/requirements.txt" -r "$filtered_ml_requirements"
+    if [[ -z "$TMBED_SOURCE_DIR" ]] && has_wheelhouse; then
+      local tmbed_wheel
+      tmbed_wheel="$(find "$WHEELHOUSE_DIR" -maxdepth 1 -type f -name 'tmbed-*.whl' | head -n 1 || true)"
+      if [[ -n "$tmbed_wheel" ]]; then
+        log "Installing TMbed from wheelhouse: $(basename "$tmbed_wheel")"
+        "$PYTHON_BIN" -m pip install "${pip_args[@]}" "${pip_install_args[@]}" "$tmbed_wheel"
+      fi
+    fi
+  fi
+
+  verify_tmbed_runtime
+}
+
+resolve_python_runtime() {
+  if [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$VENV_DIR" ]]; then
+    prepare_virtualenv
+    return 0
+  fi
+
+  prepare_virtualenv
+}
+
+resolve_gpu_flag() {
+  case "$USE_GPU_MODE" in
+    on)
+      printf '%s\n' "true"
+      ;;
+    off)
+      printf '%s\n' "false"
+      ;;
+    auto)
+      if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+        printf '%s\n' "true"
+      else
+        printf '%s\n' "false"
+      fi
+      ;;
+    *)
+      die "Unsupported --gpu-mode value: $USE_GPU_MODE"
+      ;;
+  esac
+}
+
+load_base_env() {
+  if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+  fi
+}
+
+prepare_runtime_paths() {
+  mkdir -p "$RUNTIME_ROOT"
+  if [[ -z "$SQLITE_PATH" ]]; then
+    SQLITE_PATH="$RUNTIME_ROOT/metamp_hpc.sqlite"
+  fi
+  if [[ -z "$CSV_EXPORT_PATH" ]]; then
+    CSV_EXPORT_PATH="$RUNTIME_ROOT/membrane_protein_tmalphafold_predictions.csv"
+  fi
+  mkdir -p \
+    "$RUNTIME_ROOT/data/models/semi-supervised" \
+    "$RUNTIME_ROOT/data/tmbed-models" \
+    "$RUNTIME_ROOT/data/tm_predictions/external"
+}
+
+validate_project_inputs() {
+  require_file "$ROOT_DIR/manage.py"
+  require_file "$ROOT_DIR/requirements.txt"
+  require_file "$ROOT_DIR/requirements-ml.txt"
+  [[ -d "$ROOT_DIR/datasets" ]] || die "Required dataset directory not found: $ROOT_DIR/datasets"
+}
+
+prepare_python_env() {
+  load_base_env
+  prepare_runtime_paths
+
+  export FLASK_APP=manage.py
+  export FLASK_ENV=production
+  export APP_SETTINGS=config.config.ProductionConfig
+  export DATABASE_URL="sqlite:///$SQLITE_PATH"
+  export INGESTION_DATASET_BASE_DIR="$ROOT_DIR/datasets"
+  if [[ -f "$ROOT_DIR/datasets/expert_annotation_predicted.csv" ]]; then
+    export DASHBOARD_ANNOTATION_DATASET_PATH="$ROOT_DIR/datasets/expert_annotation_predicted.csv"
+  else
+    unset DASHBOARD_ANNOTATION_DATASET_PATH || true
+    log "Optional expert annotation dataset not found; continuing without DASHBOARD_ANNOTATION_DATASET_PATH."
+  fi
+  export SEMI_SUPERVISED_MODEL_DIR="$RUNTIME_ROOT/data/models/semi-supervised"
+  export LIVE_GROUP_PREDICTIONS_PATH="$RUNTIME_ROOT/data/models/live_group_predictions.csv"
+  export TM_PREDICTION_OUTPUT_CSV="$RUNTIME_ROOT/data/tm_predictions/tm_summary.csv"
+  export OPTIONAL_TM_PREDICTION_BASE_DIR="$RUNTIME_ROOT/data/tm_predictions/external"
+  export TMBED_MODEL_DIR="$RUNTIME_ROOT/data/tmbed-models"
+  export TM_PREDICTION_BATCH_SIZE="$TMBED_BATCH_SIZE"
+  export TM_PREDICTION_MAX_WORKERS="$TMBED_MAX_WORKERS"
+  export TM_PREDICTION_USE_GPU="$(resolve_gpu_flag)"
+  export TMALPHAFOLD_TMBED_USE_GPU="$TM_PREDICTION_USE_GPU"
+}
+
+run_flask() {
+  "$PYTHON_BIN" -m flask "$@"
+}
+
+bootstrap_sqlite_db() {
+  if [[ "$REBUILD_DB" -eq 1 && -f "$SQLITE_PATH" ]]; then
+    log "Removing existing SQLite database at $SQLITE_PATH"
+    rm -f "$SQLITE_PATH"
+  fi
+
+  if [[ ! -f "$SQLITE_PATH" ]]; then
+    log "Creating SQLite database and loading dataset snapshots..."
+    run_flask load-protein-datasets --clear-db --no-seed-defaults
+  else
+    log "SQLite database already exists; syncing schema only."
+    run_flask sync-protein-schema
+  fi
+}
+
+run_tmbed_only() {
+  local args=(run-verified-tm-fallbacks --mode fallback_only --all --fallback-method TMbed)
+  if [[ "$TM_PREDICTION_USE_GPU" == "true" ]]; then
+    args+=(--use-gpu)
+  else
+    args+=(--no-gpu)
+  fi
+  args+=(--batch-size "$TMBED_BATCH_SIZE" --max-workers "$TMBED_MAX_WORKERS")
+  if [[ "$INCLUDE_COMPLETED" -eq 1 ]]; then
+    args+=(--include-completed)
+  fi
+
+  log "Running TMbed-only fallback pipeline against SQLite ..."
+  run_flask "${args[@]}"
+}
+
+export_predictions_csv() {
+  log "Exporting membrane_protein_tmalphafold_predictions to $CSV_EXPORT_PATH"
+  run_flask export-tmalphafold-predictions-csv --output-path "$CSV_EXPORT_PATH"
+}
+
+main() {
+  cd "$ROOT_DIR"
+  validate_project_inputs
+  configure_wheelhouse
+  configure_tmbed_source
+  prepare_runtime_paths
+  resolve_python_runtime
+  prepare_python_env
+
+  log "Python runtime: $PYTHON_BIN"
+  if [[ -n "$VENV_DIR" ]]; then
+    log "Virtualenv: $VENV_DIR"
+  fi
+  if [[ -n "$TMBED_SOURCE_DIR" ]]; then
+    log "TMbed source dir: $TMBED_SOURCE_DIR"
+  else
+    log "TMbed source dir: <not provided>"
+  fi
+  if [[ -n "$WHEELHOUSE_DIR" ]]; then
+    log "Wheelhouse dir: $WHEELHOUSE_DIR"
+  else
+    log "Wheelhouse dir: <not provided>"
+  fi
+  log "SQLite database: $SQLITE_PATH"
+  log "CSV export path: $CSV_EXPORT_PATH"
+  log "TMbed GPU enabled: $TM_PREDICTION_USE_GPU"
+
+  bootstrap_sqlite_db
+  run_tmbed_only
+  export_predictions_csv
+
+  log "SQLite TMbed workflow completed."
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env-file)
+      ENV_FILE="$2"
+      shift 2
+      ;;
+    --runtime-root)
+      RUNTIME_ROOT="$2"
+      shift 2
+      ;;
+    --sqlite-path)
+      SQLITE_PATH="$2"
+      shift 2
+      ;;
+    --csv-export)
+      CSV_EXPORT_PATH="$2"
+      shift 2
+      ;;
+    --venv-dir)
+      VENV_DIR="$2"
+      shift 2
+      ;;
+    --python-bin)
+      PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --tmbed-source-dir)
+      TMBED_SOURCE_DIR="$2"
+      shift 2
+      ;;
+    --wheelhouse-dir)
+      WHEELHOUSE_DIR="$2"
+      shift 2
+      ;;
+    --bootstrap-python)
+      BOOTSTRAP_PYTHON_BIN="$2"
+      shift 2
+      ;;
+    --pip-cert)
+      PIP_CERT_PATH="$2"
+      shift 2
+      ;;
+    --pip-extra-args)
+      PIP_EXTRA_ARGS="$2"
+      shift 2
+      ;;
+    --rebuild-db)
+      REBUILD_DB=1
+      shift
+      ;;
+    --include-completed)
+      INCLUDE_COMPLETED=1
+      shift
+      ;;
+    --gpu-mode)
+      USE_GPU_MODE="$2"
+      shift 2
+      ;;
+    --tmbed-batch-size)
+      TMBED_BATCH_SIZE="$2"
+      shift 2
+      ;;
+    --tmbed-max-workers)
+      TMBED_MAX_WORKERS="$2"
+      shift 2
+      ;;
+    --skip-install-deps)
+      INSTALL_DEPS=0
+      shift
+      ;;
+    --recreate-venv)
+      RECREATE_VENV=1
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "Unknown option: $1"
+      ;;
+  esac
+done
+
+main

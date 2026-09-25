@@ -1,0 +1,3 @@
+
+class TagDoesnotExist(Exception):
+    pass

@@ -1,0 +1,737 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEFAULT_ENV_FILE="$ROOT_DIR/.env.docker.deployment"
+STATE_FILE="$ROOT_DIR/.metamp-production-bootstrap.state"
+LOCK_DIR="$ROOT_DIR/.metamp-production-bootstrap.lock"
+LOCK_INFO_FILE="$LOCK_DIR/owner.env"
+BOOTSTRAP_MARKER_PATH="/var/app/data/bootstrap/production-bootstrap-state.json"
+RUNTIME_DATASET_DIR=""
+DOCKER_BIN="${DOCKER_BIN:-}"
+DOCKER_COMPOSE_BIN="${DOCKER_COMPOSE_BIN:-}"
+COMPOSE_RUNNER_MODE=""
+BOOTSTRAP_LOCK_HELD=0
+
+ENV_FILE="$DEFAULT_ENV_FILE"
+WITH_FRONTEND=0
+WITH_LOCAL_FRONTEND=0
+SKIP_BUILD=0
+NO_CACHE=0
+FORCE_BOOTSTRAP=0
+WAIT_TIMEOUT_SECONDS="${WAIT_TIMEOUT_SECONDS:-10800}"
+BOOTSTRAP_STAGES=""
+REFRESH_STAGE_ARTIFACTS=""
+
+log() {
+  printf '[MetaMP Bootstrap] %s\n' "$*"
+}
+
+warn() {
+  printf '[MetaMP Bootstrap][warn] %s\n' "$*" >&2
+}
+
+die() {
+  printf '[MetaMP Bootstrap][error] %s\n' "$*" >&2
+  exit 1
+}
+
+write_lock_info() {
+  cat >"$LOCK_INFO_FILE" <<EOF
+PID=$$
+STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMAND=$COMMAND
+ENV_FILE=$ENV_FILE
+EOF
+}
+
+release_run_lock() {
+  local owner_pid=""
+
+  if [[ "$BOOTSTRAP_LOCK_HELD" -ne 1 || ! -d "$LOCK_DIR" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$LOCK_INFO_FILE" ]]; then
+    owner_pid="$(awk -F= '$1=="PID" {print $2}' "$LOCK_INFO_FILE")"
+  fi
+
+  if [[ -z "$owner_pid" || "$owner_pid" == "$$" ]]; then
+    rm -rf "$LOCK_DIR"
+  fi
+
+  BOOTSTRAP_LOCK_HELD=0
+}
+
+acquire_run_lock() {
+  local owner_pid=""
+  local started_at=""
+  local owner_command=""
+
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    write_lock_info
+    BOOTSTRAP_LOCK_HELD=1
+    trap release_run_lock EXIT INT TERM HUP
+    return 0
+  fi
+
+  if [[ -f "$LOCK_INFO_FILE" ]]; then
+    owner_pid="$(awk -F= '$1=="PID" {print $2}' "$LOCK_INFO_FILE")"
+    started_at="$(awk -F= '$1=="STARTED_AT" {print $2}' "$LOCK_INFO_FILE")"
+    owner_command="$(awk -F= '$1=="COMMAND" {print $2}' "$LOCK_INFO_FILE")"
+  fi
+
+  if [[ -n "$owner_pid" ]] && kill -0 "$owner_pid" >/dev/null 2>&1; then
+    die "Another production bootstrap is already running (pid ${owner_pid}${started_at:+, started_at ${started_at}}${owner_command:+, command ${owner_command}}). Wait for it to finish before starting a new one."
+  fi
+
+  warn "Removing stale bootstrap lock at $LOCK_DIR"
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+  write_lock_info
+  BOOTSTRAP_LOCK_HELD=1
+  trap release_run_lock EXIT INT TERM HUP
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./scripts/metamp-production-bootstrap.sh run [options]
+  ./scripts/metamp-production-bootstrap.sh status [options]
+  ./scripts/metamp-production-bootstrap.sh logs [service] [options]
+  ./scripts/metamp-production-bootstrap.sh reset [options]
+
+Commands:
+  run       Build, start, fully bootstrap, normalize TM predictions, validate, and mark the local production state.
+  status    Show service state, bootstrap marker state, and latest maintenance status.
+  logs      Tail logs for a service. Defaults to flask-app.
+  reset     Remove the bootstrap marker so the next run executes the full bootstrap again.
+
+Options:
+  --env-file PATH            Use a different env file. Default: .env.docker.deployment
+  --with-frontend            Start the frontend service too.
+  --with-local-frontend      Start the frontend with docker-compose.local-frontend.yml.
+  --skip-build               Skip docker compose build.
+  --no-cache                 Build images without cache.
+  --force-bootstrap          Ignore any existing bootstrap marker and rerun the full process.
+  --stages CSV               Restrict ingestion to a comma-separated stage list passed to flask sync-protein-database.
+  --refresh-stages CSV       Delete local generated artifacts for the listed ingestion stages before bootstrapping.
+  --wait-timeout SECONDS     Max wait time for long ML/TM tasks. Default: 10800
+  -h, --help                 Show this help.
+EOF
+}
+
+normalize_csv_list() {
+  local raw="${1:-}"
+  python - "$raw" <<'PY'
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else ""
+parts = []
+seen = set()
+for item in raw.split(","):
+    normalized = item.strip().lower()
+    if not normalized or normalized in seen:
+        continue
+    seen.add(normalized)
+    parts.append(normalized)
+print(",".join(parts))
+PY
+}
+
+delete_matching_artifacts() {
+  local pattern=""
+  shopt -s nullglob
+  for pattern in "$@"; do
+    local matches=($pattern)
+    if [[ ${#matches[@]} -eq 0 ]]; then
+      continue
+    fi
+    rm -f "${matches[@]}"
+  done
+  shopt -u nullglob
+}
+
+refresh_stage_artifacts() {
+  local normalized
+  normalized="$(normalize_csv_list "$REFRESH_STAGE_ARTIFACTS")"
+  [[ -n "$normalized" ]] || return 0
+
+  local dataset_dir="$ROOT_DIR/datasets"
+  local stage=""
+  IFS=',' read -r -a stages <<<"$normalized"
+  for stage in "${stages[@]}"; do
+    case "$stage" in
+      mpstruc)
+        log "Refreshing local MPStruc stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/mpstrucTblXml_"*.xml \
+          "$dataset_dir/Mpstruct_dataset_"*.csv
+        ;;
+      pdb)
+        log "Refreshing local PDB stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/PDB_data_"*.csv \
+          "$dataset_dir/PDB_data_transformed_"*.csv \
+          "$dataset_dir/PDB/PDB_data_"*_batch*.csv
+        ;;
+      quantitative)
+        log "Refreshing local quantitative stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/Quantitative_data_"*.csv
+        ;;
+      opm)
+        log "Refreshing local OPM stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/NEWOPM_"*.csv \
+          "$dataset_dir/OPM/NEWOPM_"*_batch*.csv
+        ;;
+      uniprot)
+        log "Refreshing local UniProt stage artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/Uniprot_functions_"*.csv \
+          "$dataset_dir/UniProt/Uniprot_functions_"*_batch*.csv
+        ;;
+      clean_valid)
+        log "Refreshing local clean_valid outputs before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/valid/Mpstruct_dataset.csv" \
+          "$dataset_dir/valid/PDB_data_transformed.csv" \
+          "$dataset_dir/valid/Quantitative_data.csv" \
+          "$dataset_dir/valid/NEWOPM.csv" \
+          "$dataset_dir/valid/Uniprot_functions.csv"
+        ;;
+      validate_release)
+        log "Refreshing local validation report artifacts before bootstrap..."
+        delete_matching_artifacts \
+          "$dataset_dir/validation_report_"*.json
+        ;;
+      *)
+        warn "Ignoring unknown refresh stage '$stage'"
+        ;;
+    esac
+  done
+}
+
+refresh_runtime_stage_artifacts() {
+  local normalized
+  normalized="$(normalize_csv_list "$REFRESH_STAGE_ARTIFACTS")"
+  [[ -n "$normalized" ]] || return 0
+
+  log "Refreshing runtime dataset artifacts under ${RUNTIME_DATASET_DIR} before bootstrap..."
+
+  local runtime_script='
+set -eu
+runtime_dir="$1"
+stages_csv="$2"
+IFS="," read -r -a stages <<EOF
+$stages_csv
+EOF
+
+for stage in "${stages[@]}"; do
+  case "$stage" in
+    mpstruc)
+      rm -f "$runtime_dir"/mpstrucTblXml_*.xml "$runtime_dir"/Mpstruct_dataset_*.csv
+      ;;
+    pdb)
+      rm -f "$runtime_dir"/PDB_data_*.csv "$runtime_dir"/PDB_data_transformed_*.csv
+      rm -f "$runtime_dir"/PDB/PDB_data_*_batch*.csv
+      ;;
+    quantitative)
+      rm -f "$runtime_dir"/Quantitative_data_*.csv
+      ;;
+    opm)
+      rm -f "$runtime_dir"/NEWOPM_*.csv
+      rm -f "$runtime_dir"/OPM/NEWOPM_*_batch*.csv
+      ;;
+    uniprot)
+      rm -f "$runtime_dir"/Uniprot_functions_*.csv
+      rm -f "$runtime_dir"/UniProt/Uniprot_functions_*_batch*.csv
+      ;;
+    clean_valid)
+      rm -f \
+        "$runtime_dir"/valid/Mpstruct_dataset.csv \
+        "$runtime_dir"/valid/PDB_data_transformed.csv \
+        "$runtime_dir"/valid/Quantitative_data.csv \
+        "$runtime_dir"/valid/NEWOPM.csv \
+        "$runtime_dir"/valid/Uniprot_functions.csv
+      ;;
+    validate_release)
+      rm -f "$runtime_dir"/validation_report_*.json
+      ;;
+  esac
+done
+'
+
+  run_compose exec -T flask-app sh -lc "$runtime_script" -- "$RUNTIME_DATASET_DIR" "$normalized"
+}
+
+refresh_frontend_image() {
+  if [[ "$WITH_FRONTEND" -ne 1 || "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
+    return 0
+  fi
+  log "Refreshing frontend image from the configured registry..."
+  run_compose pull frontend
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+resolve_docker_bin() {
+  if [[ -n "$DOCKER_BIN" && -x "$DOCKER_BIN" ]]; then
+    return 0
+  fi
+  for candidate in docker podman; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      DOCKER_BIN="$(command -v "$candidate")"
+      return 0
+    fi
+  done
+  for candidate in \
+    /Applications/Docker.app/Contents/Resources/bin/docker \
+    /usr/local/bin/docker \
+    /opt/homebrew/bin/docker
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKER_BIN="$candidate"
+      return 0
+    fi
+  done
+  die "No supported container CLI was found. Set DOCKER_BIN to docker or podman explicitly."
+}
+
+resolve_compose_runner() {
+  if [[ -n "$DOCKER_COMPOSE_BIN" && -x "$DOCKER_COMPOSE_BIN" ]]; then
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+
+  resolve_docker_bin
+  if "$DOCKER_BIN" compose version >/dev/null 2>&1; then
+    COMPOSE_RUNNER_MODE="plugin"
+    return 0
+  fi
+
+  if command -v docker-compose >/dev/null 2>&1; then
+    DOCKER_COMPOSE_BIN="$(command -v docker-compose)"
+    COMPOSE_RUNNER_MODE="standalone"
+    return 0
+  fi
+
+  die "Docker/Podman was found, but no Compose runner is available. Install 'docker compose' or 'docker-compose', or set DOCKER_COMPOSE_BIN explicitly."
+}
+
+load_env_file() {
+  [[ -f "$ENV_FILE" ]] || die "Env file not found: $ENV_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+  RUNTIME_DATASET_DIR="${INGESTION_DATASET_BASE_DIR:-/var/app/data/datasets}"
+}
+
+compose_args() {
+  local args=(
+    --env-file "$ENV_FILE"
+    -f "$ROOT_DIR/docker-compose.yml"
+  )
+  if [[ "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
+    args+=(-f "$ROOT_DIR/docker-compose.local-frontend.yml")
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
+run_compose() {
+  resolve_compose_runner
+  local args=()
+  while IFS= read -r line; do
+    args+=("$line")
+  done < <(compose_args)
+  if [[ "$COMPOSE_RUNNER_MODE" == "plugin" ]]; then
+    COMPOSE_BAKE="${COMPOSE_BAKE:-true}" "$DOCKER_BIN" compose "${args[@]}" "$@"
+  else
+    "$DOCKER_COMPOSE_BIN" "${args[@]}" "$@"
+  fi
+}
+
+flask_exec() {
+  run_compose exec -T flask-app env FLASK_APP=manage.py flask "$@"
+}
+
+flask_run_once() {
+  run_compose run --rm -T flask-app env FLASK_APP=manage.py flask "$@"
+}
+
+wait_for_backend() {
+  local port="${FLASK_RUN_PORT:-5400}"
+  local url="http://127.0.0.1:${port}/api/v1/health/ready"
+  local attempts=90
+
+  log "Waiting for backend readiness at ${url}"
+  for _ in $(seq 1 "$attempts"); do
+    if curl --silent --fail "$url" >/dev/null 2>&1; then
+      log "Backend is ready."
+      return 0
+    fi
+    sleep 2
+  done
+
+  die "Backend did not become ready in time."
+}
+
+restart_runtime_services() {
+  local services=(flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
+
+  log "Starting application services..."
+  run_compose up -d "${services[@]}"
+  wait_for_backend
+}
+
+seed_runtime_datasets() {
+  local source_dir="$ROOT_DIR/datasets"
+
+  if [[ ! -d "$source_dir" ]]; then
+    warn "No local datasets directory found at $source_dir; skipping runtime dataset seeding."
+    return 0
+  fi
+
+  log "Seeding runtime dataset directory at ${RUNTIME_DATASET_DIR} from local snapshots..."
+  run_compose exec -T flask-app sh -lc "mkdir -p '$RUNTIME_DATASET_DIR'"
+  run_compose cp "$source_dir/." "flask-app:$RUNTIME_DATASET_DIR"
+  run_compose exec -T -u root flask-app sh -lc "chmod -R a+rwX '$RUNTIME_DATASET_DIR' || true"
+}
+
+queue_ml_job() {
+  local output
+  output="$(flask_exec queue-machine-learning-job)"
+  printf '%s\n' "$output" >&2
+  printf '%s\n' "$output" | awk -F': ' 'END {print $NF}'
+}
+
+queue_tmalphafold_sync() {
+  local args=(queue-tmalphafold-sync --with-tmdet --with-tmbed --tmbed-refresh)
+  if [[ "${TM_PREDICTION_USE_GPU:-false}" == "true" || "${TMALPHAFOLD_TMBED_USE_GPU:-false}" == "true" ]]; then
+    args+=(--tmbed-use-gpu)
+  fi
+  if [[ -n "${TM_PREDICTION_BATCH_SIZE:-}" ]]; then
+    args+=(--tmbed-batch-size "${TM_PREDICTION_BATCH_SIZE}")
+  fi
+  if [[ -n "${TM_PREDICTION_MAX_WORKERS:-}" ]]; then
+    args+=(--tmbed-max-workers "${TM_PREDICTION_MAX_WORKERS}")
+  fi
+  local output
+  output="$(flask_exec "${args[@]}")"
+  printf '%s\n' "$output" >&2
+  printf '%s\n' "$output" | awk -F': ' 'END {print $NF}'
+}
+
+get_task_status() {
+  local task_id="$1"
+  local output
+  output="$(flask_exec celery-task-status --task-id "$task_id" 2>/dev/null || true)"
+  printf '%s\n' "$output" | grep -m1 '"status"' | awk -F'"' '{print $4}'
+}
+
+wait_for_task() {
+  local label="$1"
+  local task_id="$2"
+  local started_at
+  started_at="$(date +%s)"
+
+  [[ -n "$task_id" ]] || die "Missing task id for ${label}"
+
+  log "Waiting for ${label} task ${task_id}"
+  while true; do
+    local status
+    status="$(get_task_status "$task_id")"
+
+    case "$status" in
+      succeeded|success)
+        log "${label} task ${task_id} succeeded."
+        return 0
+        ;;
+      failed|failure)
+        warn "${label} task ${task_id} failed."
+        flask_exec celery-task-status --task-id "$task_id" || true
+        return 1
+        ;;
+      skipped)
+        warn "${label} task ${task_id} was skipped."
+        return 0
+        ;;
+      started|running|PENDING|pending|"")
+        ;;
+      *)
+        log "${label} task ${task_id} current status: ${status}"
+        ;;
+    esac
+
+    if (( "$(date +%s)" - started_at > WAIT_TIMEOUT_SECONDS )); then
+      die "${label} task ${task_id} did not finish within ${WAIT_TIMEOUT_SECONDS} seconds."
+    fi
+    sleep 10
+  done
+}
+
+bootstrap_marker_exists() {
+  run_compose exec -T flask-app sh -lc "test -f '$BOOTSTRAP_MARKER_PATH'" >/dev/null 2>&1
+}
+
+show_bootstrap_marker() {
+  run_compose exec -T flask-app sh -lc "cat '$BOOTSTRAP_MARKER_PATH'" || true
+}
+
+write_bootstrap_marker() {
+  local ml_task_id="$1"
+  local tmalphafold_task_id="$2"
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  cat >"$tmp_file" <<EOF
+{
+  "status": "ready",
+  "generated_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+  "env_file": "$ENV_FILE",
+  "ml_task_id": "$ml_task_id",
+  "tmalphafold_task_id": "$tmalphafold_task_id",
+  "maintenance_schedule": "celery-beat every 30 days",
+  "validator_command": "python -m flask --app manage.py validate-dashboard-regressions"
+}
+EOF
+
+  run_compose exec -T flask-app sh -lc "mkdir -p \"$(dirname "$BOOTSTRAP_MARKER_PATH")\""
+  run_compose cp "$tmp_file" "flask-app:$BOOTSTRAP_MARKER_PATH" >/dev/null
+  rm -f "$tmp_file"
+}
+
+clear_bootstrap_marker() {
+  run_compose exec -T flask-app sh -lc "rm -f '$BOOTSTRAP_MARKER_PATH'" || true
+}
+
+write_state_file() {
+  local ml_task_id="$1"
+  local tmalphafold_task_id="$2"
+  cat >"$STATE_FILE" <<EOF
+ENV_FILE=$ENV_FILE
+WITH_FRONTEND=$WITH_FRONTEND
+WITH_LOCAL_FRONTEND=$WITH_LOCAL_FRONTEND
+ML_TASK_ID=$ml_task_id
+TMALPHAFOLD_TASK_ID=$tmalphafold_task_id
+LAST_BOOTSTRAP_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+}
+
+start_stack() {
+  load_env_file
+  require_command curl
+  resolve_docker_bin
+
+  local services=(postgres redis flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat)
+  local build_services=(flask-app celery-worker)
+
+  if [[ "$WITH_FRONTEND" -eq 1 || "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
+    services+=(frontend)
+  fi
+  if [[ "$WITH_LOCAL_FRONTEND" -eq 1 ]]; then
+    build_services+=(frontend)
+  fi
+
+  if [[ "$SKIP_BUILD" -eq 0 ]]; then
+    local build_args=(build)
+    if [[ "$NO_CACHE" -eq 1 ]]; then
+      build_args+=(--no-cache)
+    fi
+    build_args+=("${build_services[@]}")
+    log "Building service images for the two unique backend image variants..."
+    run_compose "${build_args[@]}"
+  else
+    log "Skipping image build."
+  fi
+
+  if [[ "$SKIP_BUILD" -eq 0 ]]; then
+    refresh_frontend_image
+  fi
+
+  log "Starting service stack..."
+  run_compose up -d "${services[@]}"
+  wait_for_backend
+}
+
+run_bootstrap() {
+  start_stack
+
+  if bootstrap_marker_exists && [[ "$FORCE_BOOTSTRAP" -eq 0 ]]; then
+    log "Existing bootstrap marker found. Reusing local production state."
+    show_bootstrap_marker
+    return 0
+  fi
+
+  refresh_stage_artifacts
+  seed_runtime_datasets
+  refresh_runtime_stage_artifacts
+
+  log "Stopping application services to avoid database locks during schema sync..."
+  run_compose stop flask-app celery-worker celery-worker-ml celery-worker-tm celery-beat >/dev/null
+
+  log "Running full production bootstrap..."
+  local sync_args=(sync-protein-database)
+  if [[ -n "$BOOTSTRAP_STAGES" ]]; then
+    sync_args+=(--stages "$BOOTSTRAP_STAGES")
+  fi
+  flask_run_once "${sync_args[@]}"
+
+  restart_runtime_services
+
+  log "Dropping legacy TM predictor columns from membrane_proteins..."
+  flask_exec drop-legacy-tm-predictor-columns
+
+  log "Queueing full TMAlphaFold normalized sync..."
+  local tmalphafold_task_id
+  tmalphafold_task_id="$(queue_tmalphafold_sync)"
+
+  log "Queueing ML training..."
+  local ml_task_id
+  ml_task_id="$(queue_ml_job)"
+
+  wait_for_task "Machine learning" "$ml_task_id"
+  wait_for_task "TMAlphaFold sync" "$tmalphafold_task_id"
+
+  log "Exporting discrepancy benchmark..."
+  flask_exec export-discrepancy-benchmark
+
+  log "Running regression validator..."
+  flask_exec validate-dashboard-regressions
+
+  write_bootstrap_marker "$ml_task_id" "$tmalphafold_task_id"
+  write_state_file "$ml_task_id" "$tmalphafold_task_id"
+
+  log "Production bootstrap completed successfully."
+  log "Subsequent monthly maintenance is handled by celery-beat via shared-task-monthly-production-maintenance."
+}
+
+show_status() {
+  load_env_file
+  log "Container status:"
+  run_compose ps || true
+
+  log "Backend readiness:"
+  curl --silent "http://127.0.0.1:${FLASK_RUN_PORT:-5400}/api/v1/health/ready" || true
+  printf '\n'
+
+  log "Bootstrap marker:"
+  if bootstrap_marker_exists; then
+    show_bootstrap_marker
+  else
+    warn "No bootstrap marker found."
+  fi
+
+  log "Latest maintenance status:"
+  flask_exec production-maintenance-status || true
+
+  log "Latest protein database sync status:"
+  flask_exec protein-database-sync-status || true
+
+  log "Latest TM annotation sync status:"
+  flask_exec tm-prediction-status || true
+}
+
+tail_logs() {
+  load_env_file
+  local service="${1:-flask-app}"
+  run_compose logs -f "$service"
+}
+
+reset_bootstrap() {
+  load_env_file
+  clear_bootstrap_marker
+  rm -f "$STATE_FILE"
+  log "Bootstrap marker cleared. The next run will execute the full bootstrap."
+}
+
+COMMAND="${1:-run}"
+if [[ "$COMMAND" == "-h" || "$COMMAND" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --env-file)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      ENV_FILE="$2"
+      shift 2
+      ;;
+    --with-frontend)
+      WITH_FRONTEND=1
+      shift
+      ;;
+    --with-local-frontend)
+      WITH_LOCAL_FRONTEND=1
+      shift
+      ;;
+    --skip-build)
+      SKIP_BUILD=1
+      shift
+      ;;
+    --no-cache)
+      NO_CACHE=1
+      shift
+      ;;
+    --force-bootstrap)
+      FORCE_BOOTSTRAP=1
+      shift
+      ;;
+    --stages)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      BOOTSTRAP_STAGES="$2"
+      shift 2
+      ;;
+    --refresh-stages)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      REFRESH_STAGE_ARTIFACTS="$2"
+      shift 2
+      ;;
+    --wait-timeout)
+      [[ $# -ge 2 ]] || die "Missing value for $1"
+      WAIT_TIMEOUT_SECONDS="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ "$COMMAND" == "logs" && -z "${LOG_SERVICE_SET:-}" ]]; then
+        LOG_SERVICE="$1"
+        LOG_SERVICE_SET=1
+        shift
+      else
+        die "Unknown option or argument: $1"
+      fi
+      ;;
+  esac
+done
+
+case "$COMMAND" in
+  run)
+    acquire_run_lock
+    run_bootstrap
+    ;;
+  status)
+    show_status
+    ;;
+  logs)
+    tail_logs "${LOG_SERVICE:-flask-app}"
+    ;;
+  reset)
+    reset_bootstrap
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
